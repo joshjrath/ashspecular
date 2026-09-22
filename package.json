@@ -15,7 +15,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "eval": "tsx scripts/eval.ts",
     "parse": "tsx scripts/parse.ts",
-    "test:rules": "tsx scripts/test-rules.ts"
+    "test:rules": "tsx scripts/test-rules.ts",
+    "bot": "tsx src/bot/index.ts",
+    "bot:watch": "tsx watch src/bot/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
