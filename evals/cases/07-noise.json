@@ -1,0 +1,16 @@
+{
+  "name": "noise · no category, no title, no date",
+  "why": "The bot must be willing to say it does not know. Guessing a category here is worse than leaving it unsorted for one click.",
+  "input": {
+    "author": "josh",
+    "channelName": "intake",
+    "content": "can we move the thing to next week"
+  },
+  "expect": {
+    "kind": "update",
+    "category": "unknown",
+    "channel": null,
+    "code": null,
+    "confidenceBelow": 0.6
+  }
+}

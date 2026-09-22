@@ -1,0 +1,16 @@
+{
+  "name": "review · messy forward, nothing labelled",
+  "why": "The common case: a line dragged out of a DM with a frame.io link. Must come back as a review, not a new assignment, and must not invent a code or a date.",
+  "input": {
+    "author": "marcus",
+    "channelName": "intake",
+    "content": "deadpool jjk cut is up, needs the 04:12 fix and a colour pass https://f.frame.io/reviews/a41c9 — we need the vo by 3 latest or it wont go out tonight"
+  },
+  "expect": {
+    "kind": "review",
+    "category": "long_form",
+    "airDate": null,
+    "voSource": "stated",
+    "hasFrameioLink": true
+  }
+}

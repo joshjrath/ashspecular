@@ -1,39 +1,58 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { env } from "../env.js";
-import { LANES, UNKNOWN_LANE } from "../lanes.js";
-import { localIso } from "../time.js";
+import { CATEGORIES, CHANNELS } from "../catalog.js";
+import { ORG_TZ, TEAM_TZ, dateIn } from "./derive.js";
 import { ExtractionSchema, type Extraction } from "./schema.js";
-import { extractUrls, looksLikeBareRevision, reconcileLinks } from "./rules.js";
+import { extractUrls, looksLikeBareRevision, classifyUrl } from "./rules.js";
 
-const client = new Anthropic({ apiKey: env.anthropicApiKey });
+const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
+
+let client: Anthropic | null = null;
+function anthropic(): Anthropic {
+  if (!client) client = new Anthropic();
+  return client;
+}
 
 /**
- * Stable system prefix — kept byte-identical across calls so it caches.
- * Anything time-varying belongs in the user turn below.
+ * Stable system prefix — byte-identical across calls so it caches. Anything
+ * that varies per message (today's date, the message itself) goes in the user
+ * turn below, after the cache breakpoint.
  */
 const SYSTEM = [
-  "You sort forwarded messages for a four-part YouTube content business into a work tracker.",
+  "You read messages posted into a YouTube studio's Discord and turn each one into a structured record.",
   "",
-  "The four lanes:",
-  ...LANES.map((l) => `- ${l.id} (${l.label}): ${l.hint}`),
-  `- ${UNKNOWN_LANE}: use only when nothing in the message points to a lane. Do not guess between two lanes at low confidence — say unknown and lower the confidence.`,
+  "THE FOUR CATEGORIES",
+  ...CATEGORIES.map((c) => `- ${c.id} (${c.label}): ${c.hint}`),
+  "- unknown: nothing in the message points to a category. Prefer this over a coin-flip guess, and lower the confidence.",
   "",
-  "Rules:",
-  "- A frame.io link is a revision to review unless the message says otherwise.",
-  "- 'needs VO', 'record the VO', 'voiceover by 3' all mean vo_needed = true. A stated time becomes vo_due_at.",
-  "- A time with no date means the next occurrence of that time, today if it has not passed.",
-  "- Priority 1 means it blocks an upload happening today. Reserve it. Default to 3.",
-  "- title is what the operator should see in a list: the action and the subject, nothing else.",
-  "- Never invent a deadline, a project name, or a URL that is not in the message. Use null.",
-  "- Messages are often terse, lowercase, and forwarded without context. That is normal — do your best and report honest confidence.",
+  "THE CHANNELS — return `channel` exactly as written here, or null:",
+  ...CATEGORIES.map((cat) => {
+    const names = CHANNELS.filter((c) => c.category === cat.id).map((c) => c.name);
+    return `- ${cat.label}: ${names.join(", ")}`;
+  }),
+  "",
+  "THE ASSIGNMENT POST",
+  "The studio's own format leads with a heading of three parts separated by pipes:",
+  "  <air date MM-DD-YY> | <code> | <title>",
+  "So `10-03-26 | VIDEO-008 | What If Deadpool Was In Jujutsu Kaisen?` means the video AIRS on 2026-10-03, its code is VIDEO-008, and that is the title.",
+  "Below the heading it may carry: a Project line, an `@ Tag` line, a stage header such as `SCRIPT` with a Discord mention for the assignee, a Deadline list, a Word Count, and a long Story Brief.",
+  "Deadlines are often given twice, once US/ET and once India/IST — these are the SAME instant, so return the ET one and ignore the duplicate.",
+  "",
+  "RULES",
+  "- The heading date is the AIR date, never a deadline. Put it in air_date.",
+  "- Never calculate a voiceover deadline. Set vo_due ONLY if the message states a voiceover time in words. Otherwise leave it null; it is derived downstream from the air date.",
+  "- A frame.io link means kind = review, and it is a new version of an existing project — pull the version number if one is written.",
+  "- A message about a bits channel is kind = bits: those batches already exist and open themselves daily, so it is almost never a new project.",
+  "- Copy `code` exactly as written. Never invent one.",
+  "- Never invent a date, a channel, a title or a URL that is not in the message. Use null.",
+  "- Messages are often terse, lowercase and forwarded out of a DM with no context. That is normal — extract what is there and report honest confidence.",
 ].join("\n");
 
 export interface ClassifyInput {
   content: string;
-  author: string;
-  channelName: string;
-  /** Text lifted out of a forwarded message's original, if any. */
+  author?: string;
+  channelName?: string;
+  /** Text lifted out of a Discord forward's original message. */
   forwardedFrom?: string;
   attachments?: string[];
 }
@@ -42,88 +61,88 @@ export interface ClassifyResult {
   extraction: Extraction;
   parsedBy: "llm" | "rule";
   model: string | null;
+  raw: string;
+  usage?: { input: number; output: number; cacheRead: number };
 }
 
 export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
   const raw = renderRaw(input);
 
   try {
-    const response = await client.messages.parse({
-      model: env.anthropicModel,
-      max_tokens: 4096,
+    const response = await anthropic().messages.parse({
+      model: MODEL,
+      max_tokens: 8192,
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      output_config: {
-        effort: "low",
-        format: zodOutputFormat(ExtractionSchema),
-      },
+      output_config: { effort: "low", format: zodOutputFormat(ExtractionSchema) },
       messages: [
         {
           role: "user",
           content: [
-            `Current local time: ${localIso()} (${env.timezone}).`,
-            `Forwarded by: ${input.author}`,
-            `Discord channel: #${input.channelName}`,
+            `Today is ${dateIn(ORG_TZ)} in ${ORG_TZ}. The team's second zone is ${TEAM_TZ}.`,
+            input.author ? `Posted by: ${input.author}` : "",
+            input.channelName ? `Discord channel: #${input.channelName}` : "",
             "",
             "Message:",
             raw,
-          ].join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n"),
         },
       ],
     });
 
     if (response.stop_reason === "refusal" || !response.parsed_output) {
-      console.warn("[classify] no structured output, falling back to rules", {
-        stop_reason: response.stop_reason,
-      });
-      return { extraction: ruleFallback(input, raw), parsedBy: "rule", model: null };
+      return { extraction: ruleFallback(raw), parsedBy: "rule", model: null, raw };
     }
 
-    const extraction = response.parsed_output;
-    extraction.links = reconcileLinks(raw, extraction.links);
-    extraction.tags = extraction.tags.slice(0, 5).map((t: string) => t.toLowerCase());
-    if (!extraction.title.trim()) extraction.title = fallbackTitle(raw);
-
-    return { extraction, parsedBy: "llm", model: env.anthropicModel };
+    return {
+      extraction: response.parsed_output,
+      parsedBy: "llm",
+      model: MODEL,
+      raw,
+      usage: {
+        input: response.usage.input_tokens,
+        output: response.usage.output_tokens,
+        cacheRead: response.usage.cache_read_input_tokens ?? 0,
+      },
+    };
   } catch (err) {
-    // A classifier outage must never swallow an item — file it unsorted instead.
-    console.error("[classify] API call failed, falling back to rules", err);
-    return { extraction: ruleFallback(input, raw), parsedBy: "rule", model: null };
+    // A classifier outage must never swallow a message — file it unsorted.
+    console.error("[classify] API call failed, falling back to rules:", err);
+    return { extraction: ruleFallback(raw), parsedBy: "rule", model: null, raw };
   }
 }
 
 function renderRaw(input: ClassifyInput): string {
   const parts = [input.content.trim()];
-  if (input.forwardedFrom?.trim()) {
-    parts.push(`\n[forwarded content]\n${input.forwardedFrom.trim()}`);
-  }
-  if (input.attachments?.length) {
-    parts.push(`\n[attachments] ${input.attachments.join(", ")}`);
-  }
+  if (input.forwardedFrom?.trim()) parts.push(`\n[forwarded]\n${input.forwardedFrom.trim()}`);
+  if (input.attachments?.length) parts.push(`\n[attachments] ${input.attachments.join(", ")}`);
   return parts.filter(Boolean).join("\n").trim();
 }
 
-/** Deterministic best-effort used whenever the model is unavailable. */
-function ruleFallback(input: ClassifyInput, raw: string): Extraction {
-  const bareRevision = looksLikeBareRevision(raw);
+/** Deterministic best-effort for when the model is unreachable. */
+function ruleFallback(raw: string): Extraction {
+  const urls = extractUrls(raw);
+  const hasFrameio = urls.some((u) => classifyUrl(u) === "frameio");
+
   return {
-    lane: UNKNOWN_LANE,
-    kind: bareRevision ? "revision" : "note",
-    title: fallbackTitle(raw),
-    summary: "Filed without classification — the parser was unavailable.",
-    project: null,
-    priority: 3,
-    due_at: null,
-    vo_needed: /\bvo\b|voice ?over/i.test(raw),
-    vo_due_at: null,
-    links: reconcileLinks(raw, []),
-    tags: [],
+    kind: hasFrameio || looksLikeBareRevision(raw) ? "review" : "other",
+    code: raw.match(/\b([A-Z]{3,6}-\d{2,4})\b/)?.[1] ?? null,
+    title: null,
+    category: "unknown",
+    channel: null,
+    tag: null,
+    air_date: null,
+    stage: null,
+    word_count: null,
+    assignee: null,
+    script_due: null,
+    vo_due: null,
+    deadline: null,
+    version: Number(raw.match(/\bv(\d+)\b/i)?.[1]) || null,
+    links: urls.map((url) => ({ url, kind: classifyUrl(url), label: "link" })),
+    brief: null,
+    note: "Filed without classification — the parser was unavailable.",
     confidence: 0,
   };
-}
-
-function fallbackTitle(raw: string): string {
-  const firstLine = raw.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
-  const withoutUrls = firstLine.replace(/https?:\/\/\S+/gi, "").trim();
-  const text = withoutUrls || extractUrls(raw)[0] || "Untitled item";
-  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
 }

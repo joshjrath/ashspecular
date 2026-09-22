@@ -1,0 +1,24 @@
+{
+  "name": "assignment · full post, no channel named",
+  "why": "The studio's real assignment format. The heading date is the AIR date, not a deadline. No channel is named anywhere, so channel must stay null rather than being guessed.",
+  "input": {
+    "author": "josh",
+    "channelName": "script-assignments",
+    "content": "### 10-03-26 | VIDEO-008 | What If Deadpool Was In Jujutsu Kaisen?\n\n📁 **Project**\n**TBD**\n\n@ Comics\n\n━━━━━━━━━━━━━━━━━━\n\n📝 **SCRIPT** <@717794467314270278> \n\n* Deadline:\n\n  * 🇺🇸 **9/19/2026 @ 11:59 PM ET**\n  * 🇮🇳 **9/20/2026 @ 9:29 AM IST**\n* Word Count: **5000 Words**\n\n**Story Brief** <@717794467314270278> **BREAK THE 4TH WALL MORE OFTEN FOR DEADPOOL VIDS!**\n\nPlace **Deadpool directly into the Jujutsu Kaisen universe** and explore how someone with his regeneration, combat experience, personality, and complete disregard for self-preservation would function within the world of curses and jujutsu sorcerers.\n\nClearly establish **which version of Deadpool** is being used and how the crossover handles cursed energy. Don't automatically give Wade a cursed technique just because he's in JJK.\n\nDeadpool's **healing factor should be one of the central mechanics of the story**. Normal injuries that would kill sorcerers may barely slow him down.\n\nHave Wade encounter **Yuji, Megumi, Nobara, and Gojo**, with his personality creating a completely different dynamic within Jujutsu High.\n\nStructure roughly around:\n\n**Arrival → Discovering Curses → Jujutsu High → Yuji & Gojo → Early Missions → Mahito → Kyoto → Shibuya → Sukuna → Culling Game → Final Conflict**"
+  },
+  "expect": {
+    "kind": "assignment",
+    "code": "VIDEO-008",
+    "category": "long_form",
+    "channel": null,
+    "tag": "Comics",
+    "airDate": "2026-10-03",
+    "stage": "script",
+    "wordCount": 5000,
+    "voSource": "calculated",
+    "voDueLocal": "2026-09-27",
+    "scriptDueLocal": "2026-09-19",
+    "titleContains": "Jujutsu Kaisen",
+    "briefNotEmpty": true
+  }
+}

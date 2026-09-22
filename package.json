@@ -12,7 +12,10 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "migrate": "node dist/db/migrate.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "eval": "tsx scripts/eval.ts",
+    "parse": "tsx scripts/parse.ts",
+    "test:rules": "tsx scripts/test-rules.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

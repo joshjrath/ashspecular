@@ -1,0 +1,15 @@
+{
+  "name": "bits · link for today's batch",
+  "why": "Bits batches already exist and open themselves. This must be kind=bits against the FNAF Bits channel, NOT a new project.",
+  "input": {
+    "author": "dev",
+    "channelName": "intake",
+    "content": "couple more for fnaf bits today https://drive.google.com/drive/folders/1kQxx"
+  },
+  "expect": {
+    "kind": "bits",
+    "category": "bits",
+    "channel": "FNAF Bits",
+    "code": null
+  }
+}

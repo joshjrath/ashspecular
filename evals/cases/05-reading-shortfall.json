@@ -1,0 +1,14 @@
+{
+  "name": "reading · one channel behind",
+  "why": "Reading channels are named without the word 'Specular'. Torch must match Specular Torch and land in reading.",
+  "input": {
+    "author": "josh",
+    "channelName": "intake",
+    "content": "torch is only at 3 today, need 2 more before 6"
+  },
+  "expect": {
+    "kind": "update",
+    "category": "reading",
+    "channel": "Specular Torch"
+  }
+}

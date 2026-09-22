@@ -1,0 +1,15 @@
+{
+  "name": "review · explicit version, gaming",
+  "why": "Version numbers must be pulled out so the Review Desk can stack them. Minecraft/SMP wording should land in gaming without the word 'gaming' appearing.",
+  "input": {
+    "author": "tess",
+    "channelName": "intake",
+    "content": "v3 of smp ep 9 is up https://f.frame.io/r/9bd21x — needs your eyes before tomorrow"
+  },
+  "expect": {
+    "kind": "review",
+    "category": "gaming",
+    "version": 3,
+    "hasFrameioLink": true
+  }
+}

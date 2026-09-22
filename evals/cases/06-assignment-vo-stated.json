@@ -1,0 +1,18 @@
+{
+  "name": "assignment · VO time stated in the post",
+  "why": "A stated VO time must beat the air-date-minus-6-days rule, and voSource must say so.",
+  "input": {
+    "author": "josh",
+    "channelName": "script-assignments",
+    "content": "### 10-15-26 | VIDEO-016 | FNAF Movie 2 — Everything We Know\n\n@ FNAF\n\n📝 **SCRIPT** <@717794467314270278>\n* Deadline: 🇺🇸 **10/1/2026 @ 11:59 PM ET**\n* Word Count: **4000 Words**\n\nVO needs to be recorded by Oct 5 at 2pm ET, earlier than usual because of the trip."
+  },
+  "expect": {
+    "kind": "assignment",
+    "code": "VIDEO-016",
+    "category": "long_form",
+    "channel": "Specular FNAF",
+    "airDate": "2026-10-15",
+    "voSource": "stated",
+    "voDueLocal": "2026-10-05"
+  }
+}
