@@ -120,10 +120,19 @@ async function feedback(interaction: import("discord.js").ButtonInteraction): Pr
   };
 
   await mkdir(PENDING_DIR, { recursive: true });
-  await writeFile(file, `${JSON.stringify(draft, null, 2)}\n`, "utf8");
+  const json = `${JSON.stringify(draft, null, 2)}\n`;
+  await writeFile(file, json, "utf8");
+
+  // Hand it back in Discord rather than leaving it in a folder to go and find.
+  // Short enough pastes inline; anything longer comes back as a file to drag.
+  const block = "```json\n" + json + "```";
+  const inline = block.length <= 1800;
 
   await interaction.reply({
-    content: `Saved as an eval case: \`evals/cases/pending/${stamp}.json\`\nCorrect the \`expect\` block, move it up a directory, then \`npm run eval\`.`,
+    content: inline
+      ? `Copy this and send it to Claude — it's the message plus what I read from it.\n${block}`
+      : "Too long to paste inline, so here it is as a file — send it to Claude.",
+    files: inline ? [] : [{ attachment: Buffer.from(json, "utf8"), name: `${stamp}.json` }],
     flags: MessageFlags.Ephemeral,
   });
   console.log(`[feedback] wrote ${file}`);

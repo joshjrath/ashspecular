@@ -58,29 +58,25 @@ thinks, then ✅ (or ❓ if it couldn't work out a category), and replies with a
 card showing every field it read, colour-coded by category, with the elapsed
 time and token count underneath.
 
-## 4. The loop that makes it better
+## 4. When it gets something wrong
 
-Every reply has two buttons.
+Hit **Got it wrong** on the card. The bot replies — only visible to you —
+with a block of text containing the original message and what it read from
+it. Copy that, paste it to Claude, and it gets fixed.
 
-**Got it wrong** writes `evals/cases/pending/<timestamp>.json` containing the
-exact message and what the parser returned. Open it, fix the `expect` block to
-what it *should* have said, move the file up into `evals/cases/`, and run:
+That's the whole job. You don't need to open any files; the same thing is
+also saved to `evals/cases/pending/` if you'd rather send the file, and a
+long assignment post comes back as a file attachment because it won't fit
+in a Discord message.
 
-```bash
-npm run eval
-```
+What happens on the other end: that message becomes a permanent test, so the
+next change can't quietly break it again. Run `npm run eval` any time to see
+the score across every case collected so far.
 
-That case is now permanent. Change the prompt in `src/parse/classify.ts`,
-re-run, and you can see whether you fixed it without breaking the other seven.
-
-This is the whole optimisation loop: **catch it wrong in Discord → it becomes
-a test → change the prompt → the score tells you if it worked.**
-
-Off-Discord, for quick trials:
+Off-Discord, for quick trials without posting anything:
 
 ```bash
 npm run parse -- "torch is only at 3 today, need 2 more before 6"
-pbpaste | npm run parse
 ```
 
 ---
