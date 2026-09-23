@@ -29,8 +29,20 @@ client.on(Events.Error, (err) => console.error("[bot] gateway error:", err));
 process.on("SIGINT", () => void client.destroy().finally(() => process.exit(0)));
 process.on("SIGTERM", () => void client.destroy().finally(() => process.exit(0)));
 
-client.login(token).catch((err) => {
-  console.error("[bot] login failed:", err?.message ?? err);
-  console.error("If this says 'disallowed intents', turn on MESSAGE CONTENT INTENT in the developer portal.");
+client.login(token).catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+
+  // discord.js reports a bad token as "No Description", which tells you
+  // nothing on the day you are setting this up for the first time.
+  if (/token|no description/i.test(message)) {
+    console.error("[bot] Discord rejected the token.");
+    console.error("      Check DISCORD_TOKEN in .env against the developer portal.");
+    console.error("      The token is shown once — if you lost it, hit Reset Token and copy the new one.");
+  } else if (/disallowed intents/i.test(message)) {
+    console.error("[bot] Discord refused the connection: disallowed intents.");
+    console.error("      Turn on MESSAGE CONTENT INTENT under Bot → Privileged Gateway Intents.");
+  } else {
+    console.error("[bot] login failed:", message);
+  }
   process.exit(1);
 });

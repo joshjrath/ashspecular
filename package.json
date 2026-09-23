@@ -13,11 +13,11 @@
     "dev": "tsx watch src/index.ts",
     "migrate": "node dist/db/migrate.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "eval": "tsx scripts/eval.ts",
-    "parse": "tsx scripts/parse.ts",
-    "test:rules": "tsx scripts/test-rules.ts",
-    "bot": "tsx src/bot/index.ts",
-    "bot:watch": "tsx watch src/bot/index.ts"
+    "eval": "node --env-file-if-exists=.env --import tsx scripts/eval.ts",
+    "parse": "node --env-file-if-exists=.env --import tsx scripts/parse.ts",
+    "test:rules": "node --env-file-if-exists=.env --import tsx scripts/test-rules.ts",
+    "bot": "node --env-file-if-exists=.env --import tsx src/bot/index.ts",
+    "bot:watch": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
