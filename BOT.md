@@ -42,8 +42,15 @@ else is in the server.
 ```bash
 cp .env.example .env     # then fill in DISCORD_TOKEN and ANTHROPIC_API_KEY
 npm install
-npm run bot              # or: npm run bot:watch
+npm run doctor           # check everything before touching Discord
+npm run bot
 ```
+
+`npm run doctor` tests each thing separately — Node version, `.env`, whether
+Anthropic accepts your key, whether Discord accepts your token, and one real
+message through the parser. Fix anything it flags before starting the bot;
+it is much easier than working out which of five things caused a silent
+channel.
 
 Expected output:
 
