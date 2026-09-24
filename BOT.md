@@ -119,11 +119,41 @@ case before restarting the bot.
 | ⚠️ on the message itself | The handler threw; the real error is in the terminal |
 | Card shows the wrong channel | Add an alias in `src/catalog.ts` |
 
+## Hosting it on Railway
+
+The bot is a **worker**, not a website. It holds a WebSocket open to Discord
+and never listens on a port, so don't give it a domain and don't turn on a
+healthcheck — Railway would call it dead and restart it forever.
+
+1. Railway → **New Project** → **Deploy from GitHub repo** → `ashspecular`.
+2. **Settings → Source**: set the branch to the one you are running.
+3. **Variables**: add `DISCORD_TOKEN`. That is the only required one.
+   Optionally `INTAKE_CHANNEL_IDS`, and `ANTHROPIC_API_KEY` if you decide you
+   want prose parsing.
+4. Deploy. The build runs `npm ci && npm run build`; the start command is
+   `npm start`, which is `node dist/src/bot/index.js`.
+
+Watch the deploy log for the same three lines you get locally:
+
+```
+[bot] logged in as ashtracker#1234
+[bot] intake: every channel it can see
+[bot] no API key — assignment posts and Frame.io links parse by pattern
+```
+
+Run it in **one place at a time.** Two copies on the same token both answer
+every message, so stop the local `npm run bot` once Railway is live.
+
+Two things that don't survive a redeploy: the "Got it wrong" files in
+`evals/cases/pending/` (the container's disk is wiped, and they're gitignored),
+and the in-memory record of what was parsed, so a card from before a redeploy
+can no longer be corrected. While you're still tuning the parser, running
+locally is genuinely better.
+
 ## Hosting
 
 Run it on your machine while tuning — you want the terminal output and the
 pending eval files on disk.
 
-Railway comes later, with the database. `railway.json` and `Procfile` are
-already in the repo from the first pass, and `evals/cases/pending/` is
-gitignored because a container's disk doesn't survive a redeploy.
+Railway is set up and ready (above) — worth it once the parser stops
+surprising you, so the bot is up when you aren't at your desk.
