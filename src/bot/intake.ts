@@ -10,6 +10,7 @@ import { client, isIntakeChannel } from "./client.js";
 import { classify, type ClassifyInput } from "../parse/classify.js";
 import { derive, type DerivedRecord } from "../parse/derive.js";
 import { feedbackRow, recordEmbed } from "./render.js";
+import { config, hasDatabase } from "../config.js";
 
 type Msg = OmitPartialGroupDMChannel<Message<boolean>>;
 
@@ -46,6 +47,27 @@ async function handle(message: Msg): Promise<void> {
   const record = derive(result.extraction, result.raw);
   seen.set(message.id, { input, record });
 
+  // Storage is optional: without DATABASE_URL the bot still parses and
+  // replies, it just forgets. A write failure must never lose the reply that
+  // tells you what it read.
+  let saved: number | null = null;
+  if (hasDatabase) {
+    try {
+      const { saveRecord } = await import("../db/records.js");
+      saved = await saveRecord(record, {
+        messageId: message.id,
+        channelId: message.channelId,
+        guildId: message.guildId,
+        author: message.author.username,
+        url: message.url,
+        raw: result.raw,
+        parsedBy: result.parsedBy,
+      });
+    } catch (err) {
+      console.error("[intake] could not save:", err);
+    }
+  }
+
   await message.reactions.cache.get("⏳")?.users.remove(client.user!.id).catch(() => {});
   await message.react(record.category === "unknown" ? "❓" : "✅").catch(() => {});
 
@@ -56,13 +78,15 @@ async function handle(message: Msg): Promise<void> {
   // Worth showing: a post read by pattern cost nothing and can't drift.
   const how = result.parsedBy === "pattern" ? " · read by pattern, no API call" : "";
 
+  const link = saved && config.publicUrl ? ` · <${config.publicUrl}/r/${saved}>` : "";
+
   await message.reply({
     embeds: [recordEmbed(record)],
     components: [feedbackRow(message.id)],
     content:
       result.parsedBy === "rule"
         ? "⚠️ Parser was unreachable — this is the rule-based fallback."
-        : `\`${ms}ms${cost}${how}\``,
+        : `\`${ms}ms${cost}${how}\`${link}`,
     allowedMentions: { repliedUser: false },
   });
 }

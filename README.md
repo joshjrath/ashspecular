@@ -3,22 +3,22 @@
 You forward things into a Discord channel. A bot reads each message, works out
 what it is, and files it. Eventually one website shows all of it.
 
-**Right now only the first half exists**, on purpose. The bot parses messages
-and replies with what it understood — no database, no board, no digest. The job
-at this stage is finding out where the parser is wrong, and storage would fix
-the shape of a record before it has settled.
+Both halves now run: the bot files what it reads, and the board shows it.
+Still missing are the 8am digest and the automatic daily bits batches.
 
 ## Start here
 
 | | |
 |---|---|
 | **[BOT.md](BOT.md)** | Set up the Discord bot and run it. Start here. |
+| **[BOARD.md](BOARD.md)** | Run the website, locally and on Railway. |
 | **[PARSER.md](PARSER.md)** | How the parser works, and how to improve it. |
 
 ```bash
 npm install
 npm run doctor      # checks Node, keys, Discord and Anthropic before you start
-npm run bot         # run it
+npm run bot         # the Discord bot
+npm run web         # the board, at http://localhost:8080
 ```
 
 ## The four categories
@@ -74,9 +74,16 @@ src/
     rules.ts        URL extraction
   bot/
     index.ts        boots the bot
-    intake.ts       message → parse → reply, and the feedback button
+    intake.ts       message → parse → reply → save, and the feedback button
     render.ts       the reply card
-  db/               migration runner, unused until storage lands
+  web/
+    index.ts        boots the board
+    server.ts       routes
+    page.ts         the board's HTML, server-rendered, no build step
+    auth.ts         the password gate
+  db/
+    records.ts      save and query one record
+    migrations/     schema
   _legacy/          first-pass bot and board, built on the old model. Excluded
                     from the build; kept for the plumbing.
 scripts/            doctor, eval, parse, test-rules
@@ -85,8 +92,6 @@ evals/cases/        the parser's test set
 
 ## What comes next
 
-1. Run the bot against real messages, fix what it misreads *(now)*
-2. Postgres, and correction dropdowns on the card instead of the feedback button
-3. The board, the 8am digest, and the daily bits batches
-
-Steps 2 and 3 all depend on the record shape, which is what step 1 is testing.
+1. Run it against real messages and fix what it misreads *(now)*
+2. Correction dropdowns on the Discord card, instead of the feedback button
+3. The 8am digest and the automatic daily bits batches

@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "start": "node dist/src/bot/index.js",
+    "start:web": "node dist/src/web/index.js",
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts",
     "migrate": "node dist/src/db/migrate.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -17,6 +18,7 @@
     "parse": "node --env-file-if-exists=.env --import tsx scripts/parse.ts",
     "test:rules": "node --env-file-if-exists=.env --import tsx scripts/test-rules.ts",
     "bot": "node --env-file-if-exists=.env --import tsx src/bot/index.ts",
+    "web": "node --env-file-if-exists=.env --import tsx src/web/index.ts",
     "bot:watch": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts"
   },
