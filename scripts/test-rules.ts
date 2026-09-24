@@ -19,6 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
+import { calendarGrid, shiftMonth } from "../src/web/page.js";
 
 let pass = 0;
 let fail = 0;
@@ -212,6 +213,32 @@ t(
 const header = parseAssignment("### 10-15-26 | VIDEO-016 | FNAF Movie 2\n\n🎙️ **VO** <@1>")!;
 t("a VO stage header is not a deadline", header.vo_due, null);
 t("and is read as the stage", header.stage, "vo");
+
+// ── the calendar's date arithmetic ────────────────────────────────────────
+section("calendar dates");
+
+t("next month", shiftMonth("2026-09", 1), "2026-10");
+t("previous month", shiftMonth("2026-09", -1), "2026-08");
+t("crosses new year forwards", shiftMonth("2026-12", 1), "2027-01");
+t("crosses new year backwards", shiftMonth("2026-01", -1), "2025-12");
+t("a year of steps lands a year later", shiftMonth("2026-03", 12), "2027-03");
+
+const sept = calendarGrid("2026-09");
+t("the grid is whole weeks", sept.length % 7, 0);
+t("it starts on a Sunday", new Date(`${sept[0]}T12:00:00Z`).getUTCDay(), 0);
+t("it ends on a Saturday", new Date(`${sept[sept.length - 1]}T12:00:00Z`).getUTCDay(), 6);
+t("it covers the 1st", sept.includes("2026-09-01"), true);
+t("it covers the last day", sept.includes("2026-09-30"), true);
+t("and leads with the trailing days of August", sept[0], "2026-08-30");
+
+// February 2026 starts on a Sunday and ends on a Saturday: exactly four weeks,
+// the case an off-by-one in either direction would pad wrongly.
+const feb = calendarGrid("2026-02");
+t("a month that fits its weeks exactly is not padded", feb.length, 28);
+t("no day is repeated", new Set(feb).size, feb.length);
+
+const leap = calendarGrid("2028-02");
+t("a leap day is included", leap.includes("2028-02-29"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

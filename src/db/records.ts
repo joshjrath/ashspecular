@@ -324,3 +324,65 @@ export async function lastIntake(): Promise<Date | null> {
   );
   return rows[0]?.at ?? null;
 }
+
+// ── the calendar ──────────────────────────────────────────────────────────
+
+/**
+ * What the calendar plots.
+ *
+ * "posting" is the air date — the day a video goes out, which is what a
+ * content calendar is for. "deadlines" is the day the work is due, which is a
+ * different question about the same records, so it is a mode rather than a
+ * second page.
+ */
+export type CalendarMode = "posting" | "deadlines";
+
+export interface CalendarEntry {
+  /** YYYY-MM-DD in the org's zone. */
+  day: string;
+  record: StoredRecord;
+}
+
+function calendarExpr(mode: CalendarMode): string {
+  return mode === "posting"
+    ? "to_char(air_date, 'YYYY-MM-DD')"
+    : `to_char(${DUE} AT TIME ZONE $3, 'YYYY-MM-DD')`;
+}
+
+/**
+ * Every record falling inside a date range, tagged with the day it lands on.
+ * Dates are inclusive at both ends, as YYYY-MM-DD.
+ */
+export async function calendarRange(
+  from: string,
+  to: string,
+  mode: CalendarMode,
+  zone: string,
+): Promise<CalendarEntry[]> {
+  const day = calendarExpr(mode);
+  const params: unknown[] = mode === "posting" ? [from, to] : [from, to, zone];
+
+  const { rows } = await pool.query<Row & { day: string }>(
+    `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
+       air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
+       version, links, brief, note, status, parsed_by, confidence, warnings,
+       source_url, source_author, raw_content, created_at
+     FROM records
+     WHERE ${day} BETWEEN $1 AND $2
+     ORDER BY 1 ASC, category ASC, created_at ASC
+     LIMIT 1000`,
+    params,
+  );
+
+  return rows.map((r) => ({ day: r.day, record: hydrate(r) }));
+}
+
+/** One day's worth, for the day page a calendar cell links to. */
+export async function listByDay(
+  date: string,
+  mode: CalendarMode,
+  zone: string,
+): Promise<StoredRecord[]> {
+  const entries = await calendarRange(date, date, mode, zone);
+  return entries.map((e) => e.record);
+}

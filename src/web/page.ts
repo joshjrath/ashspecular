@@ -11,8 +11,8 @@
  * belongs to.
  */
 import { CATEGORIES, CHANNELS, type CategoryId } from "../catalog.js";
-import { ORG_TZ, TEAM_TZ, renderIn } from "../parse/derive.js";
-import type { DayBucket, Stats, StoredRecord } from "../db/records.js";
+import { ORG_TZ, TEAM_TZ, dateIn, renderIn } from "../parse/derive.js";
+import type { CalendarEntry, CalendarMode, DayBucket, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
   return String(s ?? "")
@@ -165,6 +165,63 @@ button.clear:hover { border-color: var(--lf); color: var(--text); }
 .login button { width: 100%; padding: 11px; border-radius: 8px; border: 0; cursor: pointer;
   background: var(--lf); color: #0B0D11; font: inherit; font-weight: 620; }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
+/* ── calendar ──────────────────────────────────────────────────────────── */
+.calbar { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; flex-wrap: wrap; }
+.calbar .month { font-size: 15.5px; font-weight: 620; letter-spacing: -0.01em; min-width: 170px; }
+.calbar .nav {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+  padding: 6px 11px; font-size: 13px; color: var(--dim);
+}
+.calbar .nav:hover { border-color: var(--lf); color: var(--text); }
+.calbar .tabs { margin-left: auto; display: flex; gap: 4px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.calbar .tab { padding: 5px 13px; border-radius: 7px; font-size: 13px; color: var(--dim); }
+.calbar .tab.on { background: var(--panel2); color: var(--text); font-weight: 600; }
+.calbar .tab:hover { color: var(--text); }
+
+.cal {
+  /* minmax(0,1fr), not 1fr: a long title must not widen its column and throw
+     the week out of square. The chip ellipsises instead. */
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+.cal .wd {
+  background: var(--panel); padding: 8px 10px; font-size: 11px; font-weight: 650;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); text-align: center;
+}
+.cal .cell {
+  background: var(--panel); min-height: 116px; padding: 7px 7px 9px;
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.cal .cell.outside { background: #11141B; }
+.cal .cell.outside .num { color: #3D4657; }
+.cal .cell.today { background: var(--panel2); box-shadow: inset 0 0 0 1px var(--lf); }
+.cal .num {
+  font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; gap: 6px; padding: 1px 3px; border-radius: 5px;
+  align-self: flex-start;
+}
+.cal .num:hover { background: var(--line); color: var(--text); }
+.cal .cell.today .num { color: var(--lf); font-weight: 700; }
+.cal .num .tag {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--lf); font-weight: 650;
+}
+.cal .chip {
+  display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 6px;
+  background: var(--bg); border-left: 2px solid var(--c); font-size: 11.5px; color: var(--dim);
+  min-width: 0;
+}
+.cal .chip:hover { background: var(--line); color: var(--text); }
+.cal .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c); flex: none; }
+.cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal .more { font-size: 11px; color: var(--faint); padding: 1px 6px; }
+.cal .more:hover { color: var(--text); }
+@media (max-width: 900px) {
+  .cal .cell { min-height: 88px; }
+  .cal .chip .t { display: none; }
+}
+
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -177,7 +234,7 @@ export interface Shell {
   /** Which sidebar entry is lit. */
   active: string;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number };
   lastIntake: Date | null;
 }
 
@@ -217,6 +274,7 @@ function sidebar(s: Shell): string {
     <a class="mark" href="/">Specular</a>
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
+      ${item("/calendar", "Calendar", s.nav.calendar, "calendar")}
       ${item("/reviews", "Reviews", s.nav.reviews, "reviews")}
       ${item("/queue", "Queue", s.nav.queue, "queue")}
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
@@ -600,3 +658,160 @@ export function renderEmptyState(): string {
 }
 
 export type { CategoryId };
+
+// ── the content calendar ──────────────────────────────────────────────────
+
+/** Sunday-first, matching how the studio's week is written. */
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Adds whole months without the 31st-of-February problem. */
+export function shiftMonth(ym: string, by: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const total = y! * 12 + (m! - 1) + by;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
+/** YYYY-MM for a date, in the org's zone. */
+export function monthOf(at: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ORG_TZ, year: "numeric", month: "2-digit",
+  }).format(at);
+}
+
+/** Every day the grid shows: whole weeks covering the month, Sunday first. */
+export function calendarGrid(ym: string): string[] {
+  const [y, m] = ym.split("-").map(Number);
+  const first = new Date(Date.UTC(y!, m! - 1, 1, 12));
+  const start = new Date(first);
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+
+  const last = new Date(Date.UTC(y!, m!, 0, 12));
+  const end = new Date(last);
+  end.setUTCDate(end.getUTCDate() + (6 - end.getUTCDay()));
+
+  const days: string[] = [];
+  for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function monthName(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(y!, m! - 1, 1, 12)));
+}
+
+export function renderCalendar(
+  shell: Shell,
+  ym: string,
+  mode: CalendarMode,
+  entries: CalendarEntry[],
+): string {
+  const byDay = new Map<string, CalendarEntry[]>();
+  for (const e of entries) {
+    if (!byDay.has(e.day)) byDay.set(e.day, []);
+    byDay.get(e.day)!.push(e);
+  }
+
+  const today = dateIn(ORG_TZ);
+  const thisMonth = ym;
+  const grid = calendarGrid(ym);
+
+  const cells = grid
+    .map((day) => {
+      const list = byDay.get(day) ?? [];
+      const outside = !day.startsWith(thisMonth);
+      const isToday = day === today;
+      const num = Number(day.slice(8));
+
+      // Three fit before the cell starts scrolling the eye; the rest are one
+      // click away rather than crushed into unreadable slivers.
+      const chips = list
+        .slice(0, 3)
+        .map(
+          (e) => `<a class="chip" style="--c:${colourOf(e.record.category)}"
+            href="/r/${e.record.id}" title="${esc(displayTitle(e.record))}">
+            <span class="dot"></span><span class="t">${esc(displayTitle(e.record))}</span>
+          </a>`,
+        )
+        .join("");
+
+      const more =
+        list.length > 3
+          ? `<a class="more" href="/day/${day}?mode=${mode}">+${list.length - 3} more</a>`
+          : "";
+
+      return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}">
+        <a class="num" href="/day/${day}?mode=${mode}">${num}${
+          isToday ? `<span class="tag">today</span>` : ""
+        }</a>
+        ${chips}${more}
+      </div>`;
+    })
+    .join("");
+
+  const heads = WEEKDAYS.map((d) => `<div class="wd">${d}</div>`).join("");
+
+  const tab = (value: CalendarMode, label: string) =>
+    `<a class="tab${mode === value ? " on" : ""}" href="/calendar/${ym}?mode=${value}">${label}</a>`;
+
+  return layout(
+    "Calendar",
+    shell,
+    `${pageHeader("Calendar")}
+    <div class="calbar">
+      <a class="nav" href="/calendar/${shiftMonth(ym, -1)}?mode=${mode}" aria-label="Previous month">←</a>
+      <span class="month">${esc(monthName(ym))}</span>
+      <a class="nav" href="/calendar/${shiftMonth(ym, 1)}?mode=${mode}" aria-label="Next month">→</a>
+      <a class="nav today" href="/calendar?mode=${mode}">Today</a>
+      <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
+    </div>
+    <div class="cal">${heads}${cells}</div>
+    <div class="legend" style="margin-top:14px">${CATEGORIES.map(
+      (c) => `<span style="--c:${c.color}"><i></i>${esc(c.label)}</span>`,
+    ).join("")}</div>
+    ${
+      entries.length
+        ? ""
+        : `<div class="empty" style="margin-top:16px">Nothing ${
+            mode === "posting" ? "airing" : "due"
+          } this month.</div>`
+    }`,
+  );
+}
+
+export function renderDay(
+  shell: Shell,
+  date: string,
+  mode: CalendarMode,
+  list: StoredRecord[],
+): string {
+  const pretty = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+
+  const ym = date.slice(0, 7);
+
+  return layout(
+    pretty,
+    shell,
+    `${pageHeader(pretty)}
+    <div class="calbar">
+      <a class="nav" href="/day/${shiftDay(date, -1)}?mode=${mode}" aria-label="Previous day">←</a>
+      <a class="nav" href="/day/${shiftDay(date, 1)}?mode=${mode}" aria-label="Next day">→</a>
+      <a class="nav" href="/calendar/${ym}?mode=${mode}">Back to ${esc(monthName(ym))}</a>
+      <span class="month" style="font-size:13px;color:var(--dim)">${
+        mode === "posting" ? "airing" : "due"
+      } this day</span>
+    </div>
+    ${rows(list, mode === "posting" ? "Nothing airing this day." : "Nothing due this day.")}`,
+  );
+}
+
+/** Shift a YYYY-MM-DD by whole days, DST-proof via UTC noon. */
+function shiftDay(date: string, by: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + by);
+  return d.toISOString().slice(0, 10);
+}

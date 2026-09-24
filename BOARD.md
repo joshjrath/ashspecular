@@ -17,6 +17,15 @@ to mean scrolling back through DMs.
 
 **Everything else** — open records that aren't in either list above.
 
+**Calendar** — a month of everything, on the day it goes out.
+
+![The calendar](docs/calendar.png)
+
+Two modes, switched top right: **Posting** plots the air date, **Deadlines**
+plots the day the work is due. Colour is category; a cell shows three and
+hides the rest behind "+N more". Click a chip for that record, a date for
+that whole day, and the arrows to move a month or a day at a time.
+
 **Channels** — every channel with its open count. Click one and you get
 everything filed under it, cleared items included.
 
