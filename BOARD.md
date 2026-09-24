@@ -63,23 +63,34 @@ nothing, and the board says so rather than showing an empty page.
 
 ## Running it on Railway
 
-The bot is a worker and the board is a web service. They share one database,
-so they belong in one Railway project as two services.
+One service runs both halves. `npm start` boots the bot, then the board, in
+the same process — so there is one deploy, one set of variables, and no way
+for the two to drift apart.
 
-1. **+ New → Database → Add PostgreSQL.** Railway sets `DATABASE_URL`.
-2. The existing bot service: **Variables → New Variable → Add Reference →**
-   `DATABASE_URL`. Redeploy. It starts filing what it parses.
-3. **+ New → GitHub Repo →** the same repo, again. This is the board.
-   - **Settings → Start Command:** `npm run start:web`
-   - **Settings → Networking → Generate Domain**
-   - **Variables:** reference `DATABASE_URL`, then add `DASHBOARD_PASSWORD`
-     and `PUBLIC_URL` (the domain Railway just gave you, with `https://`).
+In the service you already have:
 
-`PUBLIC_URL` is what makes every Discord reply carry a link straight to its
-record, so it is worth setting.
+1. **+ New → Database → Add PostgreSQL.** Railway creates `DATABASE_URL`.
+2. **Variables → New Variable → Add Reference →** `DATABASE_URL`.
+3. **Variables → New Variable →** `DASHBOARD_PASSWORD`, anything you'll
+   remember.
+4. **Settings → Networking → Generate Domain.** Port `8080`.
+5. **Variables → New Variable →** `PUBLIC_URL`, the domain from step 4 with
+   `https://` in front. This is what makes each Discord reply link straight to
+   its record.
 
-Unlike the bot, the board *is* a web service: it listens on `PORT`, which
-Railway sets, and `/healthz` answers if you want a healthcheck.
+Redeploy. The log should say:
+
+```
+[bot] logged in as ashtracker#1234
+[web] listening on :8080
+[web] storage: connected
+```
+
+Open the domain, enter the password, and the board is there.
+
+To split them later — a worker for the bot, a web service for the board —
+set `SERVICE=bot` on one and `SERVICE=web` on the other. Nothing else
+changes.
 
 ## The password
 

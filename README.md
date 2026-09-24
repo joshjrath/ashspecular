@@ -19,6 +19,7 @@ npm install
 npm run doctor      # checks Node, keys, Discord and Anthropic before you start
 npm run bot         # the Discord bot
 npm run web         # the board, at http://localhost:8080
+npm start           # both at once, the way it runs deployed
 ```
 
 ## The four categories

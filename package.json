@@ -8,8 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
-    "start": "node dist/src/bot/index.js",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/src/db/migrations',{recursive:true})\"",
+    "start": "node dist/src/start.js",
+    "start:bot": "node dist/src/bot/index.js",
     "start:web": "node dist/src/web/index.js",
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts",
     "migrate": "node dist/src/db/migrate.js",
