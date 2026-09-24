@@ -12,7 +12,7 @@ function required(name: string): string {
 }
 
 const token = required("DISCORD_TOKEN");
-required("ANTHROPIC_API_KEY");
+const hasModel = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 
 registerIntake();
 
@@ -20,7 +20,11 @@ client.once(Events.ClientReady, (ready) => {
   const ids = (process.env.INTAKE_CHANNEL_IDS ?? "").trim();
   console.log(`[bot] logged in as ${ready.user.tag}`);
   console.log(`[bot] intake: ${ids || "every channel it can see"}`);
-  console.log(`[bot] model: ${process.env.ANTHROPIC_MODEL ?? "claude-opus-5"}`);
+  console.log(
+    hasModel
+      ? `[bot] model: ${process.env.ANTHROPIC_MODEL ?? "claude-opus-5"}`
+      : "[bot] no API key — assignment posts and Frame.io links parse by pattern; prose is filed by channel name only",
+  );
   if (!isIntakeChannel("probe")) console.log("[bot] (channel filter active)");
 });
 
