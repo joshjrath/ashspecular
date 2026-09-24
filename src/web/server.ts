@@ -20,6 +20,7 @@ import {
   openByCategory,
   setStatus,
   stats,
+  clearBatches,
   type CalendarMode,
 } from "../db/records.js";
 import { migrate } from "../db/migrate.js";
@@ -256,11 +257,36 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderRecord(s, record));
   });
 
+  /**
+   * Only ever a path on this site. A Referer is attacker-controllable, so its
+   * pathname is taken and everything else — host, scheme, a whole other URL —
+   * is thrown away, which makes an open redirect impossible.
+   */
+  function backTo(referer: string | undefined, fallback: string): string {
+    if (!referer) return fallback;
+    try {
+      const url = new URL(referer, "http://internal");
+      return url.pathname + url.search;
+    } catch {
+      return fallback;
+    }
+  }
+
   app.post<{ Params: { id: string; action: string } }>("/r/:id/:action", async (request, reply) => {
     const { id, action } = request.params;
     if (action !== "done" && action !== "open") return reply.code(400).send("no");
     await setStatus(Number(id), action);
-    return reply.redirect(`/r/${id}`);
+    // Back where you pressed it, so clearing a list does not bounce you away.
+    return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+  });
+
+  app.post<{ Body: { channel?: string; date?: string } }>("/recurring/clear", async (request, reply) => {
+    const channel = request.body?.channel;
+    const date = safeDate(request.body?.date);
+    if (channel && date && CHANNELS.some((c) => c.name === channel)) {
+      await clearBatches(channel, date);
+    }
+    return reply.redirect("/recurring");
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });

@@ -37,6 +37,12 @@ plots the day the work is due. Colour is category; a cell shows three and
 hides the rest behind "+N more". Click a chip for that record, a date for
 that whole day, and the arrows to move a month or a day at a time.
 
+**Search** sits at the top of the rail on every page — titles, codes, channels,
+briefs, and the original message text.
+
+**The tick on every row** clears it where you are looking, without opening it
+first, and puts you back on the same page.
+
 **Channels** — every channel with its open count. Click one and you get
 everything filed under it, cleared items included.
 
@@ -55,10 +61,12 @@ Every bits channel opens its batches by itself each morning at 06:00 ET. You
 send nothing. Numbers run continuously per channel, so "FNAF Bits batch 141" is
 that channel's 141st batch ever, not its 141st this month.
 
-Seven channels × 5 batches = 35 a day. To change how many, edit `perDay` on
-that channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
+One batch per channel, seven a day. To change that, edit `perDay` on the
+channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
 morning follows it. Removing a channel's `recurring` block stops it opening at
 all.
+
+The tick beside a channel clears its whole day in one press.
 
 **Working ahead** is the button on that page. It opens tomorrow's batches now,
 so you can clear them today. Tomorrow morning's run finds them already there
@@ -83,6 +91,32 @@ does. The chart keeps its size and scrolls sideways rather than shrinking into
 a smear.
 
 <img src="docs/phone-dashboard.png" width="300"> <img src="docs/phone-calendar.png" width="300">
+
+## The morning digest
+
+At 08:00 ET the bot posts one message: the four long-form videos whose
+voiceover is closest, anything late, anything due today, and how the bits
+stand. It picks by voiceover deadline, because that is what the day is built
+around. Bits get one summary line rather than seven rows.
+
+```
+DIGEST_CHANNEL_ID=…     # the channel to post into. Empty = no digest
+DIGEST_CRON=0 8 * * *   # when, in ORG_TZ
+DIGEST_COUNT=4          # how many priorities it names
+```
+
+Posting is recorded per day, so a restart can't send it twice. Preview it
+without sending:
+
+```bash
+npm run digest
+```
+
+## The overdue nudge
+
+Once something passes its deadline the bot says so in the same channel — once
+per item, never again. Hourly by default (`NUDGE_CRON`), and bits are left out
+because their batches run past 6pm most days by design.
 
 ## Running it locally
 

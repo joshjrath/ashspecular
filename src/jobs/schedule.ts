@@ -69,6 +69,37 @@ function scheduleDigest(): void {
   console.log(`[digest] ${config.digestCron} ${ORG_TZ} → channel ${config.digestChannelId}`);
 }
 
+/**
+ * The overdue nudge, into the same channel as the digest. Hourly by default,
+ * but it only ever speaks about records it has not spoken about before.
+ */
+function scheduleNudge(): void {
+  if (!config.digestChannelId || !config.nudgeCron) return;
+  if (!cron.validate(config.nudgeCron)) {
+    console.error(`[nudge] NUDGE_CRON is not a cron expression: ${config.nudgeCron}`);
+    return;
+  }
+
+  cron.schedule(
+    config.nudgeCron,
+    () => {
+      void (async () => {
+        try {
+          const { client } = await import("../bot/client.js");
+          const channel = await client.channels.fetch(config.digestChannelId);
+          if (!channel?.isSendable()) return;
+          const n = await (await import("./nudge.js")).postNudge(channel);
+          if (n) console.log(`[nudge] flagged ${n}`);
+        } catch (err) {
+          console.error("[nudge] failed:", err);
+        }
+      })();
+    },
+    { timezone: ORG_TZ },
+  );
+  console.log(`[nudge] ${config.nudgeCron} ${ORG_TZ}`);
+}
+
 export function startSchedule(options: { withDigest: boolean }): void {
   const [hh, mm] = earliestOpensAt().split(":");
   const expression = `${Number(mm ?? 0)} ${Number(hh ?? 6)} * * *`;
@@ -80,5 +111,8 @@ export function startSchedule(options: { withDigest: boolean }): void {
   void run("startup");
 
   // Only the half that holds a Discord connection can post the digest.
-  if (options.withDigest) scheduleDigest();
+  if (options.withDigest) {
+    scheduleDigest();
+    scheduleNudge();
+  }
 }

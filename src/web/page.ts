@@ -335,6 +335,20 @@ button.clear:hover { filter: brightness(1.05); }
 .login button:hover { background: #2A2A2E; }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
+.row .when { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.row .when > div { display: block; }
+.row .when .stack { text-align: right; }
+.tick { display: flex; }
+.tick button {
+  width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--line);
+  background: transparent; color: #C9C9CF; cursor: pointer; font-size: 13px; line-height: 1;
+  font-family: var(--ui); flex: none; transition: all .12s ease;
+}
+.tick button:hover { border-color: var(--gm); color: var(--gm); }
+.tick button.on { background: var(--gm); border-color: var(--gm); color: #fff; }
+.row.cleared .title { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
+.row.cleared .meta { opacity: .55; }
+
 /* ── recurring ─────────────────────────────────────────────────────────── */
 .batches { display: flex; flex-direction: column; gap: 8px; }
 .batch {
@@ -342,6 +356,9 @@ button.clear:hover { filter: brightness(1.05); }
   background: var(--sunk); color: var(--ink); font-size: 14px; letter-spacing: -0.012em;
 }
 .batch:hover { background: var(--line); }
+.batch .who { display: flex; align-items: center; gap: 12px; min-width: 180px; }
+.batch .tick button { width: 26px; height: 26px; font-size: 12px; }
+.tick-space { width: 26px; flex: none; }
 .batch .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); flex: none; }
 .batch .name { font-weight: 600; min-width: 160px; }
 .batch .bar {
@@ -583,21 +600,34 @@ function row(r: StoredRecord): string {
         .join("")}</div>`
     : "";
 
-  return `<div class="row" style="--c:${c}">
+  // Clearing is one tap from wherever you are looking, not two pages away.
+  const tick = `<form class="tick" method="post" action="/r/${r.id}/${
+    r.status === "done" ? "open" : "done"
+  }">
+    <button aria-label="${r.status === "done" ? "Reopen" : "Clear"}"
+      title="${r.status === "done" ? "Reopen" : "Clear"}"
+      class="${r.status === "done" ? "on" : ""}">✓</button>
+  </form>`;
+
+  return `<div class="row${r.status === "done" ? " cleared" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span>${code}<a href="/r/${r.id}">${esc(title)}</a></div>
     <div class="meta">${meta.join("<span>·</span>")}${links}</div>
-    <div class="when">${when(r)}</div>
+    <div class="when">${when(r)}${tick}</div>
   </div>`;
 }
 
 function when(r: StoredRecord): string {
   const at = r.voDue ?? r.deadline ?? r.scriptDue;
-  if (!at) return `<span class="z">—</span>`;
+  if (!at) return `<div class="stack"><span class="z">—</span></div>`;
 
   const label = r.voDue ? "VO" : r.deadline ? "due" : "script";
-  return `<div class="d">${esc(renderIn(at, ORG_TZ, "ET"))}</div>
+  const over = r.status === "open" && at.getTime() < Date.now();
+  return `<div class="stack">
+    <div class="d">${esc(renderIn(at, ORG_TZ, "ET"))}</div>
     <div class="z">${esc(label)} · ${esc(renderIn(at, TEAM_TZ, "IST"))}</div>
-    ${r.voDue && r.voSource === "calculated" ? `<div class="derived">air date − 6 days</div>` : ""}`;
+    ${over ? `<div class="over">past its time</div>` : ""}
+    ${r.voDue && r.voSource === "calculated" ? `<div class="derived">air date − 6 days</div>` : ""}
+  </div>`;
 }
 
 function rows(list: StoredRecord[], emptyText: string): string {
@@ -1109,16 +1139,26 @@ export function renderRecurring(
 ): string {
   const c = colourOf("bits");
 
-  const line = (r: { channel: string; total: number; done: number }) => {
+  const line = (r: { channel: string; total: number; done: number }, date?: string) => {
     const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
     const state = r.total === 0 ? "not open" : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
-    return `<a class="batch${r.total && r.done === r.total ? " done" : ""}"
-        href="/channel/${encodeURIComponent(r.channel)}" style="--c:${c}">
-      <span class="dot"></span>
-      <span class="name">${esc(r.channel)}</span>
+    const clearAll =
+      date && r.total > r.done
+        ? `<form class="tick" method="post" action="/recurring/clear">
+             <input type="hidden" name="channel" value="${esc(r.channel)}">
+             <input type="hidden" name="date" value="${esc(date)}">
+             <button aria-label="Clear ${esc(r.channel)}" title="Clear the whole day">✓</button>
+           </form>`
+        : `<span class="tick-space"></span>`;
+
+    return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${c}">
+      <a class="who" href="/channel/${encodeURIComponent(r.channel)}">
+        <span class="dot"></span><span class="name">${esc(r.channel)}</span>
+      </a>
       <span class="bar"><span style="width:${pct}%"></span></span>
       <span class="state">${esc(state)}</span>
-    </a>`;
+      ${clearAll}
+    </div>`;
   };
 
   const pretty = (d: string) =>
@@ -1134,14 +1174,14 @@ export function renderRecurring(
     `${pageHeader("Recurring")}
     <div class="panel" style="margin-bottom:14px">
       <h2>Today · ${esc(pretty(today.date))}</h2>
-      <div class="batches">${today.rows.map(line).join("")}</div>
+      <div class="batches">${today.rows.map((r) => line(r, today.date)).join("")}</div>
     </div>
 
     <div class="panel" style="margin-bottom:14px">
       <h2>Tomorrow · ${esc(pretty(ahead.date))}</h2>
       ${
         aheadOpen
-          ? `<div class="batches">${ahead.rows.map(line).join("")}</div>
+          ? `<div class="batches">${ahead.rows.map((r) => line(r, ahead.date)).join("")}</div>
              <p class="hint">Already open. Clear anything you get ahead on and it stays cleared —
              the morning run finds these and leaves them alone.</p>`
           : `<p class="hint">Not open yet. They open by themselves in the morning.</p>

@@ -356,6 +356,16 @@ export async function search(query: string, limit = 60): Promise<StoredRecord[]>
   return rows.map(hydrate);
 }
 
+/** Clear a whole channel's batches for one day — the Recurring page's tick. */
+export async function clearBatches(channel: string, date: string): Promise<number> {
+  const { rowCount } = await pool.query(
+    `UPDATE records SET status = 'done', done_at = now(), updated_at = now()
+     WHERE channel = $1 AND air_date = $2 AND batch_no IS NOT NULL AND status = 'open'`,
+    [channel, date],
+  );
+  return rowCount ?? 0;
+}
+
 /** When the bot last filed anything — the "live" indicator's truth. */
 export async function lastIntake(): Promise<Date | null> {
   const { rows } = await pool.query<{ at: Date | null }>(

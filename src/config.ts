@@ -23,6 +23,9 @@ export const config = {
   /** How many long-form priorities the digest names. */
   digestCount: Number(opt("DIGEST_COUNT", "4")),
 
+  /** Hourly check for anything newly past its deadline. Off when empty. */
+  nudgeCron: opt("NUDGE_CRON", "5 * * * *"),
+
   anthropicKey: opt("ANTHROPIC_API_KEY"),
   anthropicModel: opt("ANTHROPIC_MODEL", "claude-opus-5"),
 

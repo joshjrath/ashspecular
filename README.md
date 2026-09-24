@@ -62,6 +62,7 @@ npm run test:rules    # 63 deterministic tests — no API key needed
 npm run eval          # score the parser against evals/cases/
 npm run parse -- "…"  # parse one message from the command line
 npm run batches       # open today's bits batches by hand
+npm run digest        # print today's digest without sending it
 ```
 
 ## Layout
@@ -94,6 +95,5 @@ evals/cases/        the parser's test set
 
 ## What comes next
 
-1. Run it against real messages and fix what it misreads *(now)*
-2. Correction dropdowns on the Discord card, instead of the feedback button
-3. The 8am digest
+Everything in the original plan is built. What's left is what real use turns
+up — the parser's misreads, and whatever the board turns out not to show.
