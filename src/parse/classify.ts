@@ -4,7 +4,8 @@ import { CATEGORIES, CHANNELS } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, dateIn } from "./derive.js";
 import { ExtractionSchema, type Extraction } from "./schema.js";
 import { extractUrls, looksLikeBareRevision, classifyUrl } from "./rules.js";
-import { parseAssignment } from "./structured.js";
+import { matchChannel } from "../catalog.js";
+import { parsePattern } from "./structured.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
@@ -72,7 +73,7 @@ export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
   // The studio's own assignment post is rigidly templated, so it is read by
   // pattern first: free, instant, identical every time, and it works with no
   // API key at all. The model is for the messy forwards that follow.
-  const patterned = parseAssignment(raw);
+  const patterned = parsePattern(raw);
   if (patterned) return { extraction: patterned, parsedBy: "pattern", model: null, raw };
 
   try {
@@ -127,17 +128,34 @@ function renderRaw(input: ClassifyInput): string {
   return parts.filter(Boolean).join("\n").trim();
 }
 
-/** Deterministic best-effort for when the model is unreachable. */
+/**
+ * Deterministic best-effort for when the model is unreachable — or when there
+ * is no API key at all, which is a supported way to run this.
+ *
+ * Deliberately cruder than the pattern passes: it reads what the hostname and
+ * a named channel say and nothing more. Naming a channel is good evidence of
+ * where a message belongs and poor evidence of what it asks for, so the kind
+ * follows the channel and the confidence stays low enough to be reviewed.
+ */
 function ruleFallback(raw: string): Extraction {
   const urls = extractUrls(raw);
   const hasFrameio = urls.some((u) => classifyUrl(u) === "frameio");
+  const channel = matchChannel(raw);
+
+  const kind: Extraction["kind"] = hasFrameio || looksLikeBareRevision(raw)
+    ? "review"
+    : channel?.category === "bits"
+      ? "bits"
+      : channel
+        ? "update"
+        : "other";
 
   return {
-    kind: hasFrameio || looksLikeBareRevision(raw) ? "review" : "other",
+    kind,
     code: raw.match(/\b([A-Z]{3,6}-\d{2,4})\b/)?.[1] ?? null,
     title: null,
-    category: "unknown",
-    channel: null,
+    category: channel?.category ?? "unknown",
+    channel: channel?.name ?? null,
     tag: null,
     air_date: null,
     stage: null,
@@ -149,7 +167,9 @@ function ruleFallback(raw: string): Extraction {
     version: Number(raw.match(/\bv(\d+)\b/i)?.[1]) || null,
     links: urls.map((url) => ({ url, kind: classifyUrl(url), label: "link" })),
     brief: null,
-    note: "Filed without classification — the parser was unavailable.",
-    confidence: 0,
+    note: channel
+      ? `Filed by the channel name only — no model was available to read the rest.`
+      : "Filed without classification — no model was available.",
+    confidence: channel ? 0.4 : 0,
   };
 }

@@ -46,11 +46,11 @@ npm run doctor           # check everything before touching Discord
 npm run bot
 ```
 
-**You only strictly need the Discord token.** Your assignment posts are read by
-pattern — no API call, no key, nothing to pay for. The Anthropic key is only
-for the messy stuff: a Frame.io link forwarded out of a DM, a one-line "torch
-is only at 3 today". Without a key those still get filed, but with the links
-and code only, and no channel worked out.
+**You only need the Discord token.** Assignment posts and forwarded Frame.io
+links are both read by pattern — no API call, no key, nothing to pay for. The
+Anthropic key only buys you prose: working out what "push the deadpool cut to
+friday" means, or that "need the vo by 3 latest" is a deadline. Without it
+those still get filed against a channel they name, just not understood.
 
 `npm run doctor` tests each thing separately — Node version, `.env`, whether
 Anthropic accepts your key, whether Discord accepts your token, and one real

@@ -30,23 +30,47 @@ A message goes through as little machinery as it needs:
 
 | Pass | What it handles | Cost |
 |---|---|---|
-| **pattern** (`parse/structured.ts`) | the studio's own assignment post | free, instant, no API key |
-| **model** (`parse/classify.ts`) | messy forwards, DMs, one-liners | one Claude call |
-| **rules** (`ruleFallback`) | anything at all, when the API is unreachable | free |
+| **pattern** (`parse/structured.ts`) | assignment posts, forwarded Frame.io links | free, instant, no API key |
+| **model** (`parse/classify.ts`) | prose: intent, fuzzy times, anything unlabelled | one Claude call |
+| **rules** (`ruleFallback`) | anything at all, when there is no model | free |
 
-The assignment post is rigidly templated — `### MM-DD-YY | CODE | Title`, a
-labelled deadline, a labelled word count — so it needs no model. The pattern
-pass runs first and, when it recognises the shape, the message never reaches
-the API. **This is why most of the volume costs nothing.**
+Two shapes need no model at all:
 
-It refuses everything it is not sure of: no heading signature, no title, and it
-returns `null` and falls through. A half-read post is worse than a parsed one.
-It also never guesses a channel (the template names none) and never calculates
-the VO deadline — that stays `derive()`'s job, exactly as it is for the model.
+**The assignment post** is rigidly templated — `### MM-DD-YY | CODE | Title`, a
+labelled deadline, a labelled word count — so `parseAssignment` reads it
+outright.
 
-So an `ANTHROPIC_API_KEY` is **optional**. Without one, assignment posts still
-parse perfectly; forwarded Frame.io links and terse one-liners drop to the rule
-fallback, which keeps the links and the code but can't work out the channel.
+**A forwarded revision** isn't templated but doesn't need to be: the hostname
+says it's a review, `v3` says which version, and a channel name in the sentence
+says which project. `parseReview` reads all three. A bare link with no words
+comes back at confidence `0.5` and says plainly that it doesn't know the
+project — which is honest, because nothing in the message says.
+
+Both refuse what they aren't sure of and return `null`, and the message falls
+through to the model. The refusals that matter:
+
+- No heading signature, or a heading with no title.
+- **Any mention of the voiceover that isn't a plain date and time.** "Oct 5 at
+  2pm ET" is read; "by 3 latest" and "vo whenever you get a chance" are handed
+  over. The VO time drives the whole day's schedule, so the six-day default
+  must never quietly overwrite a stated one.
+- A paragraph with a link buried in it, rather than a forward with a note.
+
+Neither pass ever invents what the message doesn't carry: no channel the words
+don't name, and never a calculated VO deadline — that stays `derive()`'s job,
+so the air-date-minus-six rule lives in exactly one place.
+
+### So do you need an API key?
+
+**No.** `ANTHROPIC_API_KEY` is optional, and this is a supported way to run.
+
+Without one, assignment posts and Frame.io forwards parse exactly as they
+would with a key. Everything else drops to the rule fallback, which is cruder
+but not useless: it still classifies every link by hostname and still files the
+message against a channel it names, at confidence `0.4` so you know to check
+it. What you actually lose is prose — reading intent out of "push the deadpool
+cut to friday", or a fuzzy time out of "need the vo by 3 latest". Those come
+back as `other`, unsorted.
 
 ## The split that matters
 

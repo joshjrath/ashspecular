@@ -18,7 +18,7 @@ import {
   shiftDate,
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
-import { parseAssignment } from "../src/parse/structured.js";
+import { parseAssignment, parseReview } from "../src/parse/structured.js";
 
 let pass = 0;
 let fail = 0;
@@ -171,6 +171,47 @@ t(
   dateIn(ORG_TZ, derive(post, POST).voDue!),
   "2026-09-27",
 );
+
+// ── forwarded revisions ───────────────────────────────────────────────────
+section("forwarded Frame.io revisions");
+
+const rev = parseReview("v3 of smp ep 9 is up https://f.frame.io/r/9bd21x — needs your eyes before tomorrow")!;
+t("a frame.io forward is a review", rev.kind, "review");
+t("version read from v3", rev.version, 3);
+t("channel read from the sentence", rev.channel, "Specular Gaming");
+t("title is the message's own words", rev.title, "smp ep 9");
+t("the link is labelled", rev.links[0]?.label, "Frame.io review");
+t("confident when the project is named", rev.confidence, 0.9);
+
+const bare = parseReview("https://f.frame.io/r/9bd21x")!;
+t("a bare link still files", bare.kind, "review");
+t("but says it doesn't know the project", bare.channel, null);
+t("with honest confidence", bare.confidence, 0.5);
+
+t("no frame.io link is not a review", parseReview("torch is at 3 today"), null);
+t(
+  "a stated VO time goes to the model",
+  parseReview("cut is up https://f.frame.io/r/9bd21x — need the vo by 3 latest"),
+  null,
+);
+
+// ── voiceover times written in prose ──────────────────────────────────────
+section("voiceover times in prose");
+
+const statedVo = parseAssignment(
+  "### 10-15-26 | VIDEO-016 | FNAF Movie 2\n\nVO needs to be recorded by Oct 5 at 2pm ET, earlier than usual.",
+)!;
+t("a stated VO time is read, not defaulted", statedVo.vo_due, "2026-10-05T14:00:00-04:00");
+
+t(
+  "an unreadable VO line defers to the model",
+  parseAssignment("### 10-15-26 | VIDEO-016 | FNAF Movie 2\n\nvo whenever you get a chance"),
+  null,
+);
+
+const header = parseAssignment("### 10-15-26 | VIDEO-016 | FNAF Movie 2\n\n🎙️ **VO** <@1>")!;
+t("a VO stage header is not a deadline", header.vo_due, null);
+t("and is read as the stage", header.stage, "vo");
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
