@@ -214,3 +214,113 @@ export async function channelCounts(): Promise<Record<string, number>> {
   );
   return Object.fromEntries(rows.map((r) => [r.channel, Number(r.n)]));
 }
+
+// ── the dashboard's numbers ───────────────────────────────────────────────
+
+/**
+ * The effective deadline for a row: the voiceover time if there is one, then
+ * any other stated deadline, then the script deadline. One expression, used
+ * everywhere, so the bar chart and the counts can never disagree.
+ */
+const DUE = "COALESCE(vo_due, deadline, script_due)";
+
+export interface Stats {
+  late: number;
+  dueToday: number;
+  voToRecord: number;
+  shippedThisWeek: number;
+}
+
+export async function stats(zone: string): Promise<Stats> {
+  const { rows } = await pool.query<Record<string, string>>(
+    `SELECT
+       COUNT(*) FILTER (WHERE status = 'open' AND ${DUE} < now()) AS late,
+       COUNT(*) FILTER (WHERE status = 'open'
+         AND (${DUE} AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date) AS due_today,
+       COUNT(*) FILTER (WHERE status = 'open' AND vo_due IS NOT NULL) AS vo,
+       COUNT(*) FILTER (WHERE status = 'done' AND done_at > now() - interval '7 days') AS shipped
+     FROM records`,
+    [zone],
+  );
+  const r = rows[0]!;
+  return {
+    late: Number(r.late),
+    dueToday: Number(r.due_today),
+    voToRecord: Number(r.vo),
+    shippedThisWeek: Number(r.shipped),
+  };
+}
+
+export interface DayBucket {
+  /** YYYY-MM-DD in the org's zone, or null for the overdue bucket. */
+  date: string | null;
+  counts: Record<string, number>;
+  total: number;
+}
+
+/**
+ * Work due per day for the next `days` days, split by category, with
+ * everything already overdue collected into one bucket at the front.
+ */
+export async function dueByDay(zone: string, days = 14): Promise<DayBucket[]> {
+  const { rows } = await pool.query<{ day: string | null; category: string; n: string }>(
+    `SELECT
+       CASE WHEN ${DUE} < now() THEN NULL
+            ELSE to_char(${DUE} AT TIME ZONE $1, 'YYYY-MM-DD') END AS day,
+       category, COUNT(*) AS n
+     FROM records
+     WHERE status = 'open' AND ${DUE} IS NOT NULL
+       AND ${DUE} < (now() + ($2 || ' days')::interval)
+     GROUP BY 1, 2`,
+    [zone, days],
+  );
+
+  const byDay = new Map<string | null, Record<string, number>>();
+  for (const r of rows) {
+    const key = r.day;
+    if (!byDay.has(key)) byDay.set(key, {});
+    byDay.get(key)![r.category] = Number(r.n);
+  }
+
+  // Every day in the window appears, empty or not — gaps are information.
+  const out: DayBucket[] = [];
+  const overdue = byDay.get(null) ?? {};
+  out.push({ date: null, counts: overdue, total: sum(overdue) });
+
+  const today = new Date();
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(today.getTime() + i * 86_400_000);
+    const key = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(d);
+    const counts = byDay.get(key) ?? {};
+    out.push({ date: key, counts, total: sum(counts) });
+  }
+  return out;
+}
+
+function sum(counts: Record<string, number>): number {
+  return Object.values(counts).reduce((a, b) => a + b, 0);
+}
+
+/** Everything open, grouped by category, soonest deadline first. */
+export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'open'
+     ORDER BY ${DUE} ASC NULLS LAST, created_at DESC LIMIT 300`,
+  );
+  const grouped = new Map<string, StoredRecord[]>();
+  for (const r of rows.map(hydrate)) {
+    if (!grouped.has(r.category)) grouped.set(r.category, []);
+    grouped.get(r.category)!.push(r);
+  }
+  return grouped;
+}
+
+/** When the bot last filed anything — the "live" indicator's truth. */
+export async function lastIntake(): Promise<Date | null> {
+  const { rows } = await pool.query<{ at: Date | null }>(
+    `SELECT MAX(created_at) AS at FROM records`,
+  );
+  return rows[0]?.at ?? null;
+}
