@@ -4,6 +4,8 @@ One page showing everything the bot has filed. Server-rendered HTML, no build
 step and no client framework — it is a list of short records, and a list of
 short records does not need a bundler.
 
+![The board](docs/board.png)
+
 ## What's on it
 
 **VO to record**, soonest first — the spine of the day. A deadline the parser
