@@ -50,7 +50,7 @@ const CSS = `
   --sunk: #F4F4F5; --line: #E8E8EA;
   --ink: #101012; --ink2: #5F5F68; --ink3: #9A9AA3;
   --salmon: #F2A79C; --yellow: #F3E96C; --late: #D4453A; --warn: #C2611F;
-  --lf: #3E5AD6; --rd: #C96B1C; --gm: #2E9463; --bt: #9A57D6;
+  --lf: #4A5CD4; --rd: #CE7118; --gm: #35986A; --bt: #AC63C8;
   --r: 26px;
   --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --ui: "Archivo", ui-sans-serif, -apple-system, system-ui, sans-serif;
@@ -236,7 +236,7 @@ header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-
 .links { display: flex; gap: 7px; flex-wrap: wrap; }
 .links a { font-size: 11.5px; padding: 3px 11px; border-radius: 999px; background: var(--sunk);
   color: var(--ink2); font-weight: 600; }
-.links a.frameio { background: #E7EAFB; color: #3349B8; }
+.links a.frameio { background: #E9ECFA; color: #3D4CB4; }
 .links a:hover { background: var(--line); color: var(--ink); }
 .warn { color: var(--warn); font-size: 12px; font-weight: 600; }
 
@@ -597,7 +597,7 @@ function dueChart(buckets: DayBucket[]): string {
       // so an empty week reads as empty rather than as missing.
       const track = `<rect class="track" x="${x.toFixed(1)}" y="${PAD_T}" width="${barW}"
         height="${plotH}" rx="${r}" fill="${
-          isToday ? "#FCF6C4" : isLate ? "#FBE6E3" : "#F1F1F3"
+          isToday ? "#FCF6C4" : isLate ? "#FCEBE9" : "#F1F1F3"
         }"/>`;
 
       // The stack is clipped to one rounded pill, so the whole bar has the
