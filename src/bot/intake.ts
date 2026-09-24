@@ -9,15 +9,16 @@ import {
 import { client, isIntakeChannel } from "./client.js";
 import { classify, type ClassifyInput } from "../parse/classify.js";
 import { derive, type DerivedRecord } from "../parse/derive.js";
-import { feedbackRow, recordEmbed } from "./render.js";
+import { cardRows, recordEmbed } from "./render.js";
 import { config, hasDatabase } from "../config.js";
+import { CHANNELS } from "../catalog.js";
 
 type Msg = OmitPartialGroupDMChannel<Message<boolean>>;
 
 const PENDING_DIR = join(process.cwd(), "evals", "cases", "pending");
 
-/** Everything the bot has parsed this run, so feedback can find it again. */
-const seen = new Map<string, { input: ClassifyInput; record: DerivedRecord }>();
+/** Everything the bot has parsed this run, so the controls can find it again. */
+const seen = new Map<string, { input: ClassifyInput; record: DerivedRecord; savedId: number | null }>();
 
 export function registerIntake(): void {
   client.on(Events.MessageCreate, (message) => {
@@ -28,8 +29,13 @@ export function registerIntake(): void {
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
-    if (!interaction.isButton()) return;
-    void feedback(interaction).catch((err) => console.error("[feedback] failed:", err));
+    if (interaction.isButton()) {
+      void feedback(interaction).catch((err) => console.error("[feedback] failed:", err));
+      return;
+    }
+    if (interaction.isStringSelectMenu()) {
+      void correct(interaction).catch((err) => console.error("[correct] failed:", err));
+    }
   });
 }
 
@@ -45,7 +51,7 @@ async function handle(message: Msg): Promise<void> {
 
   const result = await classify(input);
   const record = derive(result.extraction, result.raw);
-  seen.set(message.id, { input, record });
+  seen.set(message.id, { input, record, savedId: null });
 
   // Storage is optional: without DATABASE_URL the bot still parses and
   // replies, it just forgets. A write failure must never lose the reply that
@@ -67,6 +73,7 @@ async function handle(message: Msg): Promise<void> {
       console.error("[intake] could not save:", err);
     }
   }
+  seen.set(message.id, { input, record, savedId: saved });
 
   await message.reactions.cache.get("⏳")?.users.remove(client.user!.id).catch(() => {});
   await message.react(record.category === "unknown" ? "❓" : "✅").catch(() => {});
@@ -82,13 +89,73 @@ async function handle(message: Msg): Promise<void> {
 
   await message.reply({
     embeds: [recordEmbed(record)],
-    components: [feedbackRow(message.id)],
+    components: cardRows(message.id, record, saved !== null),
     content:
       result.parsedBy === "rule"
         ? "⚠️ Parser was unreachable — this is the rule-based fallback."
         : `\`${ms}ms${cost}${how}\`${link}`,
     allowedMentions: { repliedUser: false },
   });
+}
+
+/**
+ * A dropdown correction: fix the record, redraw the card, and keep the
+ * correction as an eval case so the parser stops making the same mistake.
+ */
+async function correct(
+  interaction: import("discord.js").StringSelectMenuInteraction,
+): Promise<void> {
+  const [action, messageId] = interaction.customId.split(":");
+  if (!messageId) return;
+
+  const entry = seen.get(messageId);
+  if (!entry) {
+    await interaction.reply({
+      content: "That was parsed before the last restart, so I no longer have it in memory.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const choice = interaction.values[0]!;
+  const before = { category: entry.record.category, channel: entry.record.channel };
+
+  if (action === "set-channel") {
+    if (choice === "__none__") {
+      entry.record.channel = null;
+    } else {
+      const channel = CHANNELS.find((c) => c.id === choice);
+      if (!channel) return;
+      entry.record.channel = channel.name;
+      // A named channel decides the category; that rule holds here too.
+      entry.record.category = channel.category;
+    }
+  } else if (action === "set-category") {
+    entry.record.category = choice as DerivedRecord["category"];
+  } else {
+    return;
+  }
+
+  if (entry.savedId && hasDatabase) {
+    try {
+      const { updateFiling } = await import("../db/records.js");
+      await updateFiling(entry.savedId, entry.record.category, entry.record.channel);
+    } catch (err) {
+      console.error("[correct] could not save:", err);
+    }
+  }
+
+  await interaction.update({
+    embeds: [recordEmbed(entry.record)],
+    components: cardRows(messageId, entry.record, entry.savedId !== null),
+  });
+
+  await saveCase(entry, before, "corrected by hand in Discord — the parser filed it wrong");
+  console.log(
+    `[correct] ${messageId}: ${before.channel ?? before.category} → ${
+      entry.record.channel ?? entry.record.category
+    }`,
+  );
 }
 
 /**
@@ -114,40 +181,21 @@ async function feedback(interaction: import("discord.js").ButtonInteraction): Pr
     return;
   }
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const file = join(PENDING_DIR, `${stamp}.json`);
+  if (verdict === "done") {
+    if (!entry.savedId || !hasDatabase) {
+      await interaction.reply({
+        content: "Nothing to clear — this one was never stored.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const { setStatus } = await import("../db/records.js");
+    await setStatus(entry.savedId, "done");
+    await interaction.reply({ content: "Cleared.", flags: MessageFlags.Ephemeral });
+    return;
+  }
 
-  const draft = {
-    name: "TODO — name this case",
-    why: "TODO — why the parser got this wrong",
-    input: {
-      author: entry.input.author,
-      channelName: entry.input.channelName,
-      content: entry.input.content,
-      ...(entry.input.forwardedFrom ? { forwardedFrom: entry.input.forwardedFrom } : {}),
-    },
-    // What it actually returned, so you can see what to correct.
-    got: {
-      kind: entry.record.kind,
-      code: entry.record.code,
-      category: entry.record.category,
-      channel: entry.record.channel,
-      airDate: entry.record.airDate,
-      voSource: entry.record.voSource,
-      confidence: entry.record.confidence,
-    },
-    // Delete the wrong lines, correct the rest, then move this file up one
-    // directory into evals/cases/.
-    expect: {
-      kind: entry.record.kind,
-      category: entry.record.category,
-      channel: entry.record.channel,
-    },
-  };
-
-  await mkdir(PENDING_DIR, { recursive: true });
-  const json = `${JSON.stringify(draft, null, 2)}\n`;
-  await writeFile(file, json, "utf8");
+  const { file, json } = await saveCase(entry, null, "TODO — why the parser got this wrong");
 
   // Hand it back in Discord rather than leaving it in a folder to go and find.
   // Short enough pastes inline; anything longer comes back as a file to drag.
@@ -158,10 +206,49 @@ async function feedback(interaction: import("discord.js").ButtonInteraction): Pr
     content: inline
       ? `Copy this and send it to Claude — it's the message plus what I read from it.\n${block}`
       : "Too long to paste inline, so here it is as a file — send it to Claude.",
-    files: inline ? [] : [{ attachment: Buffer.from(json, "utf8"), name: `${stamp}.json` }],
+    files: inline ? [] : [{ attachment: Buffer.from(json, "utf8"), name: `${file}` }],
     flags: MessageFlags.Ephemeral,
   });
-  console.log(`[feedback] wrote ${file}`);
+}
+
+/**
+ * Writes an eval case to evals/cases/pending/. Fill in `expect`, move it up a
+ * directory, and the next `npm run eval` holds the parser to it — which is how
+ * the parser stops regressing on a mistake you already caught.
+ */
+async function saveCase(
+  entry: { input: ClassifyInput; record: DerivedRecord },
+  before: { category: string; channel: string | null } | null,
+  why: string,
+): Promise<{ file: string; json: string }> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const name = `${stamp}.json`;
+
+  const draft = {
+    name: "TODO — name this case",
+    why,
+    input: {
+      author: entry.input.author,
+      channelName: entry.input.channelName,
+      content: entry.input.content,
+      ...(entry.input.forwardedFrom ? { forwardedFrom: entry.input.forwardedFrom } : {}),
+    },
+    // What it read before any correction, so the mistake is visible.
+    ...(before ? { got: before } : {}),
+    // Delete the lines you are not asserting, then move this file up one
+    // directory into evals/cases/.
+    expect: {
+      kind: entry.record.kind,
+      category: entry.record.category,
+      channel: entry.record.channel,
+    },
+  };
+
+  const json = `${JSON.stringify(draft, null, 2)}\n`;
+  await mkdir(PENDING_DIR, { recursive: true });
+  await writeFile(join(PENDING_DIR, name), json, "utf8");
+  console.log(`[feedback] wrote ${name}`);
+  return { file: name, json };
 }
 
 /**

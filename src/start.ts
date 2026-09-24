@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     const { migrate } = await import("./db/migrate.js");
     await migrate();
     const { startSchedule } = await import("./jobs/schedule.js");
-    startSchedule();
+    startSchedule({ withDigest: only !== "web" });
   }
 
   if (only === "bot") return;

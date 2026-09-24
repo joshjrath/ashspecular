@@ -71,6 +71,18 @@ export async function saveRecord(record: DerivedRecord, source: Source): Promise
   return rows[0]!.id;
 }
 
+/** Correct where a record is filed, from the Discord card. */
+export async function updateFiling(
+  id: number,
+  category: string,
+  channel: string | null,
+): Promise<void> {
+  await pool.query(
+    `UPDATE records SET category = $2, channel = $3, updated_at = now() WHERE id = $1`,
+    [id, category, channel],
+  );
+}
+
 export async function setStatus(id: number, status: "open" | "done"): Promise<void> {
   await pool.query(
     `UPDATE records SET status = $2, done_at = CASE WHEN $2 = 'done' THEN now() END,
@@ -323,6 +335,23 @@ export async function listBatchesOn(date: string): Promise<StoredRecord[]> {
     `${SELECT} WHERE batch_no IS NOT NULL AND air_date = $1
      ORDER BY channel ASC, batch_no ASC`,
     [date],
+  );
+  return rows.map(hydrate);
+}
+
+/**
+ * Search across the things you would actually remember: the title, the code,
+ * the channel, the brief, and the message as it arrived. ILIKE rather than
+ * full-text search — at this size it is instant, and it matches partial words
+ * the way people actually type them ("deadp", "VIDEO-0").
+ */
+export async function search(query: string, limit = 60): Promise<StoredRecord[]> {
+  const q = `%${query.trim()}%`;
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE title ILIKE $1 OR code ILIKE $1 OR channel ILIKE $1
+       OR brief ILIKE $1 OR note ILIKE $1 OR raw_content ILIKE $1
+     ORDER BY status ASC, created_at DESC LIMIT $2`,
+    [q, limit],
   );
   return rows.map(hydrate);
 }

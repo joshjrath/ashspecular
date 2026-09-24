@@ -15,6 +15,7 @@ import {
   listByChannel,
   listBatchesOn,
   listByDay,
+  search,
   listReviews,
   openByCategory,
   setStatus,
@@ -172,6 +173,21 @@ export async function startWeb(): Promise<void> {
       return reply.type("text/html").send(renderDay(s, date, mode, list));
     },
   );
+
+  app.get<{ Querystring: { q?: string } }>("/search", async (request, reply) => {
+    const q = (request.query.q ?? "").trim();
+    const s = await shell("");
+    s.query = q;
+    if (q.length < 2) {
+      return reply
+        .type("text/html")
+        .send(renderList(s, "Search", "Type at least two characters.", []));
+    }
+    const list = await search(q);
+    return reply
+      .type("text/html")
+      .send(renderList(s, `“${q}”`, `Nothing matches “${q}”.`, list));
+  });
 
   app.get("/reviews", async (_req, reply) => {
     const [s, list] = await Promise.all([shell("reviews"), listReviews(100)]);

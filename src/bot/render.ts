@@ -3,10 +3,12 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   type APIEmbedField,
   type MessageActionRowComponentBuilder,
 } from "discord.js";
-import { CATEGORIES } from "../catalog.js";
+import { CATEGORIES, CHANNELS } from "../catalog.js";
 import { renderBothZones, type DerivedRecord } from "../parse/derive.js";
 
 const UNSORTED = "#8b8b8b";
@@ -99,18 +101,75 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
 }
 
 /**
- * Two buttons, because the fastest way to improve the parser is to catch it
- * being wrong at the moment it happens. "Got it wrong" writes an eval case.
+ * The controls under a card.
+ *
+ * A wrong channel used to mean sending a file to Claude and waiting for a
+ * prompt change. Now it is a dropdown: pick the right one and the record is
+ * corrected in place, the reply redrawn, and the correction still written out
+ * as an eval case so the parser learns from it. The fix and the feedback are
+ * the same action.
+ *
+ * Discord allows five rows and 25 options per menu, which the fifteen channels
+ * and four categories sit inside comfortably.
  */
-export function feedbackRow(messageId: string): ActionRowBuilder<MessageActionRowComponentBuilder> {
-  return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+export function cardRows(
+  messageId: string,
+  record: DerivedRecord,
+  saved: boolean,
+): Array<ActionRowBuilder<MessageActionRowComponentBuilder>> {
+  const rows: Array<ActionRowBuilder<MessageActionRowComponentBuilder>> = [];
+
+  const channelMenu = new StringSelectMenuBuilder()
+    .setCustomId(`set-channel:${messageId}`)
+    .setPlaceholder(record.channel ? `Channel — ${record.channel}` : "Set the channel…")
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel("No channel")
+        .setValue("__none__")
+        .setDescription("Leave it unassigned"),
+      ...CHANNELS.map((c) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(c.name)
+          .setValue(c.id)
+          .setDescription(categoryLabel(c.category))
+          .setDefault(c.name === record.channel),
+      ),
+    );
+  rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(channelMenu));
+
+  // Only offered when no channel is set: a named channel already decides the
+  // category, and two controls that can disagree is worse than one.
+  if (!record.channel) {
+    const categoryMenu = new StringSelectMenuBuilder()
+      .setCustomId(`set-category:${messageId}`)
+      .setPlaceholder(`Category — ${categoryLabel(record.category)}`)
+      .addOptions(
+        ...CATEGORIES.map((c) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(c.label)
+            .setValue(c.id)
+            .setDefault(c.id === record.category),
+        ),
+      );
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(categoryMenu));
+  }
+
+  const buttons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`ok:${messageId}`)
       .setLabel("Right")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
+      .setCustomId(`done:${messageId}`)
+      .setLabel("Clear")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!saved),
+    new ButtonBuilder()
       .setCustomId(`bad:${messageId}`)
-      .setLabel("Got it wrong")
+      .setLabel("Still wrong")
       .setStyle(ButtonStyle.Danger),
   );
+  rows.push(buttons);
+
+  return rows;
 }

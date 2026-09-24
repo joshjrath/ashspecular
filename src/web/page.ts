@@ -114,6 +114,14 @@ header.page { display: flex; align-items: flex-end; gap: 18px; margin-bottom: 22
 header.page h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.042em; margin: 0; line-height: 1; }
 header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-bottom: 4px; }
 
+aside .search { margin-bottom: 14px; }
+aside .search input {
+  width: 100%; padding: 11px 13px; border-radius: 14px; background: #222225;
+  border: 1px solid transparent; color: #fff; font: inherit; font-size: 13.5px;
+}
+aside .search input::placeholder { color: #6A6A73; }
+aside .search input:focus { outline: 0; border-color: var(--salmon); background: #26262A; }
+
 /* ── the blocks ────────────────────────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 .stat { border-radius: var(--r); padding: 22px 24px 24px; background: var(--card); color: var(--ink); }
@@ -459,6 +467,8 @@ export interface Shell {
   counts: Record<string, number>;
   nav: { reviews: number; queue: number; recurring: number; calendar: number };
   lastIntake: Date | null;
+  /** Kept so the box still shows what was searched for. */
+  query?: string;
 }
 
 function layout(title: string, shell: Shell | null, body: string): string {
@@ -495,6 +505,10 @@ function sidebar(s: Shell): string {
 
   return `<aside><div class="inner">
     <a class="mark" href="/">Specular</a>
+    <form class="search" method="get" action="/search" role="search">
+      <input type="search" name="q" placeholder="Search…" value="${esc(s.query ?? "")}"
+        aria-label="Search everything">
+    </form>
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
       ${item("/calendar", "Calendar", s.nav.calendar, "calendar")}

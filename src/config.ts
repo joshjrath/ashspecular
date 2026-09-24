@@ -16,6 +16,13 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
+  /** Where the morning digest is posted. Unset means no digest. */
+  digestChannelId: opt("DIGEST_CHANNEL_ID"),
+  /** Cron for the digest, in the studio's zone. Default 08:00 every day. */
+  digestCron: opt("DIGEST_CRON", "0 8 * * *"),
+  /** How many long-form priorities the digest names. */
+  digestCount: Number(opt("DIGEST_COUNT", "4")),
+
   anthropicKey: opt("ANTHROPIC_API_KEY"),
   anthropicModel: opt("ANTHROPIC_MODEL", "claude-opus-5"),
 

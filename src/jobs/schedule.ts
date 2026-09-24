@@ -7,6 +7,7 @@
  * on a day already opened does nothing.
  */
 import cron from "node-cron";
+import { config } from "../config.js";
 import { ORG_TZ } from "../parse/derive.js";
 import { openBatchesFor, recurringChannels } from "./batches.js";
 
@@ -31,7 +32,44 @@ async function run(reason: string): Promise<void> {
   }
 }
 
-export function startSchedule(): void {
+/**
+ * The morning digest. Skipped entirely when no channel is configured, so the
+ * board can run without the bot and vice versa.
+ */
+function scheduleDigest(): void {
+  if (!config.digestChannelId) {
+    console.log("[digest] off — set DIGEST_CHANNEL_ID to turn it on");
+    return;
+  }
+  if (!cron.validate(config.digestCron)) {
+    console.error(`[digest] DIGEST_CRON is not a cron expression: ${config.digestCron}`);
+    return;
+  }
+
+  cron.schedule(
+    config.digestCron,
+    () => {
+      void (async () => {
+        try {
+          const { client } = await import("../bot/client.js");
+          const channel = await client.channels.fetch(config.digestChannelId);
+          if (!channel?.isSendable()) {
+            console.error("[digest] channel is not one the bot can post in");
+            return;
+          }
+          const posted = await (await import("./digest.js")).postDigest(channel);
+          console.log(posted ? "[digest] posted" : "[digest] already went out today");
+        } catch (err) {
+          console.error("[digest] failed:", err);
+        }
+      })();
+    },
+    { timezone: ORG_TZ },
+  );
+  console.log(`[digest] ${config.digestCron} ${ORG_TZ} → channel ${config.digestChannelId}`);
+}
+
+export function startSchedule(options: { withDigest: boolean }): void {
   const [hh, mm] = earliestOpensAt().split(":");
   const expression = `${Number(mm ?? 0)} ${Number(hh ?? 6)} * * *`;
 
@@ -40,4 +78,7 @@ export function startSchedule(): void {
 
   // Catch up now in case the last opening time passed while this was down.
   void run("startup");
+
+  // Only the half that holds a Discord connection can post the digest.
+  if (options.withDigest) scheduleDigest();
 }
