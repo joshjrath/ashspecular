@@ -12,6 +12,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CATEGORIES, CHANNELS } from "../src/catalog.js";
 import { classify } from "../src/parse/classify.js";
 import { derive, ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS } from "../src/parse/derive.js";
+import { parseAssignment } from "../src/parse/structured.js";
 
 const C = {
   dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
@@ -28,6 +29,8 @@ const bad = (label: string, fix: string) => {
   failed += 1;
   console.log(`${C.red("✗")}  ${label}\n   ${C.yellow("→")} ${fix}`);
 };
+const warn = (label: string, fix: string) =>
+  console.log(`${C.yellow("!")}  ${label}\n   ${C.yellow("→")} ${fix}`);
 const note = (label: string, detail = "") =>
   console.log(`${C.dim("·")}  ${label}${detail ? `  ${C.dim(detail)}` : ""}`);
 
@@ -51,7 +54,12 @@ const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
 const model = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
 if (!anthropicKey) {
-  bad("ANTHROPIC_API_KEY is not set", "Get one at console.anthropic.com → API Keys, and put it in .env");
+  // Not fatal. Templated assignment posts are read by pattern and never touch
+  // the API; only messy forwards need the model.
+  warn(
+    "ANTHROPIC_API_KEY is not set",
+    "Assignment posts still parse (by pattern). Forwarded DMs and one-liners will fall back to rules. Key: console.anthropic.com → API Keys.",
+  );
 } else {
   try {
     // Cheaper and more informative than a message: proves the key works AND
@@ -113,7 +121,22 @@ note(
 note("Dates", `${ORG_TZ} / ${TEAM_TZ}, VO = air date − ${VO_BUFFER_DAYS} days`);
 note("Catalog", `${CATEGORIES.length} categories, ${CHANNELS.length} channels`);
 
-// ── 6. One real parse, end to end ─────────────────────────────────────────
+// ── 6. The pattern parser — no key, no network ───────────────────────────
+{
+  const post =
+    "### 10-03-26 | VIDEO-008 | What If Deadpool Was In Jujutsu Kaisen?\n\n@ Comics\n\n📝 **SCRIPT** <@1>\n* Deadline:\n  * 🇺🇸 **9/19/2026 @ 11:59 PM ET**\n* Word Count: **5000 Words**";
+  const hit = parseAssignment(post);
+  if (hit?.code === "VIDEO-008" && hit.air_date === "2026-10-03" && hit.word_count === 5000) {
+    ok("Assignment posts read by pattern", "no API key needed for these");
+  } else {
+    bad(
+      "The pattern parser did not read a standard assignment post",
+      "Paste this output to Claude — src/parse/structured.ts needs a fix.",
+    );
+  }
+}
+
+// ── 7. One real parse through the model, end to end ─────────────────────────────────────────
 if (anthropicKey && failed === 0) {
   console.log(C.dim("\nrunning one real message through the parser…"));
   try {

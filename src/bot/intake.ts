@@ -53,6 +53,8 @@ async function handle(message: Msg): Promise<void> {
   const cost = result.usage
     ? ` · ${result.usage.input}in/${result.usage.output}out${result.usage.cacheRead ? ` · ${result.usage.cacheRead} cached` : ""}`
     : "";
+  // Worth showing: a post read by pattern cost nothing and can't drift.
+  const how = result.parsedBy === "pattern" ? " · read by pattern, no API call" : "";
 
   await message.reply({
     embeds: [recordEmbed(record)],
@@ -60,7 +62,7 @@ async function handle(message: Msg): Promise<void> {
     content:
       result.parsedBy === "rule"
         ? "⚠️ Parser was unreachable — this is the rule-based fallback."
-        : `\`${ms}ms${cost}\``,
+        : `\`${ms}ms${cost}${how}\``,
     allowedMentions: { repliedUser: false },
   });
 }

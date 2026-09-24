@@ -12,7 +12,8 @@ npm install
 # deterministic rules — no API key, no database, ~1 second
 npm run test:rules
 
-# the full parser against the eval set (needs ANTHROPIC_API_KEY)
+# the full parser against the eval set (needs ANTHROPIC_API_KEY for the
+# messy cases; templated assignment posts are read by pattern either way)
 export ANTHROPIC_API_KEY=sk-ant-...
 npm run eval
 npm run eval -- --case 04        # one case
@@ -22,6 +23,30 @@ npm run eval -- --verbose        # dump the whole record
 npm run parse -- "torch is only at 3 today, need 2 more before 6"
 pbpaste | npm run parse          # paste a real Discord post straight in
 ```
+
+## Three passes, cheapest first
+
+A message goes through as little machinery as it needs:
+
+| Pass | What it handles | Cost |
+|---|---|---|
+| **pattern** (`parse/structured.ts`) | the studio's own assignment post | free, instant, no API key |
+| **model** (`parse/classify.ts`) | messy forwards, DMs, one-liners | one Claude call |
+| **rules** (`ruleFallback`) | anything at all, when the API is unreachable | free |
+
+The assignment post is rigidly templated — `### MM-DD-YY | CODE | Title`, a
+labelled deadline, a labelled word count — so it needs no model. The pattern
+pass runs first and, when it recognises the shape, the message never reaches
+the API. **This is why most of the volume costs nothing.**
+
+It refuses everything it is not sure of: no heading signature, no title, and it
+returns `null` and falls through. A half-read post is worse than a parsed one.
+It also never guesses a channel (the template names none) and never calculates
+the VO deadline — that stays `derive()`'s job, exactly as it is for the model.
+
+So an `ANTHROPIC_API_KEY` is **optional**. Without one, assignment posts still
+parse perfectly; forwarded Frame.io links and terse one-liners drop to the rule
+fallback, which keeps the links and the code but can't work out the channel.
 
 ## The split that matters
 

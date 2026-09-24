@@ -40,11 +40,17 @@ else is in the server.
 ## 3. Run it
 
 ```bash
-cp .env.example .env     # then fill in DISCORD_TOKEN and ANTHROPIC_API_KEY
+cp .env.example .env     # DISCORD_TOKEN is required; ANTHROPIC_API_KEY is not
 npm install
 npm run doctor           # check everything before touching Discord
 npm run bot
 ```
+
+**You only strictly need the Discord token.** Your assignment posts are read by
+pattern — no API call, no key, nothing to pay for. The Anthropic key is only
+for the messy stuff: a Frame.io link forwarded out of a DM, a one-line "torch
+is only at 3 today". Without a key those still get filed, but with the links
+and code only, and no channel worked out.
 
 `npm run doctor` tests each thing separately — Node version, `.env`, whether
 Anthropic accepts your key, whether Discord accepts your token, and one real

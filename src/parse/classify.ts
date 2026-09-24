@@ -4,6 +4,7 @@ import { CATEGORIES, CHANNELS } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, dateIn } from "./derive.js";
 import { ExtractionSchema, type Extraction } from "./schema.js";
 import { extractUrls, looksLikeBareRevision, classifyUrl } from "./rules.js";
+import { parseAssignment } from "./structured.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
@@ -59,7 +60,7 @@ export interface ClassifyInput {
 
 export interface ClassifyResult {
   extraction: Extraction;
-  parsedBy: "llm" | "rule";
+  parsedBy: "pattern" | "llm" | "rule";
   model: string | null;
   raw: string;
   usage?: { input: number; output: number; cacheRead: number };
@@ -67,6 +68,12 @@ export interface ClassifyResult {
 
 export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
   const raw = renderRaw(input);
+
+  // The studio's own assignment post is rigidly templated, so it is read by
+  // pattern first: free, instant, identical every time, and it works with no
+  // API key at all. The model is for the messy forwards that follow.
+  const patterned = parseAssignment(raw);
+  if (patterned) return { extraction: patterned, parsedBy: "pattern", model: null, raw };
 
   try {
     const response = await anthropic().messages.parse({

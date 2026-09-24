@@ -18,6 +18,7 @@ import {
   shiftDate,
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
+import { parseAssignment } from "../src/parse/structured.js";
 
 let pass = 0;
 let fail = 0;
@@ -118,6 +119,58 @@ const links = derive(
 );
 t("links recovered from raw text", links.links.length, 2);
 t("frame.io classified by host", links.links.find((l) => l.url.includes("frame.io"))?.kind, "frameio");
+
+// ── the pattern parser ────────────────────────────────────────────────────
+section("pattern parser (no API key)");
+
+const POST = [
+  "### 10-03-26 | VIDEO-008 | What If Deadpool Was In Jujutsu Kaisen?",
+  "",
+  "📁 **Project**",
+  "**TBD**",
+  "",
+  "@ Comics",
+  "",
+  "━━━━━━━━━━━━━━━━━━",
+  "",
+  "📝 **SCRIPT** <@717794467314270278> ",
+  "",
+  "* Deadline:",
+  "",
+  "  * 🇺🇸 **9/19/2026 @ 11:59 PM ET**",
+  "  * 🇮🇳 **9/20/2026 @ 9:29 AM IST**",
+  "* Word Count: **5000 Words**",
+  "",
+  "**Story Brief** <@717794467314270278> Place Deadpool into the JJK universe.",
+].join("\n");
+
+const post = parseAssignment(POST)!;
+t("recognises the assignment post", post !== null, true);
+t("code copied as written", post.code, "VIDEO-008");
+t("heading date is the air date", post.air_date, "2026-10-03");
+t("title read from the heading", post.title, "What If Deadpool Was In Jujutsu Kaisen?");
+t("tag read from the @ line", post.tag, "Comics");
+t("stage read from the header", post.stage, "script");
+t("assignee is the mention", post.assignee, "<@717794467314270278>");
+t("word count stripped of the label", post.word_count, 5000);
+t("brief captured", (post.brief ?? "").includes("JJK universe"), true);
+t("never guesses a channel", post.channel, null);
+t("never calculates the VO deadline", post.vo_due, null);
+t("script deadline takes the ET line", dateIn(ORG_TZ, new Date(post.script_due!)), "2026-09-19");
+t("ET resolved on daylight time", post.script_due, "2026-09-19T23:59:00-04:00");
+
+const winterPost = parseAssignment(
+  "### 01-20-27 | VIDEO-009 | Winter\n🇺🇸 **1/14/2027 @ 11:59 PM ET**",
+);
+t("ET resolved on standard time", winterPost?.script_due, "2027-01-14T23:59:00-05:00");
+
+t("refuses a message with no heading", parseAssignment("v3 of smp ep 9 is up"), null);
+t("refuses a heading with no title", parseAssignment("### 10-03-26 | VIDEO-008"), null);
+t(
+  "the post derives the VO deadline downstream",
+  dateIn(ORG_TZ, derive(post, POST).voDue!),
+  "2026-09-27",
+);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

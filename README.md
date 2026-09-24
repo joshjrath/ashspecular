@@ -42,6 +42,10 @@ Every message becomes one record with the same spine:
 plus the code (`VIDEO-008`), air date, stage, word count, assignee, review
 version and links, where the message carries them.
 
+Templated assignment posts are read by **pattern**, not by the model — free,
+instant, and no API key needed. The model is only for messy forwards and
+one-liners. See [PARSER.md](PARSER.md#three-passes-cheapest-first).
+
 **The model extracts; the code derives.** Anything computable is never asked of
 the model — most importantly the voiceover deadline, which is the air date
 minus six days unless the message states a time. Derived values are tagged
@@ -53,7 +57,7 @@ than a fact. Full reasoning in [PARSER.md](PARSER.md).
 ```bash
 npm run doctor        # preflight: Node, .env, both API keys, one real parse
 npm run bot           # run the Discord bot
-npm run test:rules    # 31 deterministic tests — no API key needed
+npm run test:rules    # 48 deterministic tests — no API key needed
 npm run eval          # score the parser against evals/cases/
 npm run parse -- "…"  # parse one message from the command line
 ```
