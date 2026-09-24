@@ -65,7 +65,10 @@ a { color: inherit; text-decoration: none; }
 h1, h2, h3 { font-family: var(--display); }
 
 /* ── shell ─────────────────────────────────────────────────────────────── */
-.shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+/* minmax(0,…), not 1fr: a grid item defaults to min-width:auto, so a wide
+   scrolling row inside would size its own column and push the page sideways. */
+.shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+.shell > * { min-width: 0; }
 aside { padding: 28px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 aside .inner { background: var(--rail); border-radius: var(--r); padding: 26px 14px; min-height: 100%; }
 aside .mark {
@@ -127,12 +130,18 @@ header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-
 }
 .stat.zero .n { opacity: .4; }
 
-.split { display: grid; grid-template-columns: 1fr 320px; gap: 14px; margin-bottom: 14px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; margin-bottom: 14px; }
+.split > * { min-width: 0; }
 .panel { background: var(--card); color: var(--ink); border-radius: var(--r); padding: 24px 26px 26px; }
 .panel.today { background: var(--dark); color: #fff; }
 .panel > h2, .group > .head .name, .section-title {
   font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: -0.032em; margin: 0 0 18px;
 }
+/* Below a certain width the bars stop being readable, so the chart keeps its
+   size and scrolls rather than shrinking into a smear. */
+.chartscroll { overflow-x: auto; min-width: 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.chartscroll::-webkit-scrollbar { display: none; }
+.chartscroll svg { display: block; }
 .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 12px; color: var(--ink2); }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .legend i { width: 10px; height: 10px; border-radius: 4px; background: var(--c); display: block; }
@@ -166,10 +175,16 @@ header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-
 .row:hover { background: var(--sunk); }
 .row .title {
   font-family: var(--display); font-weight: 600; font-size: 16px; letter-spacing: -0.028em;
-  display: flex; align-items: baseline; gap: 10px;
+  display: flex; align-items: baseline; gap: 10px; min-width: 0;
 }
+/* A forwarded message is often one long unbroken URL, which no amount of
+   column sizing will wrap on its own. */
+.row .title a { min-width: 0; overflow-wrap: anywhere; }
 .row .title .swatch { width: 10px; height: 10px; border-radius: 4px; background: var(--c); flex: none; transform: translateY(-1px); }
-.row .title .code { color: var(--ink3); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+.row .title .code {
+  color: var(--ink3); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex: none;
+}
 .row .meta {
   grid-column: 1; color: var(--ink3); font-size: 12.5px; display: flex; gap: 10px;
   flex-wrap: wrap; align-items: center; padding-left: 20px; letter-spacing: -0.005em;
@@ -280,7 +295,88 @@ button.clear:hover { filter: brightness(1.05); }
 .login button:hover { background: #2A2A2E; }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
-@media (max-width: 1000px) {
+/* ── phone ─────────────────────────────────────────────────────────────────
+   Not a shrunken desktop. The rail becomes a scrolling strip of pills at the
+   top, every row drops to one column so a title has the full width instead of
+   wrapping four words deep beside a deadline, and a calendar cell shows its
+   work as dots — at this size a truncated title tells you nothing a colour
+   doesn't.
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  aside { position: static; height: auto; padding: 10px 10px 0; overflow: visible; }
+  aside .inner { padding: 14px 12px; border-radius: 20px; min-height: 0; }
+  aside .mark { font-size: 21px; padding: 0 4px 12px; }
+  aside nav, aside .cats {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  aside nav::-webkit-scrollbar, aside .cats::-webkit-scrollbar { display: none; }
+  aside nav a, aside .cat {
+    white-space: nowrap; margin-bottom: 0; padding: 10px 14px; border-radius: 999px;
+    background: #1F1F23; font-size: 13.5px; flex: none;
+  }
+  aside nav a .n, aside .cat .n { margin-left: 8px; }
+  aside h3 { margin: 14px 0 8px; padding: 0 4px; }
+  aside .live { margin-top: 14px; padding: 11px 13px; }
+
+  main { padding: 14px 10px 60px; }
+  header.page { margin-bottom: 14px; padding: 4px 4px 0; display: block; }
+  header.page h1 { font-size: 30px; }
+  header.page .when { display: block; margin: 4px 0 0; padding: 0; font-size: 12px; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
+  .stat { padding: 16px 18px 17px; border-radius: 20px; }
+  .stat .n { font-size: 34px; }
+  .stat .l { font-size: 10px; margin-top: 7px; }
+
+  .split { grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 10px; }
+  .panel { padding: 18px 18px 20px; border-radius: 20px; }
+  .panel > h2, .group > .head .name, .section-title { font-size: 17px; margin-bottom: 14px; }
+  .chartscroll svg { width: 560px; max-width: none; }
+  .legend { gap: 12px; font-size: 11.5px; }
+
+  /* One column: the title gets the whole width, the deadline sits under it. */
+  .rows { padding: 8px; border-radius: 20px; }
+  .row { grid-template-columns: 1fr; gap: 6px; padding: 13px 14px 14px; border-radius: 16px; }
+  .row .title { font-size: 15px; gap: 8px; }
+  .row .title .code { font-size: 12px; }
+  .row .meta { padding-left: 18px; gap: 8px; font-size: 12px; }
+  .row .when {
+    grid-row: auto; text-align: left; padding-left: 18px; display: flex;
+    gap: 5px 10px; flex-wrap: wrap; align-items: baseline; white-space: normal;
+  }
+  .row .when .d { font-size: 13.5px; }
+
+  .group > .head { margin: 16px 0 10px; padding: 0 6px; }
+  .chanlist a { padding: 9px 14px; font-size: 13px; }
+  .brief { padding: 18px 18px; border-radius: 20px; font-size: 14px; }
+
+  .calbar { gap: 8px; padding: 0; }
+  .calbar .month { font-size: 19px; min-width: 0; flex: 1; }
+  .calbar .nav { padding: 9px 13px; font-size: 12.5px; }
+  .calbar .tabs { margin-left: 0; width: 100%; }
+  .calbar .tab { flex: 1; text-align: center; padding: 9px 0; }
+
+  .cal { gap: 3px; padding: 7px; border-radius: 20px; }
+  .cal .wd { padding: 3px 0 6px; font-size: 8.5px; letter-spacing: 0.06em; text-align: center; }
+  .cal .cell {
+    min-height: 62px; border-radius: 12px; padding: 5px 4px;
+    flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 3px;
+  }
+  .cal .num { font-size: 12px; width: 100%; padding: 0 2px; }
+  .cal .num .tag { display: none; }
+  .cal .cell.today .num { width: auto; padding: 1px 7px; border-radius: 999px; background: rgba(0,0,0,.14); }
+  /* A chip becomes its own colour dot: a two-word truncation says less. */
+  .cal .chip { width: 8px; height: 8px; padding: 0; border-radius: 50%; background: var(--c); gap: 0; }
+  .cal .chip .dot, .cal .chip .t { display: none; }
+  .cal .more { font-size: 9.5px; padding: 0 2px; white-space: nowrap; }
+
+  .login { margin: 8vh auto; }
+  .login h1 { font-size: 36px; }
+}
+
+@media (min-width: 761px) and (max-width: 1000px) {
   .shell { grid-template-columns: 1fr; }
   aside { position: static; height: auto; }
   .split { grid-template-columns: 1fr; }
@@ -344,7 +440,7 @@ function sidebar(s: Shell): string {
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
     </nav>
     <h3>Categories</h3>
-    ${cats}
+    <div class="cats">${cats}</div>
     <div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>
   </div></aside>`;
 }
@@ -498,8 +594,8 @@ function dueChart(buckets: DayBucket[]): string {
     (c) => `<span style="--c:${c.color}"><i></i>${esc(c.label)}</span>`,
   ).join("");
 
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
-      aria-label="Work due by day, stacked by category">${ticks}${bars}</svg>
+  return `<div class="chartscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+      aria-label="Work due by day, stacked by category">${ticks}${bars}</svg></div>
     <div class="legend">${legend}</div>`;
 }
 

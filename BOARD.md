@@ -36,6 +36,17 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## On a phone
+
+Not a shrunken desktop. The rail becomes a scrolling strip of pills across the
+top, every row drops to one column so a title gets the full width instead of
+wrapping four words deep beside its deadline, and a calendar cell shows its
+work as coloured dots — at 390px a two-word truncation says less than a colour
+does. The chart keeps its size and scrolls sideways rather than shrinking into
+a smear.
+
+<img src="docs/phone-dashboard.png" width="300"> <img src="docs/phone-calendar.png" width="300">
+
 ## Running it locally
 
 You need Postgres. The quickest way on a Mac:
