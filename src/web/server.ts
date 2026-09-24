@@ -3,7 +3,7 @@ import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
 import { CATEGORIES, CHANNELS } from "../catalog.js";
-import { ORG_TZ } from "../parse/derive.js";
+import { ORG_TZ, dateIn } from "../parse/derive.js";
 import {
   calendarRange,
   categoryCounts,
@@ -13,6 +13,7 @@ import {
   lastIntake,
   listByCategory,
   listByChannel,
+  listBatchesOn,
   listByDay,
   listReviews,
   openByCategory,
@@ -21,6 +22,7 @@ import {
   type CalendarMode,
 } from "../db/records.js";
 import { migrate } from "../db/migrate.js";
+import { batchStatus, openBatchesFor, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import type { Shell } from "./page.js";
 import {
@@ -32,6 +34,7 @@ import {
   renderEmptyState,
   renderList,
   renderLogin,
+  renderRecurring,
   renderRecord,
 } from "./page.js";
 
@@ -188,22 +191,30 @@ export async function startWeb(): Promise<void> {
   });
 
   app.get("/recurring", async (_req, reply) => {
-    const [s, list, channels] = await Promise.all([
+    const t = tomorrow();
+    const [s, todayRows, aheadRows, list] = await Promise.all([
       shell("recurring"),
-      listByCategory("bits", 200),
-      channelCounts(),
+      batchStatus(dateIn(ORG_TZ)),
+      batchStatus(t),
+      listBatchesOn(dateIn(ORG_TZ)),
     ]);
     return reply
       .type("text/html")
       .send(
-        renderCategory(
+        renderRecurring(
           s,
-          "Recurring",
-          "bits",
+          { date: dateIn(ORG_TZ), rows: todayRows },
+          { date: t, rows: aheadRows },
           list,
-          channels,
         ),
       );
+  });
+
+  // Working ahead: the opener is idempotent, so tomorrow's morning run finds
+  // these already there and leaves them — including anything already cleared.
+  app.post("/recurring/ahead", async (_req, reply) => {
+    await openBatchesFor(tomorrow());
+    return reply.redirect("/recurring");
   });
 
   app.get<{ Params: { name: string } }>("/channel/:name", async (request, reply) => {

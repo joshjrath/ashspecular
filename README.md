@@ -29,7 +29,7 @@ npm start           # both at once, the way it runs deployed
 | **Long Form** | Specular Studios, Specular FNAF |
 | **Reading** | Specular DC, Torch, Action, Balls, Nove — ~25 uploads a day between them |
 | **Gaming** | Specular Gaming — Minecraft, Roblox, episodic series |
-| **Bits** | Studios, FNAF, Animation, Anime, NK, Undertale, Gaming Bits — a numbered batch each, every day |
+| **Bits** | Studios, FNAF, Animation, Anime, Specular & Kay, Undertale, Gaming Bits — five numbered batches each, opened automatically every morning |
 
 All of it lives in [`src/catalog.ts`](src/catalog.ts). Adding a channel is one
 line; the parser's prompt builds its own channel list from that file.
@@ -61,6 +61,7 @@ npm run bot           # run the Discord bot
 npm run test:rules    # 63 deterministic tests — no API key needed
 npm run eval          # score the parser against evals/cases/
 npm run parse -- "…"  # parse one message from the command line
+npm run batches       # open today's bits batches by hand
 ```
 
 ## Layout
@@ -95,4 +96,4 @@ evals/cases/        the parser's test set
 
 1. Run it against real messages and fix what it misreads *(now)*
 2. Correction dropdowns on the Discord card, instead of the feedback button
-3. The 8am digest and the automatic daily bits batches
+3. The 8am digest

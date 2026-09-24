@@ -21,7 +21,8 @@
     "bot": "node --env-file-if-exists=.env --import tsx src/bot/index.ts",
     "web": "node --env-file-if-exists=.env --import tsx src/web/index.ts",
     "bot:watch": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts",
-    "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts"
+    "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
+    "batches": "node --env-file-if-exists=.env --import tsx scripts/batches.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

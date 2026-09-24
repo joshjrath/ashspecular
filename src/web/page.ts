@@ -327,6 +327,33 @@ button.clear:hover { filter: brightness(1.05); }
 .login button:hover { background: #2A2A2E; }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
+/* ── recurring ─────────────────────────────────────────────────────────── */
+.batches { display: flex; flex-direction: column; gap: 8px; }
+.batch {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px;
+  background: var(--sunk); color: var(--ink); font-size: 14px; letter-spacing: -0.012em;
+}
+.batch:hover { background: var(--line); }
+.batch .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); flex: none; }
+.batch .name { font-weight: 600; min-width: 160px; }
+.batch .bar {
+  flex: 1; height: 7px; border-radius: 999px; background: #E2E2E5; overflow: hidden; min-width: 60px;
+}
+.batch .bar > span { display: block; height: 100%; background: var(--c); border-radius: 999px; }
+.batch .state {
+  font-family: var(--display); font-weight: 700; font-size: 13px; color: var(--ink2);
+  font-variant-numeric: tabular-nums; min-width: 58px; text-align: right;
+}
+.batch.done .state { color: var(--gm); }
+.batch.done .bar > span { background: var(--gm); }
+.hint { color: var(--ink3); font-size: 12.5px; margin: 14px 0 0; max-width: 560px; line-height: 1.6; }
+.panel form { margin-top: 14px; }
+@media (max-width: 760px) {
+  .batch { flex-wrap: wrap; gap: 8px 10px; }
+  .batch .name { min-width: 0; flex: 1; }
+  .batch .bar { order: 3; flex-basis: 100%; }
+}
+
 /* ── phone ─────────────────────────────────────────────────────────────────
    Not a shrunken desktop. The rail becomes a scrolling strip of pills at the
    top, every row drops to one column so a title has the full width instead of
@@ -1057,4 +1084,66 @@ function shiftDay(date: string, by: number): string {
   const d = new Date(`${date}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + by);
   return d.toISOString().slice(0, 10);
+}
+
+/** The Recurring page: today's batches per channel, and working ahead. */
+export function renderRecurring(
+  shell: Shell,
+  today: { date: string; rows: Array<{ channel: string; total: number; done: number }> },
+  ahead: { date: string; rows: Array<{ channel: string; total: number; done: number }> },
+  list: StoredRecord[],
+): string {
+  const c = colourOf("bits");
+
+  const line = (r: { channel: string; total: number; done: number }) => {
+    const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
+    const state = r.total === 0 ? "not open" : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
+    return `<a class="batch${r.total && r.done === r.total ? " done" : ""}"
+        href="/channel/${encodeURIComponent(r.channel)}" style="--c:${c}">
+      <span class="dot"></span>
+      <span class="name">${esc(r.channel)}</span>
+      <span class="bar"><span style="width:${pct}%"></span></span>
+      <span class="state">${esc(state)}</span>
+    </a>`;
+  };
+
+  const pretty = (d: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
+    }).format(new Date(`${d}T12:00:00Z`));
+
+  const aheadOpen = ahead.rows.some((r) => r.total > 0);
+
+  return layout(
+    "Recurring",
+    shell,
+    `${pageHeader("Recurring")}
+    <div class="panel" style="margin-bottom:14px">
+      <h2>Today · ${esc(pretty(today.date))}</h2>
+      <div class="batches">${today.rows.map(line).join("")}</div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px">
+      <h2>Tomorrow · ${esc(pretty(ahead.date))}</h2>
+      ${
+        aheadOpen
+          ? `<div class="batches">${ahead.rows.map(line).join("")}</div>
+             <p class="hint">Already open. Clear anything you get ahead on and it stays cleared —
+             the morning run finds these and leaves them alone.</p>`
+          : `<p class="hint">Not open yet. They open by themselves in the morning.</p>
+             <form method="post" action="/recurring/ahead">
+               <button class="clear">Work ahead — open tomorrow now</button>
+             </form>`
+      }
+    </div>
+
+    <div class="group">
+      <div class="head" style="--c:${c}">
+        <span class="dot"></span><span class="name">Today's batches</span>
+        <span class="sub">${esc(pretty(today.date))}</span>
+        <span class="n">${list.length}</span>
+      </div>
+      ${rows(list, "Nothing open yet today.")}
+    </div>`,
+  );
 }

@@ -80,7 +80,7 @@ export const CHANNELS: Channel[] = [
   { id: "fnaf_bits", name: "FNAF Bits", category: "bits", codePrefix: "SFB", aliases: ["fnaf bits", "specular fnaf bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
   { id: "animation_bits", name: "Animation Bits", category: "bits", codePrefix: "SAB", aliases: ["animation bits", "specular animation bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
   { id: "anime_bits", name: "Anime Bits", category: "bits", codePrefix: "SNB", aliases: ["anime bits", "specular anime bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "nk_bits", name: "NK Bits", category: "bits", codePrefix: "SKB", aliases: ["nk bits", "specular nk bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "nk_bits", name: "Specular & Kay Bits", category: "bits", codePrefix: "SKB", aliases: ["nk bits", "specular nk bits", "nk", "kay bits", "specular and kay bits", "specular & kay"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
   { id: "undertale_bits", name: "Undertale Bits", category: "bits", codePrefix: "SUB", aliases: ["undertale bits", "specular undertale bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
   { id: "gaming_bits", name: "Gaming Bits", category: "bits", codePrefix: "SGB", aliases: ["gaming bits", "specular gaming bits"], recurring: { perDay: 5, opensAt: "06:00", dueAt: "18:00" } },
 ];

@@ -6,7 +6,7 @@
  * traffic they fit in one process, so that is the default. `SERVICE=bot` or
  * `SERVICE=web` splits them later without touching the code.
  */
-import { config } from "./config.js";
+import { config, hasDatabase } from "./config.js";
 
 const only = (process.env.SERVICE ?? "").trim().toLowerCase();
 
@@ -14,6 +14,14 @@ async function main(): Promise<void> {
   if (only !== "web") {
     // Importing boots the bot — it logs in as a side effect.
     await import("./bot/index.js");
+  }
+
+  // The batch opener belongs with whichever half is running, but only once.
+  if (hasDatabase && only !== "web") {
+    const { migrate } = await import("./db/migrate.js");
+    await migrate();
+    const { startSchedule } = await import("./jobs/schedule.js");
+    startSchedule();
   }
 
   if (only === "bot") return;

@@ -47,6 +47,32 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Recurring — the daily bits batches
+
+![Recurring](docs/recurring.png)
+
+Every bits channel opens its batches by itself each morning at 06:00 ET. You
+send nothing. Numbers run continuously per channel, so "FNAF Bits batch 141" is
+that channel's 141st batch ever, not its 141st this month.
+
+Seven channels × 5 batches = 35 a day. To change how many, edit `perDay` on
+that channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
+morning follows it. Removing a channel's `recurring` block stops it opening at
+all.
+
+**Working ahead** is the button on that page. It opens tomorrow's batches now,
+so you can clear them today. Tomorrow morning's run finds them already there
+and leaves them exactly as you left them, cleared ones included — the opener
+keys every batch by channel, date and index, so it can never double-open.
+
+Run it by hand any time:
+
+```bash
+npm run batches              # today
+npm run batches -- tomorrow
+npm run batches -- 2026-10-01
+```
+
 ## On a phone
 
 Not a shrunken desktop. The rail becomes a scrolling strip of pills across the

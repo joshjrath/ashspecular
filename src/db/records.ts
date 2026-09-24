@@ -317,6 +317,16 @@ export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
   return grouped;
 }
 
+/** One day's batches, newest number first. Bounded by construction. */
+export async function listBatchesOn(date: string): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE batch_no IS NOT NULL AND air_date = $1
+     ORDER BY channel ASC, batch_no ASC`,
+    [date],
+  );
+  return rows.map(hydrate);
+}
+
 /** When the bot last filed anything — the "live" indicator's truth. */
 export async function lastIntake(): Promise<Date | null> {
   const { rows } = await pool.query<{ at: Date | null }>(
@@ -369,7 +379,9 @@ export async function calendarRange(
        source_url, source_author, raw_content, created_at
      FROM records
      WHERE ${day} BETWEEN $1 AND $2
-     ORDER BY 1 ASC, category ASC, created_at ASC
+     -- Bits sort last within a day: 35 batches would otherwise bury the one
+     -- video that is actually airing.
+     ORDER BY 1 ASC, (category = 'bits') ASC, category ASC, created_at ASC
      LIMIT 1000`,
     params,
   );
