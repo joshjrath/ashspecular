@@ -137,11 +137,43 @@ header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-
 .panel > h2, .group > .head .name, .section-title {
   font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: -0.032em; margin: 0 0 18px;
 }
-/* Below a certain width the bars stop being readable, so the chart keeps its
-   size and scrolls rather than shrinking into a smear. */
+.panel > h2 { margin-bottom: 14px; }
+
+/* ── the chart ─────────────────────────────────────────────────────────────
+   A hero number, then columns that keep their slot whether or not anything is
+   due. No y-axis: each bar carries its own count, and a tick scale would only
+   ask you to read one number off another.
+   ────────────────────────────────────────────────────────────────────────── */
+.chart-head { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 2px; flex-wrap: wrap; }
+.chart-head .hero .n {
+  font-family: var(--display); font-size: 40px; font-weight: 800; letter-spacing: -0.05em;
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.chart-head .hero .l { color: var(--ink3); font-size: 12.5px; margin-top: 3px; }
+.chart-head .hero .l b { color: var(--late); font-weight: 700; }
+.chart-head .legend { margin: 6px 0 0 auto; gap: 14px; }
+
 .chartscroll { overflow-x: auto; min-width: 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .chartscroll::-webkit-scrollbar { display: none; }
 .chartscroll svg { display: block; }
+
+.chart .col .track { transition: fill .12s ease; }
+.chart .col:hover .track { fill: #E6E6E9; }
+.chart text.total {
+  font-family: var(--display); font-size: 13px; font-weight: 700; fill: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.chart text.lab { font-family: var(--ui); font-size: 11px; fill: var(--ink3); }
+.chart text.lab.wd { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.chart text.lab.wd.weekend { fill: #C6C6CD; }
+.chart text.lab.dn {
+  font-family: var(--display); font-size: 14px; font-weight: 700; fill: var(--ink2);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+}
+.chart text.lab.on { fill: var(--ink); font-weight: 700; }
+.chart text.lab.late {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; fill: var(--late);
+}
 .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 12px; color: var(--ink2); }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .legend i { width: 10px; height: 10px; border-radius: 4px; background: var(--c); display: block; }
@@ -333,7 +365,11 @@ button.clear:hover { filter: brightness(1.05); }
   .split { grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 10px; }
   .panel { padding: 18px 18px 20px; border-radius: 20px; }
   .panel > h2, .group > .head .name, .section-title { font-size: 17px; margin-bottom: 14px; }
-  .chartscroll svg { width: 560px; max-width: none; }
+  .chart-head .hero .n { font-size: 34px; }
+  .chart-head .legend { margin-left: 0; }
+  /* Below this width the bars stop being readable, so the chart keeps its size
+     and scrolls rather than shrinking into a smear. */
+  .chartscroll svg { width: 620px; max-width: none; }
   .legend { gap: 12px; font-size: 11.5px; }
 
   /* One column: the title gets the whole width, the deadline sits under it. */
@@ -538,65 +574,113 @@ function rows(list: StoredRecord[], emptyText: string): string {
  * total — colour alone never carries meaning here.
  */
 function dueChart(buckets: DayBucket[]): string {
-  const W = 700, H = 200, PAD_L = 26, PAD_B = 30, PAD_T = 20;
-  const max = Math.max(4, ...buckets.map((b) => b.total));
-  const plotH = H - PAD_B - PAD_T;
-  const slot = (W - PAD_L) / buckets.length;
-  const barW = Math.min(42, slot - 6);
+  const W = 780, H = 236;
+  const PAD_T = 30;          // room for the total above the tallest bar
+  const PAD_B = 52;          // two lines of label under each column
+  const plotH = H - PAD_T - PAD_B;
+  const slot = W / buckets.length;
+  const barW = Math.min(34, slot - 10);
+  const r = barW / 2;
 
+  const max = Math.max(3, ...buckets.map((b) => b.total));
   const order = CATEGORIES.map((c) => c.id);
-  const bars = buckets
+  const today = dateIn(ORG_TZ);
+
+  const columns = buckets
     .map((b, i) => {
-      const x = PAD_L + i * slot + (slot - barW) / 2;
-      let y = H - PAD_B;
+      const x = i * slot + (slot - barW) / 2;
+      const base = PAD_T + plotH;
+      const isToday = b.date === today;
+      const isLate = b.date === null;
+
+      // The track: every day keeps its slot whether or not anything is due,
+      // so an empty week reads as empty rather than as missing.
+      const track = `<rect class="track" x="${x.toFixed(1)}" y="${PAD_T}" width="${barW}"
+        height="${plotH}" rx="${r}" fill="${
+          isToday ? "#FCF6C4" : isLate ? "#FADEDB" : "#F1F1F3"
+        }"/>`;
+
+      // The stack is clipped to one rounded pill, so the whole bar has the
+      // card's geometry and the 2px gaps between categories sit inside it.
+      const total = b.total;
+      const stackH = (total / max) * plotH;
+      const clipId = `clip${i}`;
+      const clip = `<clipPath id="${clipId}"><rect x="${x.toFixed(1)}"
+        y="${(base - stackH).toFixed(1)}" width="${barW}" height="${stackH.toFixed(1)}"
+        rx="${Math.min(r, stackH / 2).toFixed(1)}"/></clipPath>`;
+
+      let y = base;
       const segs = order
         .filter((id) => (b.counts[id] ?? 0) > 0)
-        .map((id, n, arr) => {
-          const n_ = b.counts[id] ?? 0;
-          const h = (n_ / max) * plotH;
+        .map((id, n) => {
+          const count = b.counts[id] ?? 0;
+          const h = (count / max) * plotH;
           y -= h;
-          const top = n === arr.length - 1;
-          // 2px surface gap between stacked segments; rounded data-end on top.
-          return `<rect x="${x.toFixed(1)}" y="${(y + (n === 0 ? 0 : 1)).toFixed(1)}"
-            width="${barW}" height="${Math.max(1, h - (n === 0 ? 0 : 1)).toFixed(1)}"
-            fill="${COLOURS[id]}" rx="${top ? 4 : 0}"><title>${esc(
-              `${b.date ?? "overdue"} · ${LABELS[id]}: ${n_}`,
-            )}</title></rect>`;
+          const gap = n === 0 ? 0 : 2;
+          return `<rect x="${x.toFixed(1)}" y="${(y + gap).toFixed(1)}" width="${barW}"
+            height="${Math.max(1, h - gap).toFixed(1)}" fill="${COLOURS[id]}"
+            ><title>${esc(`${b.date ?? "overdue"} · ${LABELS[id]}: ${count}`)}</title></rect>`;
         })
         .join("");
 
-      const label = b.date
-        ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, day: "numeric" }).format(
-            new Date(`${b.date}T12:00:00Z`),
-          )
-        : "late";
+      const stack = total
+        ? `${clip}<g clip-path="url(#${clipId})">${segs}</g>`
+        : "";
 
-      return `${segs}
-        ${b.total ? `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}"
-          text-anchor="middle" font-size="10.5" fill="#5F5F68"
-          font-variant-numeric="tabular-nums">${b.total}</text>` : ""}
-        <text x="${(x + barW / 2).toFixed(1)}" y="${H - PAD_B + 15}" text-anchor="middle"
-          font-size="10.5" fill="${b.date ? "#9A9AA3" : "#D4453A"}">${esc(label)}</text>`;
+      // The count sits above its own bar. No y-axis: the number is the value,
+      // and a tick scale would only ask you to read one off the other.
+      const count = total
+        ? `<text class="total" x="${(x + barW / 2).toFixed(1)}" y="${(base - stackH - 11).toFixed(1)}"
+            text-anchor="middle">${total}</text>`
+        : "";
+
+      const at = b.date ? new Date(`${b.date}T12:00:00Z`) : null;
+      const weekday = at
+        ? new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" }).format(at)
+        : "";
+      const dayNum = at
+        ? new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric" }).format(at)
+        : "";
+      const weekend = at ? [0, 6].includes(at.getUTCDay()) : false;
+
+      const labels = isLate
+        ? `<text class="lab late" x="${(x + barW / 2).toFixed(1)}" y="${base + 22}"
+             text-anchor="middle">LATE</text>`
+        : `<text class="lab wd${weekend ? " weekend" : ""}${isToday ? " on" : ""}"
+             x="${(x + barW / 2).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(weekday)}</text>
+           <text class="lab dn${isToday ? " on" : ""}" x="${(x + barW / 2).toFixed(1)}"
+             y="${base + 38}" text-anchor="middle">${esc(dayNum)}</text>`;
+
+      return `<g class="col">${track}${stack}${count}${labels}</g>`;
     })
     .join("");
 
-  const ticks = [0, Math.ceil(max / 2), max]
-    .map((v) => {
-      const y = H - PAD_B - (v / max) * plotH;
-      return `<line x1="${PAD_L}" x2="${W}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"
-        stroke="#E8E8EA" stroke-width="1"/>
-      <text x="${PAD_L - 7}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" font-size="10"
-        fill="#9A9AA3" font-variant-numeric="tabular-nums">${v}</text>`;
-    })
-    .join("");
+  // A rule after the overdue slot: what is late is a different kind of thing
+  // from what is merely scheduled.
+  const dividerX = slot;
+  const divider = `<line x1="${dividerX.toFixed(1)}" x2="${dividerX.toFixed(1)}" y1="${PAD_T - 10}"
+    y2="${(PAD_T + plotH + 44).toFixed(1)}" stroke="#E8E8EA" stroke-width="1" stroke-dasharray="3 4"/>`;
+
+  const ahead = buckets.reduce((n, b) => (b.date ? n + b.total : n), 0);
+  const late = buckets.find((b) => b.date === null)?.total ?? 0;
 
   const legend = CATEGORIES.map(
     (c) => `<span style="--c:${c.color}"><i></i>${esc(c.label)}</span>`,
   ).join("");
 
-  return `<div class="chartscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
-      aria-label="Work due by day, stacked by category">${ticks}${bars}</svg></div>
-    <div class="legend">${legend}</div>`;
+  return `<div class="chart">
+    <div class="chart-head">
+      <div class="hero">
+        <div class="n">${ahead}</div>
+        <div class="l">due in the next 14 days${late ? ` · <b>${late} late</b>` : ""}</div>
+      </div>
+      <div class="legend">${legend}</div>
+    </div>
+    <div class="chartscroll">
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+        aria-label="Work due by day, stacked by category">${divider}${columns}</svg>
+    </div>
+  </div>`;
 }
 
 /** One category's slice of the queue, headed and counted. */

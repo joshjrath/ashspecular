@@ -8,6 +8,17 @@ short records does not need a bundler.
 
 ## What's on it
 
+**Work due by day** — a headline count, then a column per day.
+
+![The chart](docs/chart.png)
+
+Every day keeps its slot whether or not anything is due, so an empty week reads
+as empty rather than as missing. Overdue work collects in its own pink column
+at the left, behind a dashed rule; today's column is yellow, matching the tile
+above it. Each bar carries its own count, so there is no y-axis to read a
+number off. Where a day holds more than one category the bar is one pill with
+2px gaps between them.
+
 **VO to record**, soonest first — the spine of the day. A deadline the parser
 worked out rather than read is marked *air date − 6 days* in orange, so a
 derived time never reads as a stated one.
