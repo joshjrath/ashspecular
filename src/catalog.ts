@@ -80,8 +80,12 @@ export interface Channel {
   codePrefix?: string;
   /** Extra strings the parser should treat as naming this channel. */
   aliases?: string[];
-  /** Bits channels open a numbered batch every day. perDay is how many. */
-  recurring?: { perDay: number; opensAt: string; dueAt: string };
+  /**
+   * Channels that open a numbered batch every day. perDay is how many batches;
+   * units is how many uploads one batch holds — a reading channel's day is five
+   * uploads, ticked off one at a time, where a bits batch is a single job.
+   */
+  recurring?: { perDay: number; opensAt: string; dueAt: string; units?: number };
   /**
    * Matched only by its exact name or an alias, never by appearing inside a
    * longer message. The main channel is called just "Specular", which is in
@@ -119,11 +123,11 @@ export const CHANNELS: Channel[] = [
   { id: "documentaries", name: "Specular Documentaries", color: "#0275B3", category: "stories", aliases: ["specular docs"] },
 
   // ── Reading (each opens its day's batch automatically, like bits) ───────
-  { id: "dc", name: "Specular DC", color: "#B75015", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "torch", name: "Specular Torch", color: "#047A40", category: "reading", codePrefix: "RTO", aliases: ["torch"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "action", name: "Specular Action", color: "#7A6894", category: "reading", codePrefix: "RAC", aliases: ["action"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "balls", name: "Specular Balls", color: "#A54881", category: "reading", codePrefix: "RBA", aliases: ["balls"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "nove", name: "Specular Nove", color: "#6D7504", category: "reading", codePrefix: "RNO", aliases: ["nove"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "dc", name: "Specular DC", color: "#B75015", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "torch", name: "Specular Torch", color: "#047A40", category: "reading", codePrefix: "RTO", aliases: ["torch"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "action", name: "Specular Action", color: "#7A6894", category: "reading", codePrefix: "RAC", aliases: ["action"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "balls", name: "Specular Balls", color: "#A54881", category: "reading", codePrefix: "RBA", aliases: ["balls"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "nove", name: "Specular Nove", color: "#6D7504", category: "reading", codePrefix: "RNO", aliases: ["nove"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
 
   // ── Bits (each opens a numbered batch daily) ────────────────────────────
   // Ids are unchanged from before the rename: batch keys are built from them.

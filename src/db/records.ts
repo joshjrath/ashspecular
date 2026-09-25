@@ -31,6 +31,9 @@ export interface StoredRecord extends DerivedRecord {
   raw: string;
   /** Set on recurring batches only. */
   batchNo: number | null;
+  /** How many uploads the batch holds, and how many are done. */
+  batchTarget: number | null;
+  batchDone: number;
   createdAt: Date;
 }
 
@@ -158,8 +161,15 @@ export async function updateFiling(
 }
 
 export async function setStatus(id: number, status: Status): Promise<void> {
+  // A batch cleared by its tick is all its uploads done; one reopened from
+  // cleared starts its count again rather than sitting at 5/5 but open.
   await pool.query(
     `UPDATE records SET status = $2, done_at = CASE WHEN $2 = 'done' THEN now() END,
+       batch_done = CASE
+         WHEN batch_no IS NULL THEN batch_done
+         WHEN $2 = 'done' THEN COALESCE(batch_target, 1)
+         WHEN $2 = 'open' AND batch_done >= COALESCE(batch_target, 1) THEN 0
+         ELSE batch_done END,
        updated_at = now() WHERE id = $1`,
     [id, status],
   );
@@ -193,6 +203,8 @@ interface Row {
   source_author: string | null;
   raw_content: string;
   batch_no: number | null;
+  batch_target: number | null;
+  batch_done: number | null;
   created_at: Date;
 }
 
@@ -225,6 +237,8 @@ function hydrate(r: Row): StoredRecord {
     sourceAuthor: r.source_author,
     raw: r.raw_content ?? "",
     batchNo: r.batch_no ?? null,
+    batchTarget: r.batch_target ?? null,
+    batchDone: r.batch_done ?? 0,
     createdAt: r.created_at,
   };
 }
@@ -232,7 +246,7 @@ function hydrate(r: Row): StoredRecord {
 const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
   air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, batch_no, created_at FROM records`;
+  source_url, source_author, raw_content, batch_no, batch_target, batch_done, created_at FROM records`;
 
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
@@ -436,7 +450,8 @@ export async function search(query: string, limit = 60): Promise<StoredRecord[]>
 /** Clear a whole channel's batches for one day — the Recurring page's tick. */
 export async function clearBatches(channel: string, date: string): Promise<number> {
   const { rowCount } = await pool.query(
-    `UPDATE records SET status = 'done', done_at = now(), updated_at = now()
+    `UPDATE records SET status = 'done', done_at = now(), updated_at = now(),
+       batch_done = COALESCE(batch_target, 1)
      WHERE channel = $1 AND air_date = $2 AND batch_no IS NOT NULL AND status = 'open'`,
     [channel, date],
   );
@@ -517,7 +532,7 @@ export async function calendarRange(
     `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
        air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
        version, links, brief, note, status, parsed_by, confidence, warnings,
-       source_url, source_author, raw_content, batch_no, created_at
+       source_url, source_author, raw_content, batch_no, batch_target, batch_done, created_at
      FROM records
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed'
      -- Recurring batches sort last within a day: a dozen of them would

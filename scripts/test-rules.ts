@@ -348,6 +348,8 @@ t("late evening ET is still today, not tomorrow in UTC", relativeDay("2026-09-25
 
 t("the five reading channels open daily", CHANNELS.filter((c) => c.category === "reading").every((c) => c.recurring?.perDay === 1), true);
 t("twelve recurring channels in all", CHANNELS.filter((c) => c.recurring).length, 12);
+t("a reading channel's day is five uploads", CHANNELS.filter((c) => c.category === "reading").map((c) => c.recurring?.units), [5, 5, 5, 5, 5]);
+t("a bits batch is a single job", CHANNELS.filter((c) => c.category === "bits").every((c) => (c.recurring?.units ?? 1) === 1), true);
 
 // ── channel colours ───────────────────────────────────────────────────────
 section("channel colours");

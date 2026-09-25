@@ -60,8 +60,8 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
       const { rowCount } = await pool.query(
         `INSERT INTO records (
            kind, category, channel, code, title, air_date, deadline, vo_source,
-           status, parsed_by, confidence, batch_no, source_message_id, raw_content
-         ) VALUES ($8, $9, $1, $2, $3, $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '')
+           status, parsed_by, confidence, batch_no, source_message_id, raw_content, batch_target
+         ) VALUES ($8, $9, $1, $2, $3, $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '', $10)
          ON CONFLICT (source_message_id) DO NOTHING`,
         [
           channel.name,
@@ -74,6 +74,7 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
           // A batch takes its channel's category — Reading batches are Reading.
           channel.category === "bits" ? "bits" : "update",
           channel.category,
+          channel.recurring?.units ?? 1,
         ],
       );
 
@@ -95,16 +96,20 @@ export function tomorrow(): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** What a day's batches currently look like, for the Recurring page. */
+/**
+ * What a day's batches look like, for the Recurring page — counted in uploads,
+ * so a reading channel reads 2/5 and a bits channel 0/1.
+ */
 export async function batchStatus(date: string): Promise<
   Array<{ channel: string; total: number; done: number; removed: number }>
 > {
   // A removed batch leaves the count entirely, so a channel whose only batch
-  // was removed reads "removed" rather than "0/1" waiting to be done.
+  // was removed reads "removed" rather than waiting to be done.
   const { rows } = await pool.query<{ channel: string; total: string; done: string; removed: string }>(
     `SELECT channel,
-            COUNT(*) FILTER (WHERE status <> 'removed') AS total,
-            COUNT(*) FILTER (WHERE status = 'done') AS done,
+            COALESCE(SUM(COALESCE(batch_target, 1)) FILTER (WHERE status <> 'removed'), 0) AS total,
+            COALESCE(SUM(CASE WHEN status = 'done' THEN COALESCE(batch_target, 1)
+                              WHEN status = 'open' THEN batch_done ELSE 0 END), 0) AS done,
             COUNT(*) FILTER (WHERE status = 'removed') AS removed
      FROM records
      WHERE batch_no IS NOT NULL AND air_date = $1
@@ -121,4 +126,25 @@ export async function batchStatus(date: string): Promise<
       removed: Number(row?.removed ?? 0),
     };
   });
+}
+
+/**
+ * Set how many of a channel's uploads are done that day. Reaching the target
+ * clears the batch — which is what counts toward "cleared this week"; dropping
+ * back below it reopens it.
+ */
+export async function setBatchProgress(channel: string, date: string, done: number): Promise<void> {
+  await pool.query(
+    `UPDATE records SET
+       batch_done = LEAST(GREATEST($3, 0), COALESCE(batch_target, 1)),
+       status = CASE WHEN $3 >= COALESCE(batch_target, 1) THEN 'done' ELSE 'open' END,
+       done_at = CASE WHEN $3 >= COALESCE(batch_target, 1) THEN COALESCE(done_at, now()) ELSE NULL END,
+       updated_at = now()
+     WHERE id = (
+       SELECT id FROM records
+       WHERE channel = $1 AND air_date = $2 AND batch_no IS NOT NULL AND status <> 'removed'
+       ORDER BY batch_no LIMIT 1
+     )`,
+    [channel, date, done],
+  );
 }

@@ -67,9 +67,11 @@ export async function buildDigest(date = dateIn(ORG_TZ)): Promise<Digest> {
   });
 
   const batchRows = await listBatchesOn(date);
+  // Counted in uploads, as the Recurring page counts them.
+  const target = (r: StoredRecord) => r.batchTarget ?? 1;
   const batches = {
-    total: batchRows.length,
-    done: batchRows.filter((r) => r.status === "done").length,
+    total: batchRows.reduce((n, r) => n + target(r), 0),
+    done: batchRows.reduce((n, r) => n + (r.status === "done" ? target(r) : r.batchDone), 0),
     late: batchRows.filter(
       (r) => r.status === "open" && r.deadline !== null && r.deadline.getTime() < now,
     ).length,
@@ -126,7 +128,7 @@ export function renderDigestEmbed(d: Digest): EmbedBuilder {
   embed.addFields({
     name: "Recurring",
     value: d.batches.total
-      ? `${d.batches.done}/${d.batches.total} batches cleared${
+      ? `${d.batches.done}/${d.batches.total} done${
           d.batches.late ? ` · **${d.batches.late} past their time**` : ""
         }`
       : "_No batches open yet._",

@@ -38,7 +38,7 @@ import {
   instantIn,
   shiftDate,
 } from "../parse/derive.js";
-import { batchStatus, openBatchesFor, tomorrow } from "../jobs/batches.js";
+import { batchStatus, openBatchesFor, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { SORTS, type Shell, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -415,6 +415,20 @@ export async function startWeb(): Promise<void> {
     await moveAir(id, date, voFor(date));
     return reply.redirect(`/r/${id}`);
   });
+
+  // One segment on a reading channel's day: how many of its uploads are done.
+  app.post<{ Body: { channel?: string; date?: string; done?: string } }>(
+    "/recurring/progress",
+    async (request, reply) => {
+      const channel = request.body?.channel;
+      const date = safeDate(request.body?.date);
+      const done = Number(request.body?.done);
+      if (channel && date && Number.isInteger(done) && CHANNELS.some((c) => c.name === channel)) {
+        await setBatchProgress(channel, date, done);
+      }
+      return reply.redirect("/recurring");
+    },
+  );
 
   app.post<{ Body: { channel?: string; date?: string } }>("/recurring/clear", async (request, reply) => {
     const channel = request.body?.channel;

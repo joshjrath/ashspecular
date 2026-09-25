@@ -401,7 +401,7 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   background: var(--sunk); color: var(--ink); font-size: 14px; letter-spacing: -0.012em;
 }
 .batch:hover { background: var(--line); }
-.batch .who { display: flex; align-items: center; gap: 12px; min-width: 180px; }
+.batch .who { display: flex; align-items: center; gap: 12px; min-width: 250px; }
 .batch .tick button { width: 26px; height: 26px; font-size: 12px; }
 .tick-space { width: 26px; flex: none; }
 .batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; }
@@ -409,6 +409,17 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .batch .bar {
   flex: 1; height: 7px; border-radius: 999px; background: #E2E2E5; overflow: hidden; min-width: 60px;
 }
+.pips { flex: 1; display: flex; gap: 5px; min-width: 120px; }
+.pips form { flex: 1; display: flex; }
+.pip {
+  flex: 1; height: 26px; border-radius: 8px; border: 0; cursor: pointer; padding: 0;
+  background: #E2E2E5; transition: background .12s ease;
+}
+.pip:hover { background: #D2D2D7; }
+.pip.on { background: var(--c); }
+.pip.on:hover { filter: brightness(1.08); }
+.batch.done .pip.on { background: var(--gm); }
+.row .meta .count { color: var(--ink2); font-weight: 600; }
 .batch .bar > span { display: block; height: 100%; background: var(--c); border-radius: 999px; }
 .batch .state {
   font-family: var(--display); font-weight: 700; font-size: 13px; color: var(--ink2);
@@ -432,10 +443,12 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .batch-head .n { margin-left: auto; font-family: var(--ui); font-weight: 600; font-size: 12px; color: var(--ink3); padding-right: 4px; }
 .hint { color: var(--ink3); font-size: 12.5px; margin: 14px 0 0; max-width: 560px; line-height: 1.6; }
 .panel form { margin-top: 14px; }
+/* ...but not the buttons inside a batch row, which sit on its centre line. */
+.panel .batch form { margin-top: 0; }
 @media (max-width: 760px) {
   .batch { flex-wrap: wrap; gap: 8px 10px; }
   .batch .name { min-width: 0; flex: 1; }
-  .batch .bar { order: 3; flex-basis: 100%; }
+  .batch .bar, .batch .pips { order: 3; flex-basis: 100%; }
 }
 
 /* ── phone ─────────────────────────────────────────────────────────────────
@@ -659,6 +672,9 @@ function row(r: StoredRecord): string {
   if (r.version) meta.push(`v${r.version}`);
   if (r.wordCount) meta.push(`${r.wordCount.toLocaleString()} words`);
   if (r.airDate) meta.push(airs(r));
+  if (r.batchTarget && r.batchTarget > 1) {
+    meta.push(`<span class="count">${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded</span>`);
+  }
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
 
   const links = r.links.length
@@ -1445,11 +1461,35 @@ export function renderRecurring(
            </form>`
         : `<span class="tick-space"></span>`;
 
+    // A channel whose day is several uploads gets one segment per upload.
+    // Tapping the third marks three done; tapping the last filled one again
+    // steps back one, so a mis-tap is one more tap to undo.
+    const units = CHANNELS.find((ch) => ch.name === r.channel)?.recurring?.units ?? 1;
+    const progress =
+      units > 1 && date && r.total > 0
+        ? `<span class="pips" role="group" aria-label="${esc(r.channel)} uploads done">${Array.from(
+            { length: r.total },
+            (_, i) => {
+              const n = i + 1;
+              const filled = n <= r.done;
+              const target = n === r.done ? n - 1 : n;
+              return `<form method="post" action="/recurring/progress">
+                <input type="hidden" name="channel" value="${esc(r.channel)}">
+                <input type="hidden" name="date" value="${esc(date)}">
+                <input type="hidden" name="done" value="${target}">
+                <button class="pip${filled ? " on" : ""}"
+                  aria-label="${n === r.done ? `Undo — back to ${n - 1} of ${r.total}` : `${n} of ${r.total} done`}"
+                  title="${n === r.done ? `Back to ${n - 1}` : `${n} of ${r.total} done`}"></button>
+              </form>`;
+            },
+          ).join("")}</span>`
+        : `<span class="bar"><span style="width:${pct}%"></span></span>`;
+
     return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${colourOf(categoryOf(r.channel))};--ch:${channelColour(r.channel)}">
       <a class="who" href="/channel/${encodeURIComponent(r.channel)}">
         <span class="dot"></span><span class="name">${esc(r.channel)}</span>
       </a>
-      <span class="bar"><span style="width:${pct}%"></span></span>
+      ${progress}
       <span class="state">${esc(state)}</span>
       ${clearAll}
     </div>`;
@@ -1469,10 +1509,14 @@ export function renderRecurring(
     CATEGORIES.filter((cat) => list_.some((r) => categoryOf(r.channel) === cat.id))
       .map((cat) => {
         const mine = list_.filter((r) => categoryOf(r.channel) === cat.id);
-        const done = mine.filter((r) => r.total && r.done === r.total).length;
+        const done = mine.reduce((n, r) => n + r.done, 0);
+        const total = mine.reduce((n, r) => n + r.total, 0);
+        const unit = mine.some((r) => (CHANNELS.find((ch) => ch.name === r.channel)?.recurring?.units ?? 1) > 1)
+          ? "uploads"
+          : "cleared";
         return `<div class="batch-group" style="--c:${cat.color}">
           <div class="batch-head"><span class="dot"></span>${esc(cat.label)}
-            <span class="n">${done}/${mine.length} cleared</span></div>
+            <span class="n">${done}/${total} ${unit}</span></div>
           <div class="batches">${mine.map((r) => line(r, date)).join("")}</div>
         </div>`;
       })
