@@ -2941,7 +2941,11 @@ function shortsPanel(
       return `<circle cx="12" cy="${y}" r="5" fill="${channelColour(name)}" class="ring"/>
         <text x="24" y="${y + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text>
         <line x1="${LABEL}" x2="${W - RIGHT}" y1="${y}" y2="${y}" class="track"/>${band}${dots}${
-          mine.length ? "" : `<text x="${LABEL + 8}" y="${y + 4}" class="nolink">No scored Shorts this week yet</text>`
+          mine.length ? "" : `<text x="${LABEL + 8}" y="${y + 4}" class="nolink">${
+            uploads.some((u) => u.channel === name && u.views !== null)
+              ? "Nothing scored this week yet — Shorts score at 3 days old until tracking from upload has built up"
+              : "No view counts yet for this channel — they arrive with the hourly read"
+          }</text>`
         }`;
     })
     .join("");
@@ -2957,7 +2961,8 @@ function shortsPanel(
       ${ticks}${rows}</svg></div>
     <div class="uptip" hidden></div>
     <p class="hint">Each Short is compared with its channel's last 60 at the same age (1 hour, 3, 6, 24, 3 days, 7 days) on a log scale.
-    Viral is three typical spreads above usual, breakout two; soft one below, flop two. The shaded band is each channel's normal range.</p>
+    Viral is three typical spreads above usual, breakout two; soft one below, flop two. The shaded band is each channel's normal range.
+    Until those ages have been tracked from upload for enough Shorts (a couple of days after deploying), Shorts three days and older are compared on their views now.</p>
   </div>`;
 
   // Channel health.

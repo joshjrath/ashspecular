@@ -31,7 +31,7 @@ import { cadenceFor, dailyFor } from "../src/web/cadence.js";
 import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from "../src/web/ideas.js";
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
-import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf } from "../src/web/shorts-perf.js";
+import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf, typicalShort } from "../src/web/shorts-perf.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
 
@@ -763,6 +763,14 @@ t("fewer than eight to compare with: no verdict", scoreShort(viral, [...ordinary
 const allScores = scoreShorts(dcAll, sNow);
 const hDC = channelHealth("Specular DC", dcAll, allScores, sNow);
 t("the week's health counts its outliers", [hDC.counts.viral, hDC.counts.flop], [1, 1]);
+// Tracking just switched on: no snapshots at all, only each Short's views now.
+const unsnapped = (v: VideoViews): VideoViews => ({ ...v, snapshots: [] });
+const untracked = [...ordinary.map(unsnapped), unsnapped(shortAt("old-hit", 100, 4000 * 12)), unsnapped(shortAt("new", 20, 4000))];
+const oldHit = scoreShort(untracked.find((v) => v.videoId === "old-hit")!, untracked, sNow);
+t("no snapshots yet: a Short 3+ days old is scored on its views now", [oldHit?.basis, oldHit?.tier], ["lifetime", "viral"]);
+t("no snapshots yet: a day-old Short waits", scoreShort(untracked.find((v) => v.videoId === "new")!, untracked, sNow), null);
+t("typical Short views without snapshots", typicalShort(untracked, sNow)?.basis, "lifetime");
+t("typical Short views at 3 days once tracked", typicalShort(dcAll, sNow)?.basis, "at 3 days");
 const slotVideos = [...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, videoId: `m${i}`, publishedAt: new Date(`2026-09-2${i % 5}T09:30:00-04:00`) })),
   ...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, videoId: `e${i}`, publishedAt: new Date(`2026-09-2${i % 5}T20:30:00-04:00`) }))];
 const slotScores = new Map(slotVideos.map((v) => [v.videoId, { multiple: v.videoId.startsWith("m") ? 2 : 0.6 } as never]));

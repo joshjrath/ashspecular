@@ -48,7 +48,7 @@ import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesCh
 import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, channelsIn, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
-import { channelHealth, postingSlots, scoreShorts } from "./shorts-perf.js";
+import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
@@ -509,7 +509,10 @@ export async function startWeb(): Promise<void> {
         : undefined;
     const perf = scoreAll(viewData, now);
     const typical = new Map(
-      channels.map((name) => [name, typicalViews(viewData.filter((v) => v.channel === name), now)] as const),
+      channels.map((name) => {
+        const mine = viewData.filter((v) => v.channel === name);
+        return [name, target.kind === "daily" ? typicalShort(mine, now) : typicalViews(mine, now)] as const;
+      }),
     );
     const byId = new Map(allUploads.map((u) => [u.videoId, u]));
     // Shorts get the fuller treatment: checkpoints from an hour, sixty to

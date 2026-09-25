@@ -213,6 +213,10 @@ or die in hours, so they're judged more closely than long form:
 - at **1 h, 3 h, 6 h, 24 h, 3 days and 7 days** — the latest of these a
   Short has reached, against the channel's others at that same age
 - against the channel's last **sixty** Shorts (at least eight)
+- until those ages have been tracked from upload for enough Shorts (about
+  two days after deploying), Shorts **three days and older** are compared
+  on their views now with the Shorts just before them, so the panel fills
+  straight away; the same goes for each channel's *typical views*
 - on a log scale with a robust spread, so a few viral hits don't widen
   "normal" for everyone. Each Short gets its multiple, its percentile and a
   score of how far it sits from normal:

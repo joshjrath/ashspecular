@@ -51,6 +51,8 @@ export interface ShortScore {
 const POOL = 60;
 const MIN_POOL = 8;
 const HOUR = 3_600_000;
+/** Hours after which a Short's views now stand in for a missing checkpoint. */
+const LIFETIME_AFTER = 72;
 
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
@@ -81,15 +83,7 @@ export function scoreShort(v: VideoViews, channel: VideoViews[], now: Date = new
     .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
     .slice(0, POOL);
 
-  // The latest checkpoint with both this Short's views and enough to compare.
-  for (const cp of [...reached].reverse()) {
-    // Just past a checkpoint with no snapshot on it yet: its views now are
-    // close enough to its views then.
-    const justPast = cp === reached[reached.length - 1] && age < cp.hours * 1.25;
-    const value = atAge(v, cp.hours) ?? (justPast ? v.views : null);
-    if (value === null || value <= 0) continue;
-    const others = prior.map((o) => atAge(o, cp.hours)).filter((n): n is number => n !== null && n > 0);
-    if (others.length < MIN_POOL) continue;
+  const scored = (value: number, others: number[], basis: string): ShortScore => {
     const logs = others.map(Math.log);
     const m = median(logs);
     // Robust spread; never so small that ordinary noise reads as an outlier.
@@ -105,10 +99,31 @@ export function scoreShort(v: VideoViews, channel: VideoViews[], now: Date = new
       z,
       percentile: Math.round((beat / others.length) * 100),
       tier: tierOf(z),
-      basis: cp.label,
+      basis,
       sample: others.length,
       spread: mad,
     };
+  };
+
+  // The latest checkpoint with both this Short's views and enough to compare.
+  for (const cp of [...reached].reverse()) {
+    // Just past a checkpoint with no snapshot on it yet: its views now are
+    // close enough to its views then.
+    const justPast = cp === reached[reached.length - 1] && age < cp.hours * 1.25;
+    const value = atAge(v, cp.hours) ?? (justPast ? v.views : null);
+    if (value === null || value <= 0) continue;
+    const others = prior.map((o) => atAge(o, cp.hours)).filter((n): n is number => n !== null && n > 0);
+    if (others.length < MIN_POOL) continue;
+    return scored(value, others, cp.label);
+  }
+
+  // Until the snapshots have followed enough Shorts from upload — they start
+  // when this is deployed — a Short three days and older is compared on its
+  // views now with the Shorts just before it, all older still. Most of a
+  // Short's views come in its first days, so that's a fair match.
+  if (age >= LIFETIME_AFTER && v.views !== null && v.views > 0) {
+    const others = prior.map((o) => o.views).filter((n): n is number => n !== null && n > 0);
+    if (others.length >= MIN_POOL) return scored(v.views, others, "lifetime");
   }
   return null;
 }
@@ -187,4 +202,19 @@ export function postingSlots(videos: VideoViews[], scores: Map<string, ShortScor
     .filter(([, xs]) => xs.length >= 5)
     .map(([from, xs]) => ({ label: `${fmt(from)}–${fmt((from + 3) % 24)}`, from, count: xs.length, median: median(xs) }))
     .sort((a, b) => b.median - a.median);
+}
+
+/**
+ * A channel's typical Short: the median of its last sixty at 3 days, else —
+ * before the snapshots reach back that far — of the views now of those three
+ * days and older.
+ */
+export function typicalShort(channelVideos: VideoViews[], now: Date = new Date()): { views: number; basis: string } | null {
+  const recent = [...channelVideos].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).slice(0, POOL);
+  const at3 = recent.map((v) => atAge(v, 72)).filter((n): n is number => n !== null && n > 0);
+  if (at3.length >= MIN_POOL) return { views: median(at3), basis: "at 3 days" };
+  const old = recent
+    .filter((v) => v.views !== null && v.views > 0 && now.getTime() - v.publishedAt.getTime() >= LIFETIME_AFTER * HOUR)
+    .map((v) => v.views!);
+  return old.length >= MIN_POOL ? { views: median(old), basis: "lifetime" } : null;
 }
