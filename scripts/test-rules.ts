@@ -31,6 +31,7 @@ import { cadenceFor, dailyFor } from "../src/web/cadence.js";
 import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from "../src/web/ideas.js";
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
+import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf } from "../src/web/shorts-perf.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
 
@@ -693,7 +694,14 @@ const pool = [
 const analysis = analyzeIdeas(pool, new Date(Date.UTC(2026, 8, 25)));
 t("What If beats the usual, Ranked lags", [analysis.formats[0]?.key, analysis.formats.at(-1)?.key], ["What If", "Ranked"]);
 t("Gojo is the strongest subject", analysis.subjects[0]?.key, "Gojo");
-t("a proven hit two months back suggests a follow-up", analysis.suggestions.some((x) => x.kind === "sequel" && x.idea.includes("Gojo Joined The Avengers")), true);
+const sequel = analysis.suggestions.find((x) => x.kind === "sequel" && x.details.source?.title === "What If Gojo Joined The Avengers?");
+t("a proven hit two months back suggests a follow-up", Boolean(sequel), true);
+t("its drafts are real titles, not templates", sequel!.details.drafts.length > 0 && sequel!.details.drafts.every((d) => !d.includes("…")), true);
+t("a follow-up keeps its lead and changes something", sequel!.details.drafts.every((d) => d.includes("Gojo") && d !== "What If Gojo Joined The Avengers?"), true);
+t("a name only takes a slot it has held — never \"Joined The Gojo\"", analysis.suggestions.flatMap((x) => x.details.drafts).some((d) => /The (Gojo|Batman|Deadpool)\b/.test(d)), false);
+t("no two suggestions lead with the same draft", new Set(analysis.suggestions.map((x) => x.idea)).size, analysis.suggestions.length);
+t("a suggestion shows the numbers it rests on", sequel!.details.evidence.map((e) => e.label), ["What If format", "Gojo"]);
+t("evidence lists the videos behind it, best first", analysis.formats[0]!.videos[0]!.title, "What If Gojo Joined The Avengers?");
 const good = checkIdea("What If Gojo Joined The X-Men?", analysis);
 const bad = checkIdea("Every Naruto Villain, Ranked", analysis);
 t("a What If with Gojo checks out above usual", good.predicted > 1.15, true);
@@ -727,6 +735,38 @@ t("a 1:30 AM Short counts toward yesterday, which is still 'today' until 3", [la
 const after3 = dailyFor("Specular DC", [new Date("2026-09-26T01:30:00-04:00")], 5, new Date("2026-09-26T09:00:00-04:00"));
 t("after 3 AM it's a new day with nothing up yet", after3.today, 0);
 t("Stories still turn over at midnight", cadenceFor("Specular FNAF", [new Date("2026-09-26T01:30:00-04:00")], new Date("2026-09-26T09:00:00-04:00")).lastDay, "2026-09-26");
+
+section("Shorts outliers — Bits and Reading");
+t("tiers by typical spreads", [3.2, 2.1, 0.4, -1.3, -2.5].map(tierOf), ["viral", "breakout", "normal", "soft", "flop"]);
+const sNow = new Date("2026-09-25T18:00:00-04:00");
+let sSeed = 3;
+const noise = () => { sSeed = (sSeed * 16807) % 2147483647; return sSeed / 2147483647; };
+// Seventy ordinary Shorts, five a day, views ~ 4,000·√hours with honest noise.
+const shortAt = (id: string, hoursAgo: number, scale: number): VideoViews => {
+  const publishedAt = new Date(sNow.getTime() - hoursAgo * H);
+  const snaps = [];
+  for (let h = 1; h <= Math.min(hoursAgo, 200); h += h < 48 ? 1 : 6) snaps.push({ at: new Date(publishedAt.getTime() + h * H), views: Math.round(scale * Math.sqrt(h)) });
+  return { videoId: id, channel: "Specular DC", publishedAt, views: snaps.at(-1)?.views ?? 0, snapshots: snaps };
+};
+const ordinary = Array.from({ length: 70 }, (_, i) => shortAt(`o${i}`, 30 + i * 4.8, 4000 * (0.75 + noise() * 0.5)));
+const viral = shortAt("viral", 20, 4000 * 12);
+const flopShort = shortAt("flop", 26, 4000 * 0.12);
+const young = shortAt("young", 2, 4000 * 1.0);
+const dcAll = [...ordinary, viral, flopShort, young];
+const vs = scoreShort(viral, dcAll, sNow)!;
+t("a Short at 12× the usual is viral, near the top", [vs.tier, vs.basis, vs.percentile >= 98], ["viral", "at 6 hours", true]);
+t("its multiple (about 12×) is read against sixty", [vs.multiple > 10 && vs.multiple < 15, vs.sample], [true, 60]);
+t("a Short at an eighth of the usual is a flop", scoreShort(flopShort, dcAll, sNow)!.tier, "flop");
+t("two hours old: judged at one hour", scoreShort(young, dcAll, sNow)!.basis, "at 1 hour");
+t("an ordinary Short is normal", scoreShort(ordinary[5]!, dcAll, sNow)!.tier, "normal");
+t("fewer than eight to compare with: no verdict", scoreShort(viral, [...ordinary.slice(0, 5), viral], sNow), null);
+const allScores = scoreShorts(dcAll, sNow);
+const hDC = channelHealth("Specular DC", dcAll, allScores, sNow);
+t("the week's health counts its outliers", [hDC.counts.viral, hDC.counts.flop], [1, 1]);
+const slotVideos = [...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, videoId: `m${i}`, publishedAt: new Date(`2026-09-2${i % 5}T09:30:00-04:00`) })),
+  ...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, videoId: `e${i}`, publishedAt: new Date(`2026-09-2${i % 5}T20:30:00-04:00`) }))];
+const slotScores = new Map(slotVideos.map((v) => [v.videoId, { multiple: v.videoId.startsWith("m") ? 2 : 0.6 } as never]));
+t("posting slots, best first", postingSlots(slotVideos, slotScores).map((sl) => sl.label), ["9 AM–12 PM", "6 PM–9 PM"]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

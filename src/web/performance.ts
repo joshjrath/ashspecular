@@ -57,15 +57,16 @@ export function viewsAtAge(v: VideoViews, hours: number): number | null {
   const target = v.publishedAt.getTime() + hours * HOUR;
   const snaps = v.snapshots;
   if (!snaps.length) return null;
-  let before: Snapshot | null = null;
-  let after: Snapshot | null = null;
-  for (const s of snaps) {
-    if (s.at.getTime() <= target) before = s;
-    else {
-      after = s;
-      break;
-    }
+  // Snapshots are oldest first: find the first one after the target by
+  // halving, not scanning — this runs hundreds of thousands of times a page.
+  let lo = 0, hi = snaps.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (snaps[mid]!.at.getTime() <= target) lo = mid + 1;
+    else hi = mid;
   }
+  const before: Snapshot | null = lo > 0 ? snaps[lo - 1]! : null;
+  const after: Snapshot | null = lo < snaps.length ? snaps[lo]! : null;
   const near = (s: Snapshot | null) => s && Math.abs(s.at.getTime() - target) <= hours * HOUR * 0.25;
   if (before && after) {
     const t0 = before.at.getTime(), t1 = after.at.getTime();

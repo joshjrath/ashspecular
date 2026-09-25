@@ -18,7 +18,8 @@ import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, t
 import { compactViews, formatMultiple, type Performance } from "./performance.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, formatFor } from "./targets.js";
 import type { DailyCadence } from "./cadence.js";
-import type { FeatureStat, IdeaAnalysis, IdeaCheck } from "./ideas.js";
+import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
+import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -955,17 +956,72 @@ header.page a.clear { align-self: center; }
 .icol h3, .ihead { font-size: 13px; margin: 0 0 8px; color: var(--ink2); letter-spacing: 0.02em; }
 .ihead { margin-top: 18px; }
 .ilist { list-style: none; margin: 0; padding: 0; }
-.ilist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 2px; border-top: 1px solid #26262C; font-size: 13px; }
+.ilist li { border-top: 1px solid #26262C; font-size: 13px; }
 .ilist .ik { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ilist .il { font-weight: 700; font-variant-numeric: tabular-nums; }
 .ilist .il.up { color: #8FE3B6; } .ilist .il.down { color: #FF9C94; }
 .ilist .in { color: var(--ink3); font-size: 11.5px; min-width: 62px; text-align: right; }
-.isugg { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.isugg li { background: var(--sunk); border-radius: 12px; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; }
+.isugg { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
 .ikind { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
 .ikind.pairing { color: #B5BEF7; } .ikind.sequel { color: #F8E27A; } .ikind.revisit { color: #8FE3B6; }
 .iidea { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.02em; }
 .iwhy { color: var(--ink3); font-size: 12px; line-height: 1.5; }
+.ihead-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ihead-row h2 { margin-bottom: 10px; }
+.ichan { margin-left: auto; }
+.panel .ichan { margin-top: 0; }
+.ichan label { font-size: 12.5px; color: var(--ink3); display: inline-flex; gap: 8px; align-items: center; }
+.ichan select { padding: 7px 10px; border-radius: 10px; border: 0; background: var(--sunk); color: var(--ink); font: inherit; font-size: 13px; color-scheme: dark; }
+.ilist li { display: block; padding: 0; }
+.ilist details summary {
+  list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px;
+  align-items: baseline; padding: 6px 2px;
+}
+.ilist details summary::-webkit-details-marker { display: none; }
+.ilist details summary:hover .ik { text-decoration: underline; text-decoration-color: var(--ink3); }
+.ilist details[open] summary { background: var(--sunk); border-radius: 8px; }
+.idetail { padding: 8px 4px 12px; }
+.idetail h4 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin: 12px 0 6px; }
+.idetail h4:first-child { margin-top: 2px; }
+.imeta { color: var(--ink3); font-size: 12px; margin: 2px 0 6px; line-height: 1.5; }
+.ibych { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--ink2); margin: 4px 0; }
+.ibych b { margin-left: 3px; } .ibych small { color: var(--ink3); }
+.ibych b.up, .vm.up { color: #8FE3B6; } .ibych b.down, .vm.down { color: #FF9C94; }
+.ivids { list-style: none; margin: 0; padding: 0; }
+.ivids a { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 0 10px; padding: 5px 6px; border-radius: 8px; }
+.ivids a:hover { background: var(--sunk); }
+.vm { font-weight: 800; font-variant-numeric: tabular-nums; grid-row: span 2; }
+.vt { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vc { font-size: 11.5px; color: var(--ink3); }
+.isugg > li { list-style: none; }
+.isg { background: var(--sunk); border-radius: 12px; }
+.isg summary { list-style: none; cursor: pointer; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; }
+.isg summary::-webkit-details-marker { display: none; }
+.isg .imore { font-size: 11.5px; color: var(--ink3); font-weight: 600; margin-top: 2px; }
+.isg[open] .imore { display: none; }
+.isg .idetail { padding: 0 13px 13px; border-top: 1px solid #2E2E35; }
+.idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
+.idrafts a:hover { text-decoration: underline; }
+.ifacts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink2); margin-top: 12px; }
+.ifacts b { color: var(--ink3); font-weight: 700; margin-right: 4px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.icav { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink2); line-height: 1.6; }
+.ihead .sub { font-weight: 500; color: var(--ink3); letter-spacing: 0; }
+.uplanes svg .band { fill: rgba(255,255,255,.06); }
+.uplanes svg .one { stroke: #5A5520; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.uplanes svg .sdot { stroke: var(--card); stroke-width: 1.5; }
+.uplanes svg .sdot.normal { opacity: .75; }
+.lg-tier { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.lg-band { width: 18px; height: 10px; border-radius: 3px; background: rgba(255,255,255,.12); }
+.performers h2 .sub, .panel h2 .sub { font-family: var(--ui); font-size: 12.5px; font-weight: 500; color: var(--ink3); letter-spacing: 0; margin-left: 8px; }
+.utable .up { color: #8FE3B6; } .utable .down { color: #FF9C94; }
+.slots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.slots li { display: grid; grid-template-columns: 120px minmax(0, 1fr) 54px 40px; gap: 12px; align-items: center; font-size: 13px; }
+.slots .sb { height: 10px; background: #26262C; border-radius: 999px; overflow: hidden; }
+.slots .sb i { display: block; height: 100%; border-radius: 999px; background: #4A4A53; }
+.slots .sb i.up { background: #3A9A6B; }
+.slots b { text-align: right; font-variant-numeric: tabular-nums; }
+.slots b.up { color: #8FE3B6; } .slots b.down { color: #FF9C94; }
+.slots small { color: var(--ink3); }
 @media (max-width: 1000px) {
   .pcols, .icols, .isugg { grid-template-columns: minmax(0, 1fr); }
   .ichecker { flex-wrap: wrap; }
@@ -2792,7 +2848,7 @@ function dailyView(
     </div>
     <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Shorts per channel per day over the last ${range} days, against each channel's daily number">
       ${heads}${rowsSvg}</svg></div>
-    <div class="uptip" id="uptip" hidden></div>
+    <div class="uptip" hidden></div>
   </div>`;
 
   const tableRows = channels
@@ -2823,6 +2879,150 @@ function dailyView(
   return `<div class="utiles">${tiles}</div>${heatmap}${table}`;
 }
 
+// ── uploads: Shorts outliers (Bits, Reading) ──────────────────────────────
+
+const TIER: Record<ShortTier, { label: string; icon: string; colour: string; r: number }> = {
+  viral: { label: "Viral", icon: "🚀", colour: "#F8E27A", r: 7 },
+  breakout: { label: "Breakout", icon: "🔥", colour: "#EE9A55", r: 5.5 },
+  normal: { label: "Normal", icon: "", colour: "#6E6E78", r: 3.5 },
+  soft: { label: "Soft", icon: "🫤", colour: "#B08A8A", r: 4 },
+  flop: { label: "Flop", icon: "📉", colour: "#FF7A70", r: 5.5 },
+};
+
+function shortsPanel(
+  channels: string[],
+  uploads: Upload[],
+  scores: Map<string, ShortScore>,
+  health: ChannelShortHealth[],
+  slots: SlotStat[],
+  now: Date,
+): string {
+  const weekAgo = now.getTime() - 7 * 86_400_000;
+  const week = uploads.filter((u) => u.publishedAt.getTime() >= weekAgo && scores.has(u.videoId));
+  const count = (t: ShortTier) => week.filter((u) => scores.get(u.videoId)!.tier === t).length;
+  const beat = week.length ? Math.round((week.filter((u) => scores.get(u.videoId)!.multiple >= 1).length / week.length) * 100) : null;
+  const tiles = [
+    { n: `${count("viral")}`, l: "🚀 viral · 7 days", cls: count("viral") ? "t-ok" : "" },
+    { n: `${count("breakout")}`, l: "🔥 breakouts · 7 days", cls: "" },
+    { n: `${count("flop")}`, l: "📉 flops · 7 days", cls: count("flop") ? "t-late" : "" },
+    { n: beat === null ? "—" : `${beat}%`, l: `beat their channel's usual · ${week.length} scored`, cls: "" },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+
+  // The spread: every Short of the week on a log scale of its multiple.
+  const W = 1100, LABEL = 188, RIGHT = 30, ROW = 34, TOP = 30;
+  const lo = Math.log(0.1), hi = Math.log(10);
+  const x = (m: number) => LABEL + ((Math.min(Math.max(Math.log(m), lo), hi) - lo) / (hi - lo)) * (W - LABEL - RIGHT);
+  const H = TOP + channels.length * ROW + 8;
+  const ticks = [0.1, 0.25, 0.5, 1, 2, 4, 10]
+    .map((m) => `<line x1="${x(m).toFixed(1)}" x2="${x(m).toFixed(1)}" y1="${TOP - 6}" y2="${H - 6}" class="${m === 1 ? "one" : "wk"}"/>
+      <text x="${x(m).toFixed(1)}" y="${TOP - 12}" text-anchor="middle" class="tick${m === 1 ? " today-l" : ""}">${m === 1 ? "usual" : `${m}×`}</text>`)
+    .join("");
+  let seed = 7;
+  const jitter = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * (ROW - 12);
+  const rows = channels
+    .map((name, i) => {
+      const y = TOP + i * ROW + ROW / 2;
+      const mine = week.filter((u) => u.channel === name).map((u) => ({ u, sc: scores.get(u.videoId)! }));
+      const spread = mine[0]?.sc.spread;
+      const band = spread
+        ? `<rect x="${x(Math.exp(-spread)).toFixed(1)}" y="${y - ROW / 2 + 3}" width="${(x(Math.exp(spread)) - x(Math.exp(-spread))).toFixed(1)}" height="${ROW - 6}" rx="6" class="band"/>`
+        : "";
+      const dots = mine
+        .sort((a, b) => (a.sc.tier === "normal" ? -1 : 0) - (b.sc.tier === "normal" ? -1 : 0))
+        .map(({ u, sc }) => {
+          const t = TIER[sc.tier];
+          const tip = `${t.icon ? `${t.icon} ` : ""}${u.title} · ${u.views !== null ? `${u.views.toLocaleString()} views · ` : ""}${formatMultiple(sc.multiple)} usual ${sc.basis} · beat ${sc.percentile}% of the last ${sc.sample}`;
+          return `<a href="${esc(u.url)}" target="_blank" rel="noreferrer" data-tip="${esc(tip)}">
+            <circle cx="${x(sc.multiple).toFixed(1)}" cy="${(y + jitter()).toFixed(1)}" r="${t.r}" fill="${t.colour}" class="sdot ${sc.tier}"/></a>`;
+        })
+        .join("");
+      return `<circle cx="12" cy="${y}" r="5" fill="${channelColour(name)}" class="ring"/>
+        <text x="24" y="${y + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text>
+        <line x1="${LABEL}" x2="${W - RIGHT}" y1="${y}" y2="${y}" class="track"/>${band}${dots}${
+          mine.length ? "" : `<text x="${LABEL + 8}" y="${y + 4}" class="nolink">No scored Shorts this week yet</text>`
+        }`;
+    })
+    .join("");
+  const spreadChart = `<div class="panel uplanes">
+    <div class="uphead">
+      <h2>This week's Shorts, against each channel's usual</h2>
+      <div class="ulegend">
+        ${(["viral", "breakout", "normal", "soft", "flop"] as ShortTier[]).map((t) => `<span><i class="lg-tier" style="--c:${TIER[t].colour}"></i>${TIER[t].icon} ${TIER[t].label}</span>`).join("")}
+        <span><i class="lg-band"></i>Normal range</span>
+      </div>
+    </div>
+    <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Every Short of the last seven days, placed by its multiple of its channel's usual views on a log scale">
+      ${ticks}${rows}</svg></div>
+    <div class="uptip" hidden></div>
+    <p class="hint">Each Short is compared with its channel's last 60 at the same age (1 hour, 3, 6, 24, 3 days, 7 days) on a log scale.
+    Viral is three typical spreads above usual, breakout two; soft one below, flop two. The shaded band is each channel's normal range.</p>
+  </div>`;
+
+  // Channel health.
+  const trend = (h: ChannelShortHealth) => {
+    if (h.thisWeek === null || h.lastWeek === null) return "—";
+    const pct = Math.round((h.thisWeek / h.lastWeek - 1) * 100);
+    return `<span class="${pct >= 0 ? "up" : "down"}">${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`;
+  };
+  const healthRows = health
+    .map((h) => `<tr>
+      <td><span class="cdot" style="--ch:${channelColour(h.channel)}"></span>${esc(h.channel)}</td>
+      <td class="num">${h.thisWeek === null ? "—" : esc(formatMultiple(h.thisWeek))}</td>
+      <td class="num">${trend(h)}</td>
+      <td class="num">${h.beatRate === null ? "—" : `${Math.round(h.beatRate * 100)}%`}</td>
+      <td class="num">${h.counts.viral || "·"}</td><td class="num">${h.counts.breakout || "·"}</td>
+      <td class="num">${h.counts.soft || "·"}</td><td class="num">${h.counts.flop || "·"}</td>
+      <td class="num">${h.scored}</td>
+    </tr>`)
+    .join("");
+  const healthTable = `<div class="panel">
+    <h2>Channel health <span class="sub">this week against last</span></h2>
+    <div class="utable-wrap"><table class="utable">
+      <thead><tr><th>Channel</th><th class="num" title="Median multiple of this week's Shorts">Typical ×</th><th class="num">vs last week</th>
+        <th class="num">Beat usual</th><th class="num">🚀</th><th class="num">🔥</th><th class="num">🫤</th><th class="num">📉</th><th class="num">Scored</th></tr></thead>
+      <tbody>${healthRows}</tbody></table></div>
+  </div>`;
+
+  // The outliers themselves.
+  const month = uploads.filter((u) => now.getTime() - u.publishedAt.getTime() < 30 * 86_400_000 && scores.has(u.videoId));
+  const row = (u: Upload) => {
+    const sc = scores.get(u.videoId)!;
+    const t = TIER[sc.tier];
+    return `<a class="prow" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+      <span class="pmult ${sc.tier === "flop" || sc.tier === "soft" ? "under" : "breakout"}">${esc(formatMultiple(sc.multiple))}</span>
+      <span class="pbody"><span class="ut">${t.icon} ${esc(u.title)}</span>
+        <span class="pmeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span>${esc(u.channel)} · ${
+          sc.tier === "flop" || sc.tier === "soft" ? `bottom ${Math.max(1, 100 - sc.percentile)}%` : `top ${Math.max(1, 100 - sc.percentile)}%`
+        } · ${esc(compactViews(sc.value))} ${esc(sc.basis)} vs ${esc(compactViews(Math.round(sc.baseline)))} usual · ${esc(relativeDay(shortsDay(u.publishedAt)))}</span></span>
+    </a>`;
+  };
+  const ups = month.filter((u) => ["viral", "breakout"].includes(scores.get(u.videoId)!.tier)).sort((a, b) => scores.get(b.videoId)!.z - scores.get(a.videoId)!.z).slice(0, 10);
+  const downs = month.filter((u) => scores.get(u.videoId)!.tier === "flop").sort((a, b) => scores.get(a.videoId)!.z - scores.get(b.videoId)!.z).slice(0, 10);
+  const outliers = `<div class="panel performers">
+    <h2>Outliers <span class="sub">last 30 days, most unusual first</span></h2>
+    <div class="pcols">
+      <div><h3>🚀🔥 Above <span>${ups.length}</span></h3>${ups.map(row).join("") || `<p class="hint">None this month yet.</p>`}</div>
+      <div><h3>📉 Flops <span>${downs.length}</span></h3>${downs.map(row).join("") || `<p class="hint">None this month.</p>`}</div>
+    </div>
+  </div>`;
+
+  const maxSlot = Math.max(...slots.map((s) => s.median), 1);
+  const slotPanel = slots.length
+    ? `<div class="panel"><h2>When Shorts do best <span class="sub">three-hour slots, Eastern · median multiple of the channel's usual</span></h2>
+        <ul class="slots">${slots
+          .slice()
+          .sort((a, b) => a.from - b.from)
+          .map((sl) => `<li><span class="sl">${esc(sl.label)}</span>
+            <span class="sb"><i style="width:${((sl.median / maxSlot) * 100).toFixed(0)}%" class="${sl.median >= 0.95 ? "up" : "down"}"></i></span>
+            <b class="${sl.median >= 0.95 ? "up" : "down"}">${esc(formatMultiple(sl.median))}</b><small>${sl.count}</small></li>`)
+          .join("")}</ul></div>`
+    : "";
+
+  return `<div class="utiles">${tiles}</div>${spreadChart}${outliers}${healthTable}${slotPanel}`;
+}
+
 // ── uploads: ideas ────────────────────────────────────────────────────────
 
 function liftText(lift: number): string {
@@ -2830,18 +3030,64 @@ function liftText(lift: number): string {
   return `${pct >= 0 ? "+" : "−"}${Math.abs(pct)}%`;
 }
 
-function ideasPanel(category: CategoryId, a: IdeaAnalysis, idea: { title: string; check: IdeaCheck } | null): string {
+function ideasPanel(
+  category: CategoryId,
+  a: IdeaAnalysis,
+  idea: { title: string; check: IdeaCheck } | null,
+  channels: string[] = [],
+  channel: string | null = null,
+): string {
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
-  const statRow = (s: FeatureStat) => `<li>
-      <span class="ik">${esc(s.key)}</span>
-      <span class="il ${s.lift >= 1 ? "up" : "down"}">${esc(liftText(s.lift))}</span>
-      <span class="in">${s.count} video${s.count === 1 ? "" : "s"}</span>
-    </li>`;
+  const scope = channel ?? `${catLabel} channels`;
+  const ago = (d: Date) => relativeDay(dayOf(d));
+  const vidLine = (v: IdeaVideo) => `<li><a href="${esc(v.url)}" target="_blank" rel="noreferrer">
+      <span class="vm ${v.multiple! >= 1 ? "up" : "down"}">${esc(formatMultiple(v.multiple!))}</span>
+      <span class="vt">${esc(v.title)}</span>
+      <span class="vc"><span class="cdot" style="--ch:${channelColour(v.channel)}"></span>${esc(v.channel.replace(/^Specular /, ""))} · ${esc(ago(v.publishedAt))}</span>
+    </a></li>`;
+  const channelTable = (st: FeatureStat) =>
+    st.byChannel.length > 1
+      ? `<div class="ibych">${st.byChannel
+          .slice(0, 6)
+          .map((c) => `<span><span class="cdot" style="--ch:${channelColour(c.channel)}"></span>${esc(c.channel.replace(/^Specular /, ""))}
+            <b class="${c.median >= a.overall ? "up" : "down"}">${esc(formatMultiple(c.median))}</b> <small>${c.count}</small></span>`)
+          .join("")}</div>`
+      : "";
+  const statDetail = (st: FeatureStat) => {
+    const best = st.videos.slice(0, 3);
+    const worst = st.videos.length > 4 ? st.videos.slice(-2).reverse() : [];
+    return `<div class="idetail">
+      <p class="imeta">${st.count} judged videos · median ${esc(formatMultiple(st.median))} their channel's usual
+        (all ${esc(catLabel)}: ${esc(formatMultiple(a.overall))}) · last used ${esc(ago(st.lastUsed))}</p>
+      ${channelTable(st)}
+      <h4>Best</h4><ul class="ivids">${best.map(vidLine).join("")}</ul>
+      ${worst.length ? `<h4>Weakest</h4><ul class="ivids">${worst.map(vidLine).join("")}</ul>` : ""}
+    </div>`;
+  };
+  const statRow = (st: FeatureStat) => `<li><details>
+      <summary><span class="ik">${esc(st.key)}</span>
+        <span class="il ${st.lift >= 1 ? "up" : "down"}">${esc(liftText(st.lift))}</span>
+        <span class="in">${st.count} video${st.count === 1 ? "" : "s"}</span></summary>
+      ${statDetail(st)}
+    </details></li>`;
   const list = (title: string, xs: FeatureStat[], n: number) =>
     `<div class="icol"><h3>${esc(title)}</h3>${xs.length ? `<ul class="ilist">${xs.slice(0, n).map(statRow).join("")}</ul>` : `<p class="hint">Not enough yet.</p>`}</div>`;
 
+  const picker = channels.length > 1
+    ? `<form method="get" action="/uploads" class="ichan">
+        <input type="hidden" name="cat" value="${category}">
+        <label>Ideas for
+          <select name="ch" onchange="this.form.submit()">
+            <option value="">all ${esc(catLabel)} channels</option>
+            ${channels.map((c) => `<option value="${esc(c)}"${c === channel ? " selected" : ""}>${esc(c)}</option>`).join("")}
+          </select>
+        </label>
+      </form>`
+    : "";
+
   const checker = `<form method="get" action="/uploads" class="ichecker">
       <input type="hidden" name="cat" value="${category}">
+      ${channel ? `<input type="hidden" name="ch" value="${esc(channel)}">` : ""}
       <input type="text" name="idea" value="${esc(idea?.title ?? "")}" placeholder="Type a title idea — e.g. What If Gojo Joined The Avengers?" autocomplete="off">
       <button class="clear">Check idea</button>
     </form>
@@ -2865,31 +3111,48 @@ function ideasPanel(category: CategoryId, a: IdeaAnalysis, idea: { title: string
         : ""
     }`;
 
-  const suggestions = a.suggestions.length
-    ? `<ul class="isugg">${a.suggestions
-        .map(
-          (s) => `<li><span class="ikind ${s.kind}">${s.kind === "pairing" ? "New pairing" : s.kind === "sequel" ? "Follow-up" : "Bring back"}</span>
-            <span class="iidea">${esc(s.idea)}</span><span class="iwhy">${esc(s.why)}</span></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="hint">No suggestions yet — they need a few formats and subjects with a track record.</p>`;
+  const suggestion = (sg: Suggestion) => {
+    const d = sg.details;
+    return `<li><details class="isg">
+      <summary>
+        <span class="ikind ${sg.kind}">${sg.kind === "pairing" ? "New pairing" : sg.kind === "sequel" ? "Follow-up" : "Bring back"}</span>
+        <span class="iidea">${esc(sg.idea)}</span><span class="iwhy">${esc(sg.why)}</span>
+        <span class="imore">Details ▾</span>
+      </summary>
+      <div class="idetail">
+        ${d.drafts.length ? `<h4>Titles to start from</h4><ol class="idrafts">${d.drafts.map((t) => `<li><a href="/uploads?cat=${category}${channel ? `&amp;ch=${encodeURIComponent(channel)}` : ""}&amp;idea=${encodeURIComponent(t)}" title="Check this title">${esc(t)}</a></li>`).join("")}</ol>` : ""}
+        ${d.source ? `<h4>The hit it builds on</h4><ul class="ivids">${vidLine(d.source)}</ul>` : ""}
+        <div class="ifacts">
+          ${d.bestChannel ? `<span><b>Best channel</b> ${esc(d.bestChannel.channel)} · ${esc(formatMultiple(d.bestChannel.median))} usual</span>` : ""}
+          ${d.bestDay ? `<span><b>Best day</b> ${esc(d.bestDay.key)} · ${esc(liftText(d.bestDay.lift))}</span>` : ""}
+          ${d.lastUsedDays !== null ? `<span><b>Last done</b> ${d.lastUsedDays} days ago</span>` : `<span><b>Last done</b> never</span>`}
+        </div>
+        ${d.evidence.map((e) => `<h4>${esc(e.label)} · ${esc(liftText(e.stat.lift))} over ${e.stat.count} videos</h4>${channelTable(e.stat)}<ul class="ivids">${e.stat.videos.slice(0, 3).map(vidLine).join("")}</ul>`).join("")}
+        ${d.caveats.length ? `<h4>Watch out</h4><ul class="icav">${d.caveats.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+      </div>
+    </details></li>`;
+  };
 
-  return `<div class="panel ideas">
-    <h2>Ideas <span class="sub">from ${a.judged} ${esc(catLabel)} videos judged against their channel's usual</span></h2>
+  return `<div class="panel ideas" id="ideas">
+    <div class="ihead-row">
+      <h2>Ideas <span class="sub">from ${a.judged} videos on ${esc(scope)}, each judged against its channel's usual</span></h2>
+      ${picker}
+    </div>
     ${checker}
     ${
       a.judged < 6
-        ? `<p class="hint">Ideas need at least six judged videos in this category — videos are judged once they're two weeks old, or sooner as the hourly view history builds up.</p>`
+        ? `<p class="hint">Ideas need at least six judged videos${channel ? " on this channel" : " in this category"} — videos are judged once they're two weeks old, or sooner as the hourly view history builds up.</p>`
         : `<div class="icols">
             ${list("Formats", a.formats, 6)}
             ${list("Subjects", a.subjects, 8)}
-            <div class="icol">${list("Best days", a.days, 3).replace('<div class="icol">', "").replace(/<\/div>$/, "")}
+            <div class="icol"><h3>Best days</h3>${a.days.length ? `<ul class="ilist">${a.days.slice(0, 3).map(statRow).join("")}</ul>` : `<p class="hint">Not enough yet.</p>`}
               <h3 style="margin-top:14px">Title length</h3><ul class="ilist">${[a.length.short, a.length.long]
                 .filter((x): x is FeatureStat => Boolean(x))
                 .map(statRow)
                 .join("")}</ul></div>
           </div>
-          <h3 class="ihead">Suggested ideas</h3>${suggestions}`
+          <h3 class="ihead">Suggested ideas <span class="sub">— open one for titles, evidence and where to post it</span></h3>
+          ${a.suggestions.length ? `<ul class="isugg">${a.suggestions.map(suggestion).join("")}</ul>` : `<p class="hint">No suggestions yet — they need a few formats and subjects with a track record.</p>`}`
     }
   </div>`;
 }
@@ -2933,6 +3196,8 @@ export function renderUploads(
     daily?: DailyCadence[];
     ideas?: IdeaAnalysis;
     idea?: { title: string; check: IdeaCheck } | null;
+    ideaChannel?: string | null;
+    shorts?: { scores: Map<string, ShortScore>; health: ChannelShortHealth[]; slots: SlotStat[] };
   },
   now = new Date(),
 ): string {
@@ -3113,7 +3378,7 @@ export function renderUploads(
     <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
       aria-label="Uploads per ${esc(catLabel)} channel over the last ${data.range} days">
       ${grid.join("")}${lanes}</svg></div>
-    <div class="uptip" id="uptip" hidden></div>
+    <div class="uptip" hidden></div>
   </div>`;
 
   // ── the table — the same facts, readable without the chart
@@ -3240,18 +3505,18 @@ export function renderUploads(
     ${
       linked.length
         ? target.kind === "daily"
-          ? `${dailyView(data.channels, linkOf, data.daily ?? [], data.range, typical, category, now)}${performers}`
+          ? `${dailyView(data.channels, linkOf, data.daily ?? [], data.range, typical, category, now)}${
+              data.shorts ? shortsPanel(data.channels, data.uploads, data.shorts.scores, data.shorts.health, data.shorts.slots, now) : performers
+            }`
           : `<div class="utiles">${tiles}</div>${timeline}${performers}${table}`
         : ""
     }
-    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null) : ""}
+    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null) : ""}
     ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>
-    // Hover any upload or gap for what it is.
-    (function () {
-      var tip = document.getElementById("uptip");
-      if (!tip) return;
+    // Hover any upload, gap, day or Short for what it is — on every chart.
+    document.querySelectorAll(".uptip").forEach(function (tip) {
       var box = tip.parentElement;
       box.addEventListener("mousemove", function (e) {
         var t = e.target.closest && e.target.closest("[data-tip]");
@@ -3264,7 +3529,7 @@ export function renderUploads(
         tip.style.top = (e.clientY - r.top + 16) + "px";
       });
       box.addEventListener("mouseleave", function () { tip.hidden = true; });
-    })();
+    });
     </script>`,
   );
 }

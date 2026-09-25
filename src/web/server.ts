@@ -48,6 +48,7 @@ import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesCh
 import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, channelsIn, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
+import { channelHealth, postingSlots, scoreShorts } from "./shorts-perf.js";
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
@@ -478,7 +479,7 @@ export async function startWeb(): Promise<void> {
   });
 
   // Uploads: whether each Stories channel is keeping to its four-day pace.
-  app.get<{ Querystring: { range?: string; cat?: string; idea?: string } }>("/uploads", async (request, reply) => {
+  app.get<{ Querystring: { range?: string; cat?: string; idea?: string; ch?: string } }>("/uploads", async (request, reply) => {
     const category = (UPLOAD_CATEGORIES.find((c) => c.id === request.query.cat)?.id ?? "stories") as CategoryId;
     const target = UPLOAD_TARGETS[category];
     const ranges = target.kind === "daily" ? [14, 30, 60] : [30, 90, 180];
@@ -511,13 +512,18 @@ export async function startWeb(): Promise<void> {
       channels.map((name) => [name, typicalViews(viewData.filter((v) => v.channel === name), now)] as const),
     );
     const byId = new Map(allUploads.map((u) => [u.videoId, u]));
+    // Shorts get the fuller treatment: checkpoints from an hour, sixty to
+    // compare with, a log-scale spread.
+    const shortScores = target.kind === "daily" ? scoreShorts(viewData, now) : null;
+    const multipleOf = (id: string) => shortScores?.get(id)?.multiple ?? perf.get(id)?.multiple ?? null;
+    const ideaChannel = channels.includes(request.query.ch ?? "") ? request.query.ch! : null;
     const ideas = analyzeIdeas(
-      viewData.map((v) => ({
+      viewData.filter((v) => !ideaChannel || v.channel === ideaChannel).map((v) => ({
         title: byId.get(v.videoId)?.title ?? "",
         channel: v.channel,
         publishedAt: v.publishedAt,
         url: byId.get(v.videoId)?.url ?? "",
-        multiple: perf.get(v.videoId)?.multiple ?? null,
+        multiple: multipleOf(v.videoId),
       })).filter((v) => v.title),
       now,
     );
@@ -528,6 +534,14 @@ export async function startWeb(): Promise<void> {
         {
           channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()), perf, typical,
           category, daily, ideas, idea: ideaTitle ? { title: ideaTitle, check: checkIdea(ideaTitle, ideas) } : null,
+          ideaChannel,
+          shorts: shortScores
+            ? {
+                scores: shortScores,
+                health: channels.map((c) => channelHealth(c, viewData, shortScores, now)),
+                slots: postingSlots(viewData.filter((v) => now.getTime() - v.publishedAt.getTime() < 30 * 86_400_000), shortScores),
+              }
+            : undefined,
         },
         now,
       ),

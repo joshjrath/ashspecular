@@ -189,6 +189,49 @@ usual") with the reasons ("What If +55%", "Gojo +57%"). Small samples are
 pulled toward "no effect", so one lucky video doesn't make a rule. No AI or
 key needed — it's the board's own statistics.
 
+**Click any row for the detail.** Each format, subject, day and length
+opens to its numbers per channel and the best and weakest videos behind it.
+Each suggestion opens to:
+
+- **draft titles** — real titles that did well, rewritten for the idea
+  ("What If Deadpool Was In FNAF?" did 1.6×, so a Gojo idea offers "What If
+  Gojo Was In FNAF?"). A name only replaces one that played the same part:
+  a star for a star, a *"Joined The Avengers"* for another *"Joined The …"*,
+  so drafts don't come out as nonsense. Click a draft to run it through the
+  checker.
+- the hit it follows up, the **best channel** and **best day** for it, and
+  when it was last done
+- the evidence: each stat it rests on, with its videos
+- caveats — a lead resting on few videos, or ones that flopped
+
+A **channel** picker above the panel narrows everything — stats,
+suggestions and the checker — to one channel.
+
+**Shorts outliers (Bits and Reading).** Shorts go up by the dozen and live
+or die in hours, so they're judged more closely than long form:
+
+- at **1 h, 3 h, 6 h, 24 h, 3 days and 7 days** — the latest of these a
+  Short has reached, against the channel's others at that same age
+- against the channel's last **sixty** Shorts (at least eight)
+- on a log scale with a robust spread, so a few viral hits don't widen
+  "normal" for everyone. Each Short gets its multiple, its percentile and a
+  score of how far it sits from normal:
+
+| Score | |
+|---|---|
+| 3 or more | 🚀 viral |
+| 2 or more | 🔥 breakout |
+| between | normal |
+| −1 or less | soft |
+| −2 or less | 📉 flop |
+
+The Shorts panel shows the counts for the last week, a **spread chart**
+(every Short of the last 30 days as a dot on a 0.1×–10× scale, each channel's
+normal band shaded; hover a dot for the title and numbers), the **top and
+bottom** Shorts, each channel's **health** (this week's median against last
+week's, share beating its usual, tiers) and **posting slots** — how Shorts
+do by the three-hour Eastern window they went up in, best first.
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their

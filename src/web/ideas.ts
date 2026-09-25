@@ -36,6 +36,10 @@ export interface FeatureStat {
   lift: number;
   best: IdeaVideo | null;
   lastUsed: Date;
+  /** The judged videos behind it, best first. */
+  videos: IdeaVideo[];
+  /** How it does channel by channel, best first. */
+  byChannel: Array<{ channel: string; count: number; median: number }>;
 }
 
 export interface IdeaAnalysis {
@@ -53,6 +57,21 @@ export interface Suggestion {
   idea: string;
   why: string;
   lift: number;
+  details: IdeaDetails;
+}
+
+/** What opening a suggestion shows. */
+export interface IdeaDetails {
+  /** Concrete titles to start from, built on the best real titles. */
+  drafts: string[];
+  /** The numbers it rests on: the format, the subject, the hit. */
+  evidence: Array<{ label: string; stat: FeatureStat }>;
+  /** The channel where this does best, if one stands out. */
+  bestChannel: { channel: string; median: number; count: number } | null;
+  bestDay: FeatureStat | null;
+  lastUsedDays: number | null;
+  source: IdeaVideo | null;
+  caveats: string[];
 }
 
 /** Title shapes, first match wins. */
@@ -123,7 +142,80 @@ function stat(key: string, list: IdeaVideo[], overall: number): FeatureStat {
     lift: med / overall,
     best: judged.reduce<IdeaVideo | null>((b, v) => (!b || v.multiple! > b.multiple! ? v : b), null),
     lastUsed: new Date(Math.max(...list.map((v) => v.publishedAt.getTime()))),
+    videos: [...judged].sort((a, b) => b.multiple! - a.multiple!),
+    byChannel: [...group(judged, (v) => [v.channel])]
+      .map(([channel, l]) => ({ channel, count: l.length, median: median(l.map((v) => v.multiple!)) }))
+      .sort((a, b) => b.median - a.median),
   };
+}
+
+/** Where a subject shows up in titles: first or later, and the word before it. */
+interface Role { lead: number; other: number; before: Set<string> }
+type Roles = Map<string, Role>;
+
+/** The word just before a subject in a title, lower-cased: "the" in "Joined The Avengers". */
+function wordBefore(title: string, subject: string): string {
+  const i = title.indexOf(subject);
+  if (i <= 0) return "";
+  const prev = title.slice(0, i).trim().split(/\s+/).pop() ?? "";
+  return prev.replace(/[^A-Za-z0-9'’-]/g, "").toLowerCase();
+}
+
+export function rolesOf(videos: Array<{ title: string }>): Roles {
+  const out: Roles = new Map();
+  for (const v of videos) {
+    subjectsOf(v.title).forEach((subj, i) => {
+      const r = out.get(subj) ?? { lead: 0, other: 0, before: new Set<string>() };
+      if (i === 0) r.lead += 1;
+      else r.other += 1;
+      r.before.add(wordBefore(v.title, subj));
+      out.set(subj, r);
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether a subject can stand where another stood in a real title without
+ * breaking it. A name that's been the star of titles can replace a star; one
+ * that's only ever been the other half ("… Joined The Avengers") can replace
+ * another other-half, and only after the same word — so Gojo never ends up
+ * as "Joined The Gojo".
+ */
+function fits(roles: Roles | undefined, subject: string, title: string, replacing: string, asLead: boolean): boolean {
+  if (!roles) return true;
+  const r = roles.get(subject);
+  if (!r) return false;
+  const sameSlot = r.before.has(wordBefore(title, replacing));
+  return asLead ? r.lead >= 1 && (sameSlot || r.lead >= r.other) : r.other >= 1 && sameSlot;
+}
+
+/**
+ * Concrete titles for a format and a subject: the format's best real titles
+ * with their lead subject swapped for this one. "What If Sukuna Joined The
+ * Avengers?" did 3×, so Gojo gets "What If Gojo Joined The Avengers?" —
+ * never a title that already exists, and never a swap that breaks the title.
+ * With no real title to build on, the format's shape with the blank filled by
+ * a strong partner subject.
+ */
+function draftsFor(format: FeatureStat | undefined, subject: string, taken: Set<string>, n = 3, roles?: Roles, partner?: string): string[] {
+  const out: string[] = [];
+  for (const v of format?.videos ?? []) {
+    const lead = subjectsOf(v.title)[0];
+    if (!lead || lead.toLowerCase() === subject.toLowerCase()) continue;
+    if (subjectsOf(v.title).some((x) => x.toLowerCase() === subject.toLowerCase())) continue;
+    if (!fits(roles, subject, v.title, lead, true)) continue;
+    const draft = v.title.replace(lead, subject);
+    const key = draft.toLowerCase();
+    if (taken.has(key) || out.some((d) => d.toLowerCase() === key)) continue;
+    out.push(draft);
+    if (out.length >= n) break;
+  }
+  if (!out.length && format) {
+    const t = TEMPLATE[format.key];
+    if (t) out.push(t(subject, partner && partner !== subject ? partner : undefined));
+  }
+  return out;
 }
 
 function group(videos: IdeaVideo[], keysOf: (v: IdeaVideo) => string[]): Map<string, IdeaVideo[]> {
@@ -135,18 +227,18 @@ function group(videos: IdeaVideo[], keysOf: (v: IdeaVideo) => string[]): Map<str
   return out;
 }
 
-/** Title shapes to write a pairing in, by format. */
-const TEMPLATE: Record<string, (s: string) => string> = {
-  "What If": (s) => `What If ${s} …?`,
-  "Could … Survive": (s) => `Could ${s} Survive …?`,
-  "Could … Beat / Kill": (s) => `Could ${s} Beat …?`,
-  "Could / Would …": (s) => `Could ${s} …?`,
-  Ranked: (s) => `Every ${s} …, Ranked`,
-  Versus: (s) => `${s} vs …`,
-  "How …": (s) => `How ${s} …`,
-  "Why …": (s) => `Why ${s} …`,
-  "Explained / Theory": (s) => `${s} … Explained`,
-  "Top / Best": (s) => `Top 10 ${s} …`,
+/** Title shapes to write a pairing in, by format, filled with a partner when there is one. */
+const TEMPLATE: Record<string, (s: string, p?: string) => string> = {
+  "What If": (s, p) => (p ? `What If ${s} Fought ${p}?` : `What If ${s} …?`),
+  "Could … Survive": (s, p) => `Could ${s} Survive ${p ?? "…"}?`,
+  "Could … Beat / Kill": (s, p) => `Could ${s} Beat ${p ?? "…"}?`,
+  "Could / Would …": (s, p) => (p ? `Could ${s} Beat ${p}?` : `Could ${s} …?`),
+  Ranked: (s) => `Every ${s} Moment, Ranked`,
+  Versus: (s, p) => `${s} vs ${p ?? "…"}`,
+  "How …": (s, p) => (p ? `How ${s} Would Beat ${p}` : `How ${s} …`),
+  "Why …": (s, p) => (p ? `Why ${s} Can't Beat ${p}` : `Why ${s} …`),
+  "Explained / Theory": (s, p) => (p ? `${s} vs ${p} Explained` : `${s} Explained`),
+  "Top / Best": (s) => `Top 10 ${s} Moments`,
 };
 
 export function analyzeIdeas(videos: IdeaVideo[], now: Date = new Date()): IdeaAnalysis {
@@ -178,6 +270,36 @@ export function analyzeIdeas(videos: IdeaVideo[], now: Date = new Date()): IdeaA
   const suggestions: Suggestion[] = [];
   const daysSince = (d: Date) => Math.round((now.getTime() - d.getTime()) / 86_400_000);
   const pct = (lift: number) => `${lift >= 1 ? "+" : ""}${Math.round((lift - 1) * 100)}%`;
+  const taken = new Set(videos.map((v) => v.title.trim().toLowerCase()));
+  const roles = rolesOf(videos);
+  /** The strongest subject that's played second fiddle in titles — a ready opponent or setting. */
+  const partnerFor = (subject: string) =>
+    subjects.find((x) => x.lift > 1 && x.key !== subject && (roles.get(x.key)?.other ?? 0) >= 1)?.key;
+  const bestDay = days.find((d) => d.lift > 1.03) ?? null;
+  /** The channel where both stats do best, needing two videos there. */
+  const bestChannelFor = (...stats: FeatureStat[]) => {
+    const scores = new Map<string, { n: number; xs: number[] }>();
+    for (const st of stats) for (const c of st.byChannel) {
+      const e = scores.get(c.channel) ?? { n: 0, xs: [] };
+      e.n += c.count;
+      e.xs.push(c.median);
+      scores.set(c.channel, e);
+    }
+    const ranked = [...scores]
+      .filter(([, e]) => e.n >= 2)
+      .map(([channel, e]) => ({ channel, count: e.n, median: e.xs.reduce((a, b) => a + b, 0) / e.xs.length }))
+      .sort((a, b) => b.median - a.median);
+    return ranked[0] ?? null;
+  };
+  const caveatsFor = (...stats: FeatureStat[]) => {
+    const out: string[] = [];
+    for (const st of stats) {
+      if (st.count < 5) out.push(`${st.key} rests on only ${st.count} videos — treat it as a lead, not a rule.`);
+      const flops = st.videos.filter((v) => v.multiple! <= 0.5).length;
+      if (flops) out.push(`${flops} of ${st.count} ${st.key} videos did half the usual or less.`);
+    }
+    return out;
+  };
 
   // Strong formats × strong subjects not used lately.
   const topFormats = formats.filter((f) => f.lift > 1.05 && f.key !== "Other").slice(0, 3);
@@ -197,13 +319,23 @@ export function analyzeIdeas(videos: IdeaVideo[], now: Date = new Date()): IdeaA
       if (last && daysSince(new Date(last)) < 60) continue;
       const template = TEMPLATE[f.key];
       if (!template) continue;
+      const drafts = draftsFor(f, s.key, taken, 3, roles, partnerFor(s.key));
       suggestions.push({
         kind: "pairing",
-        idea: template(s.key),
+        idea: drafts[0] ?? template(s.key),
         why: `${f.key} titles run ${pct(f.lift)} and ${s.key} ${pct(s.lift)}; ${
           last ? `this pairing was last done ${daysSince(new Date(last))} days ago` : "they've never been paired"
         }.`,
         lift: Math.sqrt(f.lift * s.lift),
+        details: {
+          drafts,
+          evidence: [{ label: `${f.key} format`, stat: f }, { label: s.key, stat: s }],
+          bestChannel: bestChannelFor(f, s),
+          bestDay,
+          lastUsedDays: last ? daysSince(new Date(last)) : null,
+          source: null,
+          caveats: caveatsFor(f, s),
+        },
       });
       break;
     }
@@ -218,22 +350,80 @@ export function analyzeIdeas(videos: IdeaVideo[], now: Date = new Date()): IdeaA
     const key = v.title.trim().toLowerCase();
     if (sequels.has(key) || sequels.size >= 3) continue;
     sequels.add(key);
+    // Follow-ups: the same lead with its other subject swapped for another
+    // strong one, and the same lead in the other strong formats.
+    const subs = subjectsOf(v.title);
+    const lead = subs[0];
+    const drafts: string[] = [];
+    if (subs[1]) {
+      const second = subs[1];
+      for (const alt of subjects.filter((x) => x.lift > 1 && !subs.includes(x.key) && fits(roles, x.key, v.title, second, false)).slice(0, 2)) {
+        const d = v.title.replace(second, alt.key);
+        if (!taken.has(d.toLowerCase())) drafts.push(d);
+      }
+    }
+    if (lead) {
+      // The lead dropped into the same format's other real titles: "What If
+      // Gojo Was In FNAF?" from "What If Deadpool Was In FNAF?".
+      const same = formats.find((x) => x.key === formatOf(v.title));
+      for (const d of same && same.key !== "Other" ? draftsFor({ ...same, videos: same.videos.filter((o) => o !== v) }, lead, taken, 3, roles) : []) {
+        if (!d.includes("…") && !drafts.includes(d)) drafts.push(d);
+        if (drafts.length >= 3) break;
+      }
+      for (const f of topFormats.filter((f) => f.key !== formatOf(v.title))) {
+        if (drafts.length >= 3) break;
+        const d = draftsFor(f, lead, taken, 1, roles, partnerFor(lead))[0];
+        if (d && !drafts.includes(d)) drafts.push(d);
+        if (drafts.length >= 3) break;
+      }
+    }
+    // Drafts an earlier suggestion already leads with aren't offered twice.
+    const used = new Set(suggestions.flatMap((x) => x.details.drafts));
+    for (let i = drafts.length - 1; i >= 0; i--) if (used.has(drafts[i]!)) drafts.splice(i, 1);
+    const leadStat = subjects.find((x) => x.key === lead);
+    const fmtStat = formats.find((x) => x.key === formatOf(v.title));
     suggestions.push({
       kind: "sequel",
-      idea: `A follow-up to “${v.title}”`,
-      why: `It did ${v.multiple!.toFixed(1)}× ${v.channel}'s usual, ${daysSince(v.publishedAt)} days ago — the premise is proven and it's been long enough.`,
+      idea: drafts[0] ?? `A follow-up to “${v.title}”`,
+      why: `A follow-up to “${v.title}”, which did ${v.multiple!.toFixed(1)}× ${v.channel}'s usual ${daysSince(v.publishedAt)} days ago — the premise is proven and it's been long enough.`,
       lift: v.multiple!,
+      details: {
+        drafts,
+        evidence: [
+          ...(fmtStat ? [{ label: `${fmtStat.key} format`, stat: fmtStat }] : []),
+          ...(leadStat ? [{ label: leadStat.key, stat: leadStat }] : []),
+        ],
+        bestChannel: { channel: v.channel, median: v.multiple!, count: 1 },
+        bestDay,
+        lastUsedDays: daysSince(v.publishedAt),
+        source: v,
+        caveats: [
+          "A follow-up works best when it's clearly new — a new opponent or setting, not the same video again.",
+          ...(leadStat ? caveatsFor(leadStat) : []),
+        ],
+      },
     });
   }
 
   // Subjects that did well but have gone quiet.
   for (const s of subjects.filter((s) => s.lift >= 1.3 && daysSince(s.lastUsed) >= 45).slice(0, 3)) {
     if (suggestions.some((x) => x.idea.includes(s.key))) continue;
+    const fmt = topFormats[0];
+    const drafts = fmt ? draftsFor(fmt, s.key, taken, 3, roles, partnerFor(s.key)) : [];
     suggestions.push({
       kind: "revisit",
-      idea: `Bring back ${s.key}`,
+      idea: drafts[0] ? `Bring back ${s.key}: ${drafts[0]}` : `Bring back ${s.key}`,
       why: `${s.count} videos at ${pct(s.lift)}, but none in ${daysSince(s.lastUsed)} days.`,
       lift: s.lift,
+      details: {
+        drafts,
+        evidence: [{ label: s.key, stat: s }, ...(fmt ? [{ label: `${fmt.key} format`, stat: fmt }] : [])],
+        bestChannel: bestChannelFor(s),
+        bestDay,
+        lastUsedDays: daysSince(s.lastUsed),
+        source: s.best,
+        caveats: caveatsFor(s),
+      },
     });
   }
 
