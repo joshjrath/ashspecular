@@ -529,7 +529,7 @@ function sidebar(s: Shell): string {
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
       ${item("/calendar", "Calendar", s.nav.calendar, "calendar")}
-      ${item("/reviews", "Reviews", s.nav.reviews, "reviews")}
+      ${item("/revisions", "Revisions", s.nav.reviews, "reviews")}
       ${item("/queue", "Queue", s.nav.queue, "queue")}
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
     </nav>
@@ -567,6 +567,10 @@ function pageHeader(title: string): string {
 function displayTitle(r: StoredRecord): string {
   if (r.title) return r.title;
   const firstLine = r.raw.split("\n").map((l) => l.trim()).find(Boolean);
+  // A bare link says nothing the link chip beside it doesn't already say.
+  if (firstLine && /^https?:\/\/\S+$/.test(firstLine)) {
+    return r.kind === "review" ? "Unnamed revision" : "Link";
+  }
   if (firstLine) return firstLine.length > 90 ? `${firstLine.slice(0, 88)}…` : firstLine;
   return r.note ?? "(untitled)";
 }

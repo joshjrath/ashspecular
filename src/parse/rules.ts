@@ -8,14 +8,25 @@ export function extractUrls(text: string): string[] {
   return [...new Set(found.map((u) => u.replace(/[.,;:!?]+$/, "")))];
 }
 
+/**
+ * The domain itself or any subdomain of it — never a lookalike. A substring
+ * check would accept "notframe.io"; this does not.
+ */
+function hostIs(host: string, ...domains: string[]): boolean {
+  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
 export function classifyUrl(url: string): Extraction["links"][number]["kind"] {
   const host = safeHost(url);
-  if (host.includes("frame.io")) return "frameio";
-  if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube";
-  if (host.includes("drive.google.com")) return "drive";
-  if (host.includes("docs.google.com")) return "docs";
-  if (host.includes("notion.so") || host.includes("notion.site")) return "notion";
-  if (host.includes("dropbox.com")) return "dropbox";
+  // f.io is Frame.io's share-link shortener — the form links usually arrive in
+  // when someone hits "copy link". next.frame.io and app.frame.io are covered
+  // as subdomains.
+  if (hostIs(host, "frame.io", "f.io")) return "frameio";
+  if (hostIs(host, "youtube.com", "youtu.be")) return "youtube";
+  if (hostIs(host, "drive.google.com")) return "drive";
+  if (hostIs(host, "docs.google.com")) return "docs";
+  if (hostIs(host, "notion.so", "notion.site")) return "notion";
+  if (hostIs(host, "dropbox.com")) return "dropbox";
   return "other";
 }
 

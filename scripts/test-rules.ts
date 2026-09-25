@@ -20,6 +20,7 @@ import {
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
 import { calendarGrid, shiftMonth } from "../src/web/page.js";
+import { classifyUrl } from "../src/parse/rules.js";
 
 let pass = 0;
 let fail = 0;
@@ -239,6 +240,28 @@ t("no day is repeated", new Set(feb).size, feb.length);
 
 const leap = calendarGrid("2028-02");
 t("a leap day is included", leap.includes("2028-02-29"), true);
+
+// ── which links are Frame.io ──────────────────────────────────────────────
+section("Frame.io links");
+
+t("a full frame.io link", classifyUrl("https://frame.io/reviews/abc"), "frameio");
+t("the f.io short link", classifyUrl("https://f.io/7bu6f54B"), "frameio");
+t("next.frame.io share links", classifyUrl("https://next.frame.io/share/abc"), "frameio");
+t("app.frame.io", classifyUrl("https://app.frame.io/player/abc"), "frameio");
+t("a lookalike is not Frame.io", classifyUrl("https://surf.io/abc"), "other");
+t("nor is a domain that merely contains it", classifyUrl("https://notframe.io/abc"), "other");
+t("youtu.be still youtube", classifyUrl("https://youtu.be/abc"), "youtube");
+
+// The exact message that came in: a bare short link and nothing else.
+const bareShort = parseReview("https://f.io/7bu6f54B")!;
+t("a bare f.io link is read by pattern", bareShort !== null, true);
+t("as a revision", bareShort.kind, "review");
+t("says what it's missing instead of '(no title)'", (bareShort.note ?? "").includes("which project"), true);
+t("and doesn't guess a channel", bareShort.channel, null);
+
+const namedShort = parseReview("v2 of smp ep 10 https://f.io/Xy12ab")!;
+t("a short link with a name finds its channel", namedShort.channel, "Specular Gaming");
+t("and its version", namedShort.version, 2);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

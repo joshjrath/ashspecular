@@ -76,6 +76,12 @@ export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
   const patterned = parsePattern(raw);
   if (patterned) return { extraction: patterned, parsedBy: "pattern", model: null, raw };
 
+  // No key is a supported way to run, not a fault: go straight to the rules
+  // instead of making a request that can only fail and logging it as an error.
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    return { extraction: ruleFallback(raw), parsedBy: "rule", model: null, raw };
+  }
+
   try {
     const response = await anthropic().messages.parse({
       model: MODEL,

@@ -190,12 +190,15 @@ export async function startWeb(): Promise<void> {
       .send(renderList(s, `“${q}”`, `Nothing matches “${q}”.`, list));
   });
 
-  app.get("/reviews", async (_req, reply) => {
+  // The old address keeps working for anything that already links to it.
+  app.get("/reviews", async (_req, reply) => reply.redirect("/revisions"));
+
+  app.get("/revisions", async (_req, reply) => {
     const [s, list] = await Promise.all([shell("reviews"), listReviews(100)]);
     return reply
       .type("text/html")
       .send(
-        renderList(s, "Reviews", "No Frame.io links yet. Forward one into the intake channel.", list),
+        renderList(s, "Revisions", "No Frame.io links yet. Forward one into the intake channel.", list),
       );
   });
 

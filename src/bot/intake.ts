@@ -92,7 +92,9 @@ async function handle(message: Msg): Promise<void> {
     components: cardRows(message.id, record, saved !== null),
     content:
       result.parsedBy === "rule"
-        ? "⚠️ Parser was unreachable — this is the rule-based fallback."
+        ? process.env.ANTHROPIC_API_KEY?.trim()
+          ? "⚠️ The parser was unreachable — filed by rules instead."
+          : "Filed by rules — set the channel below if it needs one."
         : `\`${ms}ms${cost}${how}\`${link}`,
     allowedMentions: { repliedUser: false },
   });

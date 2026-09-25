@@ -310,7 +310,9 @@ export function parseReview(raw: string): Extraction | null {
     version,
     links,
     brief: null,
-    note: words || null,
+    // A bare link carries no words, so say plainly what is missing rather
+    // than showing "(no title)" — the dropdown under the card is the fix.
+    note: words || "Frame.io review — which project is this? Set the channel below.",
     // Honest: the link and version are certain, the project only when the
     // message names it. A bare link nobody labelled is a coin flip, and the
     // model would be guessing at it too.
