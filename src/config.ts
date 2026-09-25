@@ -9,6 +9,22 @@ function opt(name: string, fallback = ""): string {
   return process.env[name]?.trim() || fallback;
 }
 
+/**
+ * A site's address as people paste it: Railway's copy button leaves off
+ * "https://", and a pasted link may carry quotes, a path or ?k=. Returns
+ * just the origin, or "" when there's nothing usable.
+ */
+export function siteAddress(raw: string): string {
+  let s = raw.trim().replace(/^["'<]+|["'>]+$/g, "");
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = `https://${s.replace(/^\/+/, "")}`;
+  try {
+    return new URL(s).origin;
+  } catch {
+    return "";
+  }
+}
+
 export const config = {
   discordToken: opt("DISCORD_TOKEN"),
   intakeChannelIds: opt("INTAKE_CHANNEL_IDS")
@@ -33,7 +49,9 @@ export const config = {
   databaseUrl: opt("DATABASE_URL"),
 
   /** Another board to show under a Scripts tab — the scriptwriter's. Unset hides the tab. */
-  scriptsUrl: opt("SCRIPTS_URL").replace(/\/+$/, ""),
+  scriptsUrl: siteAddress(opt("SCRIPTS_URL")),
+  /** Kept so the Scripts tab can say what it couldn't read. */
+  scriptsUrlRaw: opt("SCRIPTS_URL"),
   /** His board's view-only password (his SCRIPTCHECK_VIEW_TOKEN), to read its data. */
   scriptsToken: opt("SCRIPTS_TOKEN"),
 

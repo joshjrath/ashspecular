@@ -89,7 +89,7 @@ async function shell(active: string): Promise<Shell> {
     },
     lastIntake: at,
     removed,
-    scripts: Boolean(config.scriptsUrl),
+    scripts: Boolean(config.scriptsUrl || config.scriptsUrlRaw),
   };
 }
 
@@ -416,7 +416,10 @@ export async function startWeb(): Promise<void> {
 
   app.get("/scripts", async (_req, reply) => {
     const s = await shell("scripts");
-    if (!config.scriptsUrl) return reply.redirect("/");
+    if (!config.scriptsUrl && !config.scriptsUrlRaw) return reply.redirect("/");
+    if (!config.scriptsUrl) {
+      return reply.type("text/html").send(renderScriptBoard(s, "#", await fetchScriptReport()));
+    }
     // With his view-only password, read his data and show it natively. Without
     // one, fall back to showing his page itself, where his site allows it.
     if (config.scriptsToken) {

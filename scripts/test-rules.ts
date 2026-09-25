@@ -24,7 +24,7 @@ import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { readFileSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
-import { config } from "../src/config.js";
+import { config, siteAddress } from "../src/config.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
@@ -557,6 +557,9 @@ cfg.scriptsUrl = "https://scripts.example"; cfg.scriptsToken = "";
 const locked = await fetchScriptReport((async () => new Response("Not found", { status: 404 })) as unknown as typeof fetch);
 t("a password-protected board says which password to set", /SCRIPTS_TOKEN/.test(locked.error ?? ""), true);
 cfg.scriptsUrl = ""; cfg.scriptsToken = "";
+t("an address without https:// still works", siteAddress("scriptcheck-production.up.railway.app"), "https://scriptcheck-production.up.railway.app");
+t("a pasted link keeps only the site", siteAddress(" \"https://his.up.railway.app/report.json?k=abc\" "), "https://his.up.railway.app");
+t("nonsense is no address", siteAddress("not a url at all"), "");
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

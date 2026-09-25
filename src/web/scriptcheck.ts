@@ -77,7 +77,15 @@ let cache: { at: number; report: ScriptReport } | null = null;
 export async function fetchScriptReport(fetcher: typeof fetch = fetch): Promise<ScriptReport> {
   if (cache && Date.now() - cache.at < 60_000) return cache.report;
   const base = config.scriptsUrl;
-  if (!base) return { rows: [], generatedAt: null, error: "SCRIPTS_URL isn't set." };
+  if (!base) {
+    return {
+      rows: [],
+      generatedAt: null,
+      error: config.scriptsUrlRaw
+        ? `SCRIPTS_URL ("${config.scriptsUrlRaw}") isn't a web address. Use his board's address, like https://something.up.railway.app.`
+        : "SCRIPTS_URL isn't set.",
+    };
+  }
   const url = new URL("/report.json", base);
   if (config.scriptsToken) url.searchParams.set("k", config.scriptsToken);
   let report: ScriptReport;
