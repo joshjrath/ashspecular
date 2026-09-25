@@ -135,12 +135,14 @@ all.
 
 The tick beside a channel clears its whole day in one press.
 
-**Reading channels count uploads.** A reading channel's day is five uploads,
-so its row is five segments rather than one bar. Tap the third to mark three
-done; tap the last filled one again to step back one. At 5/5 the channel is
-cleared and counts once toward "cleared this week"; dropping back to 4/5
-reopens it. The group header totals the uploads — "7/25 uploads". Change the
-five with `units` on the channel in `src/catalog.ts`.
+**Every channel counts uploads.** A reading channel's day is five uploads; a
+bits channel's depends on the channel — Studios, Anime, FNAF and Animation
+Bits five, Gaming and Undertale Bits three, Specular & Kay Bits one. Each row
+is one segment per upload. Tap the third to mark three done; tap the last
+filled one again to step back one. When every segment is filled the channel is
+cleared and counts once toward "cleared this week"; stepping back reopens it.
+Each group header totals its uploads — "7/25", "12/27". Change a number with
+`units` on the channel in `src/catalog.ts`.
 
 **Working ahead** is the button on that page. It opens tomorrow's batches now,
 so you can clear them today. Tomorrow morning's run finds them already there

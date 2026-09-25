@@ -2222,12 +2222,11 @@ export function renderRecurring(
            </form>`
         : `<span class="tick-space"></span>`;
 
-    // A channel whose day is several uploads gets one segment per upload.
-    // Tapping the third marks three done; tapping the last filled one again
-    // steps back one, so a mis-tap is one more tap to undo.
-    const units = CHANNELS.find((ch) => ch.name === r.channel)?.recurring?.units ?? 1;
+    // One segment per upload — five, three, or a single one — so every row
+    // reads the same way. Tapping the third marks three done; tapping the
+    // last filled one again steps back one, so a mis-tap is one more tap.
     const progress =
-      units > 1 && date && r.total > 0
+      date && r.total > 0
         ? `<span class="pips" role="group" aria-label="${esc(r.channel)} uploads done">${Array.from(
             { length: r.total },
             (_, i) => {

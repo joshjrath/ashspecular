@@ -349,7 +349,14 @@ t("late evening ET is still today, not tomorrow in UTC", relativeDay("2026-09-25
 t("the five reading channels open daily", CHANNELS.filter((c) => c.category === "reading").every((c) => c.recurring?.perDay === 1), true);
 t("twelve recurring channels in all", CHANNELS.filter((c) => c.recurring).length, 12);
 t("a reading channel's day is five uploads", CHANNELS.filter((c) => c.category === "reading").map((c) => c.recurring?.units), [5, 5, 5, 5, 5]);
-t("a bits batch is a single job", CHANNELS.filter((c) => c.category === "bits").every((c) => (c.recurring?.units ?? 1) === 1), true);
+t(
+  "bits uploads per channel",
+  Object.fromEntries(CHANNELS.filter((c) => c.category === "bits").map((c) => [c.name, c.recurring?.units])),
+  {
+    "Specular Studios Bits": 5, "Specular Anime Bits": 5, "Specular FNAF Bits": 5, "Specular Animation Bits": 5,
+    "Specular Gaming Bits": 3, "Specular Undertale Bits": 3, "Specular & Kay Bits": 1,
+  },
+);
 
 // ── channel colours ───────────────────────────────────────────────────────
 section("channel colours");
