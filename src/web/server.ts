@@ -54,6 +54,7 @@ import {
   renderList,
   renderLogin,
   renderRecurring,
+  renderScripts,
   renderWeek,
   renderRecord,
 } from "./page.js";
@@ -86,6 +87,7 @@ async function shell(active: string): Promise<Shell> {
     },
     lastIntake: at,
     removed,
+    scripts: Boolean(config.scriptsUrl),
   };
 }
 
@@ -382,6 +384,39 @@ export async function startWeb(): Promise<void> {
     return reply
       .type("text/html")
       .send(renderList(s, "Late", "Nothing is late.", list, listSort(request, reply)));
+  });
+
+  // The scriptwriter's board under a Scripts tab. Whether it can sit in a
+  // frame is the other site's choice (X-Frame-Options, or CSP
+  // frame-ancestors), so ask it — once every ten minutes — rather than show
+  // a blank box.
+  let frameCheck: { at: number; ok: boolean; why: string } | null = null;
+  async function canFrame(url: string): Promise<{ ok: boolean; why: string }> {
+    if (frameCheck && Date.now() - frameCheck.at < 600_000) return frameCheck;
+    let result = { ok: true, why: "" };
+    try {
+      const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(5000) });
+      const xfo = (res.headers.get("x-frame-options") ?? "").toLowerCase();
+      const csp = (res.headers.get("content-security-policy") ?? "").toLowerCase();
+      const ancestors = csp.match(/frame-ancestors([^;]*)/)?.[1]?.trim() ?? "";
+      const self = config.publicUrl ? new URL(config.publicUrl).origin.toLowerCase() : "";
+      if (xfo.includes("deny") || xfo.includes("sameorigin")) {
+        result = { ok: false, why: "His site says it may only be shown on its own (X-Frame-Options)." };
+      } else if (ancestors && !ancestors.includes("*") && !(self && ancestors.includes(self))) {
+        result = { ok: false, why: "His site only allows itself to be shown on the pages it lists (frame-ancestors)." };
+      }
+    } catch {
+      // Unreachable from here isn't proof it can't be framed; let the browser try.
+    }
+    frameCheck = { at: Date.now(), ...result };
+    return result;
+  }
+
+  app.get("/scripts", async (_req, reply) => {
+    const s = await shell("scripts");
+    if (!config.scriptsUrl) return reply.redirect("/");
+    const { ok, why } = await canFrame(config.scriptsUrl);
+    return reply.type("text/html").send(renderScripts(s, config.scriptsUrl, ok, why));
   });
 
   // Today, and any day ahead — ?day= picks it, tomorrow by default.

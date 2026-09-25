@@ -332,11 +332,12 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   white-space: pre-wrap; line-height: 1.68; font-size: 14.5px; max-width: 800px;
 }
 form.inline { display: inline; }
-button.clear {
+button.clear, a.clear {
+  display: inline-block;
   background: var(--salmon); border: 0; color: #101012; font-family: var(--ui);
   border-radius: 999px; padding: 11px 22px; font-size: 13px; cursor: pointer; font-weight: 700;
 }
-button.clear:hover { filter: brightness(1.05); }
+button.clear:hover, a.clear:hover { filter: brightness(1.05); }
 button.clear.secondary { background: var(--sunk); color: var(--ink2); }
 button.clear.secondary:hover { background: var(--line); filter: none; }
 
@@ -771,6 +772,12 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   .colbar { margin: 18px 4px 10px; }
 }
 
+.scriptsframe { background: var(--card); border-radius: var(--r); overflow: hidden; height: calc(100vh - 150px); min-height: 480px; }
+.scriptsframe iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.scriptsblocked h2 { margin-bottom: 8px; }
+header.page a.clear { align-self: center; }
+@media (max-width: 760px) { .scriptsframe { height: calc(100vh - 170px); border-radius: 18px; } }
+
 /* ── working ahead ──────────────────────────────────────────────────────── */
 .aheadbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
 .aheadbar .nav {
@@ -941,6 +948,8 @@ export interface Shell {
   removed?: number;
   /** Kept so the box still shows what was searched for. */
   query?: string;
+  /** Set when SCRIPTS_URL is, so the rail shows a Scripts tab. */
+  scripts?: boolean;
 }
 
 function layout(title: string, shell: Shell | null, body: string): string {
@@ -1002,6 +1011,7 @@ function sidebar(s: Shell): string {
       ${item("/revisions", "Revisions", s.nav.reviews, "reviews")}
       ${item("/queue", "Queue", s.nav.queue, "queue")}
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
+      ${s.scripts ? item("/scripts", "Scripts", null, "scripts") : ""}
     </nav>
     <h3>Categories</h3>
     <div class="cats">${cats}</div>
@@ -2305,6 +2315,33 @@ export function renderCalendar(
       });
     })();
     </script>`,
+  );
+}
+
+/**
+ * The scriptwriter's board, inside this one. Shown in a frame when his site
+ * allows it; when it doesn't (many sites refuse to be framed, and a login
+ * inside a frame can be blocked by the browser), a clear way to open it.
+ */
+export function renderScripts(shell: Shell, url: string, embeddable: boolean, why = ""): string {
+  const open = `<a class="clear" href="${esc(url)}" target="_blank" rel="noopener">Open in a new tab ↗</a>`;
+  return layout(
+    "Scripts",
+    shell,
+    `${pageHeader("Scripts", open)}
+    ${
+      embeddable
+        ? `<div class="scriptsframe"><iframe src="${esc(url)}" title="Scripts board"
+             referrerpolicy="no-referrer" allow="clipboard-write"></iframe></div>
+           <p class="hint">This is the scriptwriter's own board, live. If it asks you to sign in and the
+           sign-in doesn't stick, use <b>Open in a new tab</b> — some browsers block logins inside another site.</p>`
+        : `<div class="panel scriptsblocked">
+             <h2>His board can't be shown inside this one</h2>
+             <p class="hint">${esc(why || "The site doesn't allow being embedded in another page.")}
+             It opens in its own tab instead, and stays signed in there.</p>
+             <p style="margin-top:18px">${open}</p>
+           </div>`
+    }`,
   );
 }
 

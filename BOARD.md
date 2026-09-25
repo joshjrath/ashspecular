@@ -154,6 +154,21 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Scripts — the scriptwriter's board, inside this one
+
+Set `SCRIPTS_URL` on Railway to his board's address and a **Scripts** tab
+appears in the rail, showing his board live inside this one. Unset, there is
+no tab.
+
+Whether his site can be shown inside another is its choice. The board asks it
+first: if it says no (`X-Frame-Options`, or a CSP `frame-ancestors` that
+doesn't list this board), the tab shows a button that opens it in its own tab
+instead of an empty box. If his site asks you to sign in and the sign-in
+doesn't stick inside the frame, use **Open in a new tab** — some browsers
+block logins inside another site. To allow the frame on his side, his app
+needs `frame-ancestors https://<this board's address>` in its CSP (or no
+`X-Frame-Options: DENY/SAMEORIGIN`).
+
 ## Frame.io links, read without the API
 
 When a message carries a Frame.io link, the bot opens it the way a link

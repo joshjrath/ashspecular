@@ -32,6 +32,9 @@ export const config = {
   /** Unset means the bot parses and replies but stores nothing. */
   databaseUrl: opt("DATABASE_URL"),
 
+  /** Another board to show under a Scripts tab — the scriptwriter's. Unset hides the tab. */
+  scriptsUrl: opt("SCRIPTS_URL").replace(/\/+$/, ""),
+
   port: Number(opt("PORT", "8080")),
   publicUrl: opt("PUBLIC_URL").replace(/\/+$/, ""),
   dashboardPassword: opt("DASHBOARD_PASSWORD"),
