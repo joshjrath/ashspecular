@@ -41,6 +41,18 @@ Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
 
+**Open work** sits in columns, one per category, side by side. The
+**Columns** menu top right is a checklist of the five categories with their
+counts — tick three and you get three columns, tick five and you get five; it
+takes effect at once and the dashboard remembers it. Gaming, Stories and Bits
+until you choose. Each column shows its ten most pressing, pinned first, with
+"See all" for the rest; in a narrow column each task stacks itself so nothing
+is cut off. Anything with no category yet always shows, full width, below.
+
+Recurring batches opened ahead for a later day stay on Recurring and the
+calendar; they join the dashboard, the lists and every count on the morning
+they're for.
+
 **Tasks** are two tight lines each: the title, then its code, channel, air
 countdown and links, with one deadline pill on the right — "VO 9/24/2026 ·
 11:59 PM", red with how late it is once past, amber inside a day. Hover the

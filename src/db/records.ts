@@ -1,5 +1,6 @@
 import type { CategoryId } from "../catalog.js";
 import type { DerivedRecord } from "../parse/derive.js";
+import { ORG_TZ } from "../parse/derive.js";
 import type { Extraction } from "../parse/schema.js";
 import { pool } from "./pool.js";
 
@@ -264,7 +265,7 @@ const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' ORDER BY created_at DESC LIMIT $1`,
+    `${SELECT} WHERE status = 'open' AND ${LIVE} ORDER BY created_at DESC LIMIT $1`,
     [limit],
   );
   return rows.map(hydrate);
@@ -273,7 +274,7 @@ export async function listOpen(limit = 200): Promise<StoredRecord[]> {
 /** Open work with a voiceover deadline, soonest first — the spine of the day. */
 export async function listVoQueue(limit = 50): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND vo_due IS NOT NULL
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND vo_due IS NOT NULL
      ORDER BY vo_due ASC LIMIT $1`,
     [limit],
   );
@@ -283,7 +284,7 @@ export async function listVoQueue(limit = 50): Promise<StoredRecord[]> {
 /** Everything carrying a Frame.io link — the thing that used to live in DMs. */
 export async function listReviews(limit = 50): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open'
+    `${SELECT} WHERE status = 'open' AND ${LIVE}
        AND links @> '[{"kind":"frameio"}]'::jsonb
      ORDER BY created_at DESC LIMIT $1`,
     [limit],
@@ -303,7 +304,7 @@ export async function listByChannel(channel: string, limit = 100): Promise<Store
 
 export async function listByCategory(category: string, limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE category = $1 AND status = 'open' ORDER BY created_at DESC LIMIT $2`,
+    `${SELECT} WHERE category = $1 AND status = 'open' AND ${LIVE} ORDER BY created_at DESC LIMIT $2`,
     [category, limit],
   );
   return rows.map(hydrate);
@@ -317,7 +318,7 @@ export async function getRecord(id: number): Promise<StoredRecord | null> {
 /** Open count per category, for the four tiles across the top. */
 export async function categoryCounts(): Promise<Record<string, number>> {
   const { rows } = await pool.query<{ category: string; n: string }>(
-    `SELECT category, COUNT(*) AS n FROM records WHERE status = 'open' GROUP BY category`,
+    `SELECT category, COUNT(*) AS n FROM records WHERE status = 'open' AND ${LIVE} GROUP BY category`,
   );
   return Object.fromEntries(rows.map((r) => [r.category, Number(r.n)]));
 }
@@ -326,7 +327,7 @@ export async function categoryCounts(): Promise<Record<string, number>> {
 export async function channelCounts(): Promise<Record<string, number>> {
   const { rows } = await pool.query<{ channel: string; n: string }>(
     `SELECT channel, COUNT(*) AS n FROM records
-     WHERE status = 'open' AND channel IS NOT NULL GROUP BY channel`,
+     WHERE status = 'open' AND ${LIVE} AND channel IS NOT NULL GROUP BY channel`,
   );
   return Object.fromEntries(rows.map((r) => [r.channel, Number(r.n)]));
 }
@@ -340,6 +341,13 @@ export async function channelCounts(): Promise<Record<string, number>> {
  */
 const DUE = "COALESCE(vo_due, deadline, script_due)";
 
+/**
+ * Open work that is live today. A recurring batch opened ahead for a later day
+ * is real, but it isn't today's work: it stays on Recurring and the calendar,
+ * and joins the dashboard, the lists and every count on the morning it's for.
+ */
+const LIVE = `NOT (batch_no IS NOT NULL AND air_date > (now() AT TIME ZONE '${ORG_TZ}')::date)`;
+
 export interface Stats {
   late: number;
   dueToday: number;
@@ -350,10 +358,10 @@ export interface Stats {
 export async function stats(zone: string): Promise<Stats> {
   const { rows } = await pool.query<Record<string, string>>(
     `SELECT
-       COUNT(*) FILTER (WHERE status = 'open' AND ${DUE} < now()) AS late,
-       COUNT(*) FILTER (WHERE status = 'open'
+       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND ${DUE} < now()) AS late,
+       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE}
          AND (${DUE} AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date) AS due_today,
-       COUNT(*) FILTER (WHERE status = 'open' AND vo_due IS NOT NULL) AS vo,
+       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND vo_due IS NOT NULL) AS vo,
        COUNT(*) FILTER (WHERE status = 'done' AND done_at > now() - interval '7 days') AS shipped
      FROM records`,
     [zone],
@@ -385,7 +393,7 @@ export async function dueByDay(zone: string, days = 14): Promise<DayBucket[]> {
             ELSE to_char(${DUE} AT TIME ZONE $1, 'YYYY-MM-DD') END AS day,
        category, COUNT(*) AS n
      FROM records
-     WHERE status = 'open' AND ${DUE} IS NOT NULL
+     WHERE status = 'open' AND ${LIVE} AND ${DUE} IS NOT NULL
        AND ${DUE} < (now() + ($2 || ' days')::interval)
      GROUP BY 1, 2`,
     [zone, days],
@@ -422,7 +430,7 @@ function sum(counts: Record<string, number>): number {
 /** Everything open, grouped by category, soonest deadline first. */
 export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open'
+    `${SELECT} WHERE status = 'open' AND ${LIVE}
      ORDER BY ${DUE} ASC NULLS LAST, created_at DESC LIMIT 300`,
   );
   const grouped = new Map<string, StoredRecord[]>();
@@ -484,7 +492,7 @@ export async function openBatchCount(date: string): Promise<number> {
 /** Open work past its time, most overdue first — the chart's LATE column. */
 export async function listLate(limit = 300): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
     [limit],
   );
   return rows.map(hydrate);

@@ -455,7 +455,7 @@ for (const [name, html] of Object.entries(pages)) {
 }
 t("day strip: one column per day", (pages.day.match(/class="daycol/g) ?? []).length, 3);
 t("day strip: the clicked day is focused", /daycol[^"]*focus[^"]*" data-date="2026-09-28"/.test(pages.day), true);
-const groupsHtml = pages.dashboard.slice(pages.dashboard.indexOf('class="group"'));
+const groupsHtml = pages.dashboard.slice(pages.dashboard.indexOf('class="catcols"'));
 t("pinned row sits first in its own category", groupsHtml.indexOf("/r/7\"") < groupsHtml.indexOf("/r/8\""), true);
 t("no separate pinned section", pages.dashboard.includes("group pinned"), false);
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
@@ -475,7 +475,7 @@ const batchRec = { ...pinnedRec, id: 9, pinnedAt: null, batchNo: 1, batchTarget:
 const batchDay = renderDay(shellFix, "2026-09-28", "posting", [{ date: "2026-09-28", list: [batchRec] }]);
 t("a batch card is its channel, no number", /class="t"[^>]*>(<i[^>]*><\/i>)?Specular FNAF Bits</.test(batchDay), true);
 t("no batch numbers anywhere on it", /batch \d|SFB-\d/.test(batchDay), false);
-t("in a list a batch carries its air date", renderList(shellFix, "Queue", "", [batchRec]).includes("Specular FNAF Bits · 9/28/2026"), true);
+t("a batch row keeps its full name and day in its tooltip", renderList(shellFix, "Queue", "", [batchRec]).includes("Specular FNAF Bits · 9/28/2026"), true);
 
 // ── reading a Frame.io link, no API ───────────────────────────────────────
 section("Frame.io links — what the page itself says");
@@ -523,6 +523,17 @@ t("the which-project prompt is gone once the link names it", /which project/.tes
 t("confidence rises when the name carries a code", merged.confidence >= 0.85, true);
 const said = parseReview("Walter White v4 is up https://f.io/7bu6f54B", new Date("2026-09-25T12:00:00Z"))!;
 t("what the message says wins over the file name", mergeFrame(said, "https://f.io/7bu6f54B", followed!).version, 4);
+
+section("Dashboard columns");
+const dashWith = (cols?: string[]) => renderDashboard({ ...shellFix, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [], grouped: new Map([["stories", [plainRec]]]), channels: {}, cols,
+});
+const visibleCols = (html: string) => [...html.matchAll(/class="catcol" data-cat="([a-z]+)"[^>]*?(hidden)?>/g)].filter((m) => !m[2]).map((m) => m[1]);
+t("default columns: Gaming, Stories, Bits side by side", visibleCols(dashWith()), ["gaming", "stories", "bits"]);
+t("the number ticked is the number of columns", /data-n="2" style="--n:2"/.test(dashWith(["stories", "reading"])), true);
+t("columns keep the studio's order", visibleCols(dashWith(["movies", "gaming"])), ["gaming", "movies"]);
+t("nothing ticked shows no columns, and says how to pick", [visibleCols(dashWith([])).length, /class="empty nocols">/.test(dashWith([]))], [0, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

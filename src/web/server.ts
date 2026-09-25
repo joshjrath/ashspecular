@@ -160,8 +160,26 @@ export async function startWeb(): Promise<void> {
 
     return reply
       .type("text/html")
-      .send(renderDashboard(s, { stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request) }));
+      .send(
+        renderDashboard(s, {
+          stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request),
+          cols: dashColumns(request),
+        }),
+      );
   });
+
+  /**
+   * The dashboard's columns, as the page last saved them. "none" means every
+   * box was unticked; no cookie means the default three.
+   */
+  function dashColumns(request: import("fastify").FastifyRequest): string[] | undefined {
+    const raw = request.cookies.dash_cols;
+    if (!raw) return undefined;
+    if (raw === "none") return [];
+    const known = new Set<string>(CATEGORIES.map((c) => c.id));
+    const cols = raw.split(".").filter((id) => known.has(id));
+    return cols.length ? cols : undefined;
+  }
 
   /** When this browser last opened the bell. Set by the page itself. */
   function noticesSeen(request: import("fastify").FastifyRequest): number {

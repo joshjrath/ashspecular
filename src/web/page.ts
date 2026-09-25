@@ -697,13 +697,87 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   .batch .bar, .batch .pips { order: 3; flex-basis: 100%; }
 }
 
+/* ── dashboard columns ─────────────────────────────────────────────────── */
+.colbar { display: flex; align-items: center; gap: 12px; margin: 26px 4px 12px; }
+.colbar .section-title { margin: 0; }
+.colpick { position: relative; margin-left: auto; }
+.colpick summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: 999px; background: var(--rail); color: #D8D8DE; font-size: 13px; font-weight: 600;
+}
+.colpick summary::-webkit-details-marker { display: none; }
+.colpick summary::after { content: "▾"; color: var(--ink3); font-size: 11px; }
+.colpick summary b {
+  background: var(--yellow); color: #101012; border-radius: 999px; min-width: 20px; height: 20px;
+  display: grid; place-items: center; font-size: 11.5px; padding: 0 6px;
+}
+.colpick[open] summary { background: #26262A; color: #fff; }
+.colmenu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 15; width: 230px; padding: 6px;
+  background: var(--card); border-radius: 16px; box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 0 1px #2E2E35;
+}
+.colmenu label {
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px;
+  cursor: pointer; color: var(--ink); font-size: 13.5px; font-weight: 600;
+}
+.colmenu label:hover { background: var(--sunk); }
+.colmenu input { width: 16px; height: 16px; accent-color: var(--yellow); margin: 0; }
+.colmenu i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.colmenu span { margin-left: auto; color: var(--ink3); font-variant-numeric: tabular-nums; font-weight: 700; }
+.catcols { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; align-items: start; margin-bottom: 14px; }
+.catcol { min-width: 0; container-type: inline-size; }
+.catcol[hidden], .nocols[hidden] { display: none; }
+.colhead { display: flex; align-items: baseline; gap: 10px; padding: 0 8px 10px; }
+.colhead .dot { width: 11px; height: 11px; border-radius: 4px; background: var(--c); flex: none; }
+.colhead .name { font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -0.03em; }
+.colhead .name:hover { text-decoration: underline; text-decoration-color: var(--ink3); }
+.colhead .sub { color: var(--dim); font-size: 12px; }
+.colhead .n { margin-left: auto; font-family: var(--display); font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
+.catcol .empty { padding: 28px 16px; font-size: 13px; }
+.seeall { display: block; text-align: center; padding: 10px; color: var(--ink3); font-size: 12.5px; font-weight: 600; }
+.seeall:hover { color: var(--ink); }
+/* In a narrow column a task stacks: title and buttons, whose-and-when, then
+   the deadline pill — the same shape as on a phone. */
+@container (max-width: 560px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; padding: 10px 8px 11px 12px; }
+  .row .title { grid-row: 1; font-size: 14.5px; align-items: flex-start; }
+  .row .title .swatch { margin-top: 5px; }
+  .row .title a { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  /* The cream row already says pinned; the tag keeps just its pin. */
+  .row .pinned-tag { padding: 4px; }
+  .row .pinned-tag span, .row .pinned-tag:hover::after { display: none; }
+  .row .acts { grid-column: 2; grid-row: 1; }
+  .row .meta { grid-column: 1 / -1; grid-row: 2; }
+  .row .due { grid-column: 1 / -1; grid-row: 3; justify-self: start; margin: 3px 0 0 19px; padding: 4px 9px; font-size: 12px;
+    white-space: normal; flex-wrap: wrap; column-gap: 6px; max-width: calc(100% - 19px); }
+}
+@container (max-width: 560px) {
+  .row .due.none { display: none; }
+}
+@container (max-width: 300px) {
+  .row .meta { padding-left: 0; }
+  .row .due { margin-left: 0; max-width: 100%; }
+}
+.row .title .chdot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ch);
+  margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 1px var(--ring);
+}
+@media (max-width: 1100px) {
+  .catcols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catcols[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .catcols { grid-template-columns: minmax(0, 1fr); }
+  .colbar { margin: 18px 4px 10px; }
+}
+
 /* ── working ahead ──────────────────────────────────────────────────────── */
 .aheadbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
 .aheadbar .nav {
   background: var(--sunk); border-radius: 999px; padding: 8px 14px; font-size: 13px; color: var(--ink2); font-weight: 600;
 }
 .aheadbar .nav:hover { background: var(--line); color: var(--ink); }
-.aheadbar .nav[aria-disabled="true"] { pointer-events: none; color: #6E6E78; }
+.aheadbar .nav[aria-disabled="true"] { pointer-events: none; color: #8E8E98; background: transparent; box-shadow: inset 0 0 0 1px #34343B; }
 .aheadbar input[type="date"] {
   padding: 8px 12px; border-radius: 12px; border: 0; background: var(--sunk); color: var(--ink);
   font: inherit; font-size: 13px; color-scheme: dark;
@@ -1197,20 +1271,22 @@ function displayTitle(r: StoredRecord): string {
  */
 function row(r: StoredRecord): string {
   const c = colourOf(r.category);
-  const title = displayTitle(r);
+  // A batch is its channel; the deadline pill already says which day.
+  const title = r.batchNo && r.channel ? r.channel : displayTitle(r);
 
   const meta: string[] = [];
   if (r.code) meta.push(`<span class="code">${esc(r.code)}</span>`);
-  if (r.channel) {
+  if (r.channel && !r.batchNo) {
     meta.push(
       `<a class="chan" style="--ch:${channelColour(r.channel)};--ink:${channelInk(channelColour(r.channel))}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`,
     );
-  } else {
+  } else if (!r.channel) {
     meta.push(`<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`);
   }
   if (r.airDate && !r.batchNo) meta.push(airs(r));
-  if (r.batchTarget && r.batchTarget > 1) {
-    meta.push(`<span class="count">${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded</span>`);
+  if (r.batchNo) {
+    const target = r.batchTarget ?? 1;
+    meta.push(`<span class="count">${r.status === "done" ? target : r.batchDone}/${target} uploaded</span>`);
   }
   for (const l of r.links) {
     const label = l.kind === "frameio" ? `Frame.io${r.version ? ` v${r.version}` : ""}` : l.label || l.kind;
@@ -1221,7 +1297,9 @@ function row(r: StoredRecord): string {
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
 
   return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" style="--c:${c}">
-    <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(title)}">${esc(title)}</a>${pinControl(r)}</div>
+    <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(displayTitle(r))}">${
+      r.batchNo && r.channel ? `<i class="chdot" style="--ch:${channelColour(r.channel)}"></i>` : ""
+    }${esc(title)}</a>${pinControl(r)}</div>
     <div class="meta">${meta.join("")}</div>
     ${duePill(r)}
     ${actions(r)}
@@ -1499,6 +1577,9 @@ function group(id: string, list: StoredRecord[], sub = ""): string {
   </div>`;
 }
 
+/** The dashboard's columns until you pick your own. */
+export const DEFAULT_DASH_COLS = ["gaming", "stories", "bits"];
+
 export function renderDashboard(
   shell: Shell,
   data: {
@@ -1508,6 +1589,8 @@ export function renderDashboard(
     channels: Record<string, number>;
     notices?: Notice[];
     seen?: number;
+    /** Which categories show as columns, from the dash_cols cookie. */
+    cols?: string[];
   },
 ): string {
   const tiles = [
@@ -1531,12 +1614,36 @@ export function renderDashboard(
     </div>`;
   }).join("");
 
-  const groups = CATEGORIES.map((c) => {
-    const list = data.grouped.get(c.id) ?? [];
-    if (!list.length) return "";
+  // Categories side by side. Every category is rendered; the ones not picked
+  // are hidden, so ticking one in the Columns menu shows it at once.
+  const picked = new Set(data.cols ?? DEFAULT_DASH_COLS);
+  const shown = CATEGORIES.filter((c) => picked.has(c.id)).length;
+  const columns = CATEGORIES.map((c) => {
+    const list = pinnedFirst(data.grouped.get(c.id) ?? []);
     const channels = CHANNELS.filter((ch) => ch.category === c.id).length;
-    return group(c.id, pinnedFirst(list).slice(0, 8), channels > 1 ? `${channels} channels` : "");
+    return `<section class="catcol" data-cat="${c.id}" style="--c:${c.color}"${picked.has(c.id) ? "" : " hidden"}>
+      <div class="colhead">
+        <span class="dot"></span>
+        <a class="name" href="/category/${c.id}">${esc(c.label)}</a>
+        ${channels > 1 ? `<span class="sub">${channels} channels</span>` : ""}
+        <span class="n">${list.length}</span>
+      </div>
+      ${list.length ? `<div class="rows">${list.slice(0, 10).map(row).join("")}</div>` : `<div class="empty">Nothing open.</div>`}
+      ${list.length > 10 ? `<a class="seeall" href="/category/${c.id}">See all ${list.length} →</a>` : ""}
+    </section>`;
   }).join("");
+
+  const colPicker = `<details class="colpick">
+    <summary>Columns <b id="colcount">${shown}</b></summary>
+    <div class="colmenu" role="group" aria-label="Categories to show">
+      ${CATEGORIES.map(
+        (c) => `<label style="--c:${c.color}">
+          <input type="checkbox" value="${c.id}"${picked.has(c.id) ? " checked" : ""}>
+          <i></i>${esc(c.label)}<span>${(data.grouped.get(c.id) ?? []).length}</span>
+        </label>`,
+      ).join("")}
+    </div>
+  </details>`;
 
   const unsorted = pinnedFirst(data.grouped.get("unknown") ?? []);
 
@@ -1568,7 +1675,38 @@ export function renderDashboard(
       </div>
     </div>
 
-    ${groups || `<div class="empty">Nothing open. Forward something into the intake channel.</div>`}
+    <div class="colbar">
+      <h2 class="section-title">Open work</h2>
+      ${colPicker}
+    </div>
+    <div class="catcols" id="catcols" data-n="${shown}" style="--n:${Math.max(shown, 1)}">${columns}</div>
+    <div class="empty nocols"${shown ? " hidden" : ""}>Pick a category under Columns to see its work here.</div>
+    <script>
+    // Tick a category and its column appears; the choice is kept in a cookie
+    // so the dashboard opens the same way next time.
+    (function () {
+      var grid = document.getElementById("catcols"), count = document.getElementById("colcount");
+      var none = document.querySelector(".nocols");
+      document.querySelectorAll(".colmenu input").forEach(function (box) {
+        box.addEventListener("change", function () {
+          var on = [];
+          document.querySelectorAll(".colmenu input").forEach(function (b) {
+            grid.querySelector('[data-cat="' + b.value + '"]').hidden = !b.checked;
+            if (b.checked) on.push(b.value);
+          });
+          grid.dataset.n = String(on.length);
+          grid.style.setProperty("--n", String(Math.max(on.length, 1)));
+          count.textContent = String(on.length);
+          none.hidden = on.length > 0;
+          document.cookie = "dash_cols=" + (on.join(".") || "none") + "; path=/; max-age=31536000; samesite=lax";
+        });
+      });
+      document.addEventListener("click", function (e) {
+        var menu = document.querySelector(".colpick");
+        if (menu && menu.open && !menu.contains(e.target)) menu.open = false;
+      });
+    })();
+    </script>
     ${unsorted.length ? group("unknown", unsorted.slice(0, 8), "needs a category") : ""}
 
     <div class="group">
