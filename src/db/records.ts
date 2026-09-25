@@ -494,6 +494,15 @@ export interface Notice {
   record: StoredRecord;
 }
 
+/** Open work past its time, most overdue first — the chart's LATE column. */
+export async function listLate(limit = 300): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'open' AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
+    [limit],
+  );
+  return rows.map(hydrate);
+}
+
 export async function listNotices(limit = 30): Promise<Notice[]> {
   const [revisions, overdue] = await Promise.all([
     pool.query<Row>(

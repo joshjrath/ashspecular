@@ -26,6 +26,7 @@ import {
   refile,
   moveAir,
   moveDue,
+  listLate,
   listNotices,
   setPinned,
   type CalendarMode,
@@ -355,6 +356,14 @@ export async function startWeb(): Promise<void> {
       grouped.get("unknown") ?? [],
     );
     return reply.type("text/html").send(renderList(s, "Queue", "Nothing open.", all, listSort(request, reply)));
+  });
+
+  // Everything past its time: where the chart's LATE column goes.
+  app.get("/late", async (request, reply) => {
+    const [s, list] = await Promise.all([shell("dashboard"), listLate()]);
+    return reply
+      .type("text/html")
+      .send(renderList(s, "Late", "Nothing is late.", list, listSort(request, reply)));
   });
 
   app.get("/recurring", async (_req, reply) => {

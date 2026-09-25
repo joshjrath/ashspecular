@@ -190,8 +190,27 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 .chartscroll::-webkit-scrollbar { display: none; }
 .chartscroll svg { display: block; }
 
+.chart .col { cursor: pointer; }
 .chart .col .track { transition: fill .12s ease; }
 .chart .col:hover .track { fill: #E6E6E9; }
+.chart .col:hover text.lab.dn, .chart .col:hover text.lab.wd { fill: var(--ink); }
+.chart .col:focus-visible { outline: none; }
+.chart .col:focus-visible .track { stroke: var(--ink); stroke-width: 2; }
+/* Rises into the pill on load, each column a beat after the last. */
+.chart .liquid { animation: rise 1.1s cubic-bezier(.2,.8,.2,1) var(--d, 0ms) both; }
+@keyframes rise { from { transform: translateY(var(--rise)); } to { transform: none; } }
+.chart text.total { animation: fadein .5s ease calc(var(--d, 0ms) + .55s) both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+/* The surface drifts one wavelength at a time: seamless, never done. */
+.chart .wave { animation: drift 2.6s linear infinite; }
+.chart .wave.back { animation: driftback 3.4s linear infinite; }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(var(--lambda)); } }
+@keyframes driftback { from { transform: translateX(var(--lambda)); } to { transform: translateX(0); } }
+.chart .col:hover .wave { animation-duration: 1.2s; }
+.chart .col:hover .wave.back { animation-duration: 1.6s; }
+@media (prefers-reduced-motion: reduce) {
+  .chart .liquid, .chart text.total, .chart .wave { animation: none; }
+}
 .chart text.total {
   font-family: var(--display); font-size: 13px; font-weight: 700; fill: var(--ink);
   font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
@@ -1124,6 +1143,18 @@ function rows(list: StoredRecord[], emptyText: string): string {
  * the legend is always present, and each bar is directly labelled with its
  * total — colour alone never carries meaning here.
  */
+/**
+ * A filled shape whose top edge is a sine-like wave: from x0 to x1 at level
+ * y, down to the floor. One wavelength per `lambda`, amplitude 3px.
+ */
+function wavePath(x0: number, x1: number, y: number, floor: number, lambda: number): string {
+  const amp = 3;
+  const half = lambda / 2;
+  let d = `M${x0.toFixed(1)} ${floor.toFixed(1)} L${x0.toFixed(1)} ${y.toFixed(1)} q${(half / 2).toFixed(1)} ${-amp} ${half.toFixed(1)} 0`;
+  for (let x = x0 + half; x < x1; x += half) d += ` t${half.toFixed(1)} 0`;
+  return `${d} L${(x1 + half).toFixed(1)} ${floor.toFixed(1)} Z`;
+}
+
 function dueChart(buckets: DayBucket[]): string {
   const W = 780, H = 236;
   const PAD_T = 30;          // room for the total above the tallest bar
@@ -1151,38 +1182,57 @@ function dueChart(buckets: DayBucket[]): string {
           isToday ? "#FCF6C4" : isLate ? "#FCEBE9" : "#F1F1F3"
         }"/>`;
 
-      // The stack is clipped to one rounded pill, so the whole bar has the
-      // card's geometry and the 2px gaps between categories sit inside it.
+      // The work is liquid poured into the pill: clipped to the track's own
+      // shape, so the bottom is always the pill's round end and the level is
+      // a surface, never a shrunken capsule of its own. It rises into place
+      // when the page loads; a pill that isn't full keeps a slow wave on top.
       const total = b.total;
-      const stackH = (total / max) * plotH;
-      const clipId = `clip${i}`;
-      const clip = `<clipPath id="${clipId}"><rect x="${x.toFixed(1)}"
-        y="${(base - stackH).toFixed(1)}" width="${barW}" height="${stackH.toFixed(1)}"
-        rx="${Math.min(r, stackH / 2).toFixed(1)}"/></clipPath>`;
+      const level = (total / max) * plotH;
+      const full = total >= max;
+      const clipId = `pill${i}`;
+      const clip = `<clipPath id="${clipId}"><rect x="${x.toFixed(1)}" y="${PAD_T}" width="${barW}"
+        height="${plotH}" rx="${r}"/></clipPath>`;
 
+      const layers = order.filter((id) => (b.counts[id] ?? 0) > 0);
       let y = base;
-      const segs = order
-        .filter((id) => (b.counts[id] ?? 0) > 0)
+      const segs = layers
         .map((id, n) => {
           const count = b.counts[id] ?? 0;
           const h = (count / max) * plotH;
           y -= h;
-          const gap = n === 0 ? 0 : 2;
-          return `<rect x="${x.toFixed(1)}" y="${(y + gap).toFixed(1)}" width="${barW}"
-            height="${Math.max(1, h - gap).toFixed(1)}" fill="${COLOURS[id]}"
-            ><title>${esc(`${b.date ?? "overdue"} · ${LABELS[id]}: ${count}`)}</title></rect>`;
+          // A 2px seam of track shows between one layer and the one below.
+          const floor = n === 0 ? base + 2 : y + h - 2;
+          const tip = `<title>${esc(`${LABELS[id]}: ${count}`)}</title>`;
+          const top = n === layers.length - 1;
+          if (top && !full) {
+            // The surface: a wave twice the pill's width, slid sideways by
+            // one wavelength forever — seamless because it repeats.
+            // A paler wave behind, half a wavelength out and drifting the
+            // other way, gives the surface depth.
+            return `<path class="wave back" d="${wavePath(x - barW * 1.5, x + barW * 2, y - 1.5, floor, barW)}"
+              fill="${COLOURS[id]}" opacity=".4"/>
+              <path class="wave" d="${wavePath(x - barW, x + barW * 2, y, floor, barW)}"
+              fill="${COLOURS[id]}">${tip}</path>`;
+          }
+          // Full to the brim, the top layer runs past the rim and the clip
+          // rounds it; below the surface, layers are flat.
+          const yTop = top ? PAD_T - 2 : y;
+          return `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW}"
+            height="${Math.max(1, floor - yTop).toFixed(1)}" fill="${COLOURS[id]}">${tip}</rect>`;
         })
         .join("");
 
-      const stack = total
-        ? `${clip}<g clip-path="url(#${clipId})">${segs}</g>`
+      const liquid = total
+        ? `${clip}<g clip-path="url(#${clipId})"><g class="liquid" style="--rise:${level.toFixed(1)}px;--d:${(
+            i * 45
+          ).toFixed(0)}ms">${segs}</g></g>`
         : "";
 
-      // The count sits above its own bar. No y-axis: the number is the value,
-      // and a tick scale would only ask you to read one off the other.
+      // The count sits above its own level. No y-axis: the number is the
+      // value, and a tick scale would only ask you to read one off the other.
       const count = total
-        ? `<text class="total" x="${(x + barW / 2).toFixed(1)}" y="${(base - stackH - 11).toFixed(1)}"
-            text-anchor="middle">${total}</text>`
+        ? `<text class="total" x="${(x + barW / 2).toFixed(1)}" y="${(base - level - 11).toFixed(1)}"
+            text-anchor="middle" style="--d:${(i * 45).toFixed(0)}ms">${total}</text>`
         : "";
 
       const at = b.date ? new Date(`${b.date}T12:00:00Z`) : null;
@@ -1202,7 +1252,17 @@ function dueChart(buckets: DayBucket[]): string {
            <text class="lab dn${isToday ? " on" : ""}" x="${(x + barW / 2).toFixed(1)}"
              y="${base + 38}" text-anchor="middle">${esc(dayNum)}</text>`;
 
-      return `<g class="col">${track}${stack}${count}${labels}</g>`;
+      // The whole column — pill, count and date — opens that day's work.
+      // The hit area is the full slot, so a thin empty pill is still easy
+      // to press.
+      const href = isLate ? "/late" : `/day/${b.date}?mode=deadlines&amp;st=done`;
+      const label = isLate
+        ? `${total} late — open the list`
+        : `${weekday} ${usDate(b.date!)}: ${total} due — open the day`;
+      return `<a class="col" href="${href}" aria-label="${esc(label)}">
+        <title>${esc(label)}</title>
+        <rect class="hit" x="${(i * slot).toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${H}" fill="transparent"/>
+        ${track}${liquid}${count}${labels}</a>`;
     })
     .join("");
 
@@ -1228,8 +1288,8 @@ function dueChart(buckets: DayBucket[]): string {
       <div class="legend">${legend}</div>
     </div>
     <div class="chartscroll">
-      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
-        aria-label="Work due by day, stacked by category">${divider}${columns}</svg>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="--lambda:${barW}px"
+        aria-label="Work due by day, stacked by category. Press a day to open it.">${divider}${columns}</svg>
     </div>
   </div>`;
 }

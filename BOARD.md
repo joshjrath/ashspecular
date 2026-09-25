@@ -35,6 +35,12 @@ above it. Each bar carries its own count, so there is no y-axis to read a
 number off. Where a day holds more than one category the bar is one pill with
 2px gaps between them.
 
+Each pill fills like a glass: the work is liquid poured in from the bottom,
+always the pill's own rounded shape, rising into place when the page loads. A
+pill that isn't full keeps a slow two-layer wave on its surface; the busiest
+day is full to the brim and still. Press any pill or date to open that day's
+incomplete work; press LATE for everything past its time.
+
 **VO to record**, soonest first — the spine of the day. A deadline the parser
 worked out rather than read is marked *air date − 6 days* in orange, so a
 derived time never reads as a stated one.
