@@ -43,6 +43,9 @@ import {
   shiftDate,
 } from "../parse/derive.js";
 import { fetchScriptReport } from "./scriptcheck.js";
+import cron from "node-cron";
+import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
+import { STORIES_EVERY_DAYS, cadenceFor, dayOf, daysBetween } from "./cadence.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
@@ -59,6 +62,7 @@ import {
   renderRecurring,
   renderScripts,
   renderScriptBoard,
+  renderUploads,
   renderWeek,
   renderRecord,
 } from "./page.js";
@@ -70,7 +74,7 @@ const PUBLIC = new Set(["/login", "/healthz"]);
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed, batchesOpen] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
@@ -78,6 +82,7 @@ async function shell(active: string): Promise<Shell> {
     monthEntries(monthOf()),
     removedCount(),
     openBatchCount(dateIn(ORG_TZ)),
+    behindCount().catch(() => null),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
@@ -88,11 +93,24 @@ async function shell(active: string): Promise<Shell> {
       queue,
       recurring: batchesOpen,
       calendar: month.length,
+      behind,
     },
     lastIntake: at,
     removed,
     scripts: Boolean(config.scriptsUrl || config.scriptsUrlRaw),
   };
+}
+
+/** How many linked Stories channels are past the four-day pace — for the rail. */
+async function behindCount(): Promise<number | null> {
+  const [links, latest] = await Promise.all([listChannelLinks(), latestUploads()]);
+  const linked = links.filter((l) => l.youtubeId);
+  if (!linked.length) return null;
+  const today = dateIn(ORG_TZ);
+  return linked.filter((l) => {
+    const last = latest.get(l.channel);
+    return !last || daysBetween(dayOf(last), today) > STORIES_EVERY_DAYS;
+  }).length;
 }
 
 /** This board's own address: PUBLIC_URL, or what the request came in on. */
@@ -455,6 +473,36 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderScripts(s, config.scriptsUrl, ok, why));
   });
 
+  // Uploads: whether each Stories channel is keeping to its four-day pace.
+  app.get<{ Querystring: { range?: string } }>("/uploads", async (request, reply) => {
+    const range = [30, 90, 180].includes(Number(request.query.range)) ? Number(request.query.range) : 90;
+    const channels = storiesChannels();
+    const now = new Date();
+    // Enough history for the chart, the 90-day figures, and a quiet channel's last upload.
+    const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
+    const [s, links, uploads] = await Promise.all([shell("uploads"), listChannelLinks(), listUploads(since)]);
+    const cadence = channels.map((name) =>
+      cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now),
+    );
+    return reply.type("text/html").send(
+      renderUploads(s, { channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()) }, now),
+    );
+  });
+
+  app.post<{ Body: Record<string, string | undefined> }>("/uploads/links", async (request, reply) => {
+    const body = request.body ?? {};
+    for (const name of storiesChannels()) {
+      if (typeof body[name] === "string") await setChannelLink(name, body[name]!);
+    }
+    await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
+    return reply.redirect("/uploads");
+  });
+
+  app.post("/uploads/check", async (_req, reply) => {
+    await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
+    return reply.redirect("/uploads");
+  });
+
   // Today, and any day ahead — ?day= picks it, tomorrow by default.
   app.get<{ Querystring: { day?: string } }>("/recurring", async (request, reply) => {
     const today = dateIn(ORG_TZ);
@@ -644,6 +692,16 @@ export async function startWeb(): Promise<void> {
     }
     return reply.redirect(backTo(request.headers.referer, "/recurring"));
   });
+
+  // Read YouTube hourly (at :07), and once shortly after boot.
+  if (hasDatabase) {
+    const read = (why: string) =>
+      syncUploads()
+        .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
+        .catch((err) => console.error("[uploads] read failed:", err));
+    cron.schedule("7 * * * *", () => void read("hourly"));
+    setTimeout(() => void read("boot"), 20_000).unref();
+  }
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   console.log(`[web] listening on :${config.port}`);

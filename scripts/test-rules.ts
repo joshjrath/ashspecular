@@ -19,13 +19,15 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderScriptBoard, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderScriptBoard, renderUploads, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { readFileSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
+import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed } from "../src/jobs/youtube.js";
+import { cadenceFor } from "../src/web/cadence.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
@@ -584,6 +586,54 @@ t("only= limits categories", buildIcs([feedVideo], [feedVideo], parseFeedOptions
 t("the link's key is checked", [checkFeedKey(feedKey()), checkFeedKey("guess"), checkFeedKey(undefined)], [true, false, false]);
 const calWithFeed = renderCalendar(shellFix, "2026-09", "posting", [], [], [], "https://board.example/calendar.ics?key=abc");
 t("the subscribe panel's script compiles", [...calWithFeed.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+
+section("Uploads — reading YouTube without a key");
+t("a @handle", readChannelInput("@SpecularStudios"), { page: "https://www.youtube.com/@SpecularStudios" });
+t("a channel page link, no https", readChannelInput("youtube.com/@SpecularFNAF/videos"), { page: "https://www.youtube.com/@SpecularFNAF/videos" });
+t("a /channel/ link is the id outright", readChannelInput("https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv"), { id: "UCabcdefghijklmnopqrstuv" });
+t("not YouTube is refused", readChannelInput("https://vimeo.com/specular"), null);
+t("a page gives up its channel id", channelIdFromPage('<link rel="canonical" href="https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv">'), "UCabcdefghijklmnopqrstuv");
+const atom = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/">
+ <title>Uploads from Specular FNAF</title><author><name>Specular FNAF</name></author>
+ <entry><id>yt:video:aaaaaaaaaaa</id><yt:videoId>aaaaaaaaaaa</yt:videoId><title>Every FNAF Ending, Ranked &amp; Explained</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=aaaaaaaaaaa"/><published>2026-09-22T16:00:00+00:00</published>
+  <media:group><media:community><media:statistics views="48211"/></media:community></media:group></entry>
+ <entry><yt:videoId>bbbbbbbbbbb</yt:videoId><title>fnaf short</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/bbbbbbbbbbb"/><published>2026-09-23T16:00:00+00:00</published></entry>
+</feed>`;
+const parsed = parseFeed(atom);
+t("a feed's videos, titles decoded, views read", [parsed.title, parsed.videos[0]!.title, parsed.videos[0]!.views], ["Specular FNAF", "Every FNAF Ending, Ranked & Explained", 48211]);
+const longForm = await readLongFormFeed("UCabcdefghijklmnopqrstuv", (async () => new Response(atom)) as unknown as typeof fetch);
+t("Shorts never count", longForm.videos.map((v) => v.videoId), ["aaaaaaaaaaa"]);
+let asked = "";
+await readLongFormFeed("UCabcdefghijklmnopqrstuv", (async (u: string) => { asked ||= String(u); return new Response(atom); }) as unknown as typeof fetch);
+t("it asks for the long-form-only list first", asked, "https://www.youtube.com/feeds/videos.xml?playlist_id=UULFabcdefghijklmnopqrstuv");
+
+section("Uploads — the four-day pace");
+const at = (d: string, hhmm = "12:00") => new Date(`${d}T${hhmm}:00-04:00`);
+const nowET = at("2026-09-25", "15:00");
+const steady = cadenceFor("A", ["2026-09-09", "2026-09-13", "2026-09-17", "2026-09-21", "2026-09-24"].map((d) => at(d)), nowET);
+t("a day ago: on pace, next due in three", [steady.state, steady.daysSince, steady.nextDue], ["on-pace", 1, "2026-09-28"]);
+t("five on-time uploads in a row", steady.streak, 5);
+const due = cadenceFor("B", [at("2026-09-21")], nowET);
+t("four days ago: due today", [due.state, due.behindBy], ["due", 0]);
+const late = cadenceFor("C", [at("2026-09-10"), at("2026-09-18")], nowET);
+t("seven days ago: behind by three, streak broken", [late.state, late.behindBy, late.streak], ["behind", 3, 0]);
+t("an eight-day gap is counted and not on time", [late.longestGap90, late.onTime90], [8, 0]);
+t("11 pm in New York is still that day", cadenceFor("D", [new Date("2026-09-22T03:30:00Z")], nowET).lastDay, "2026-09-21");
+t("nothing yet", cadenceFor("E", [], nowET).state, "none");
+t("two uploads the same day are one day's posting", cadenceFor("F", [at("2026-09-24", "09:00"), at("2026-09-24", "18:00")], nowET).gaps.length, 0);
+
+const upPage = renderUploads(shellFix, {
+  channels: ["Specular Studios", "Specular FNAF"],
+  links: [{ channel: "Specular Studios", input: "@x", youtubeId: "UCabcdefghijklmnopqrstuv", title: "Specular Studios", error: null, checkedAt: new Date() }],
+  uploads: [{ videoId: "aaaaaaaaaaa", channel: "Specular Studios", title: "A <b>video</b>", publishedAt: at("2026-09-22"), url: "https://www.youtube.com/watch?v=aaaaaaaaaaa", views: 10 }],
+  cadence: [cadenceFor("Specular Studios", [at("2026-09-22")], nowET), cadenceFor("Specular FNAF", [], nowET)],
+  range: 90, hasKey: false,
+}, nowET);
+t("the Uploads page's script compiles", [...upPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+t("a video title is escaped", upPage.includes("A <b>video</b>"), false);
+t("an unlinked channel asks for its link", upPage.includes("No link yet"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

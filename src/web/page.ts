@@ -13,6 +13,8 @@
 import { CATEGORIES, CHANNELS, channelInk, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
+import type { ChannelLink, Upload } from "../jobs/youtube.js";
+import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -814,6 +816,96 @@ header.page a.clear { align-self: center; }
   .subpanel { position: fixed; left: 10px; right: 10px; top: 80px; width: auto; }
 }
 
+/* ── uploads ───────────────────────────────────────────────────────────── */
+.usub { color: var(--dim); font-size: 13px; margin: -12px 4px 16px; }
+.checknow { margin: 0; align-self: center; }
+.utiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.utile { background: var(--card); border-radius: var(--r); padding: 20px 22px; }
+.utile .n { font-family: var(--display); font-size: 40px; font-weight: 800; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+.utile .l { color: var(--ink3); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 10px; }
+.utile.t-ok { background: #173226; } .utile.t-ok .n { color: #7FE0AE; }
+.utile.t-late { background: #3A1E1D; } .utile.t-late .n { color: #FF9C94; }
+.uplanes { position: relative; margin-bottom: 14px; }
+.uphead { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.uphead h2 { margin: 0; }
+.uphead .tabs { margin-left: auto; display: flex; gap: 3px; background: var(--sunk); border-radius: 999px; padding: 4px; }
+.uphead .tab { padding: 6px 14px; border-radius: 999px; font-size: 12.5px; color: var(--ink2); font-weight: 600; }
+.uphead .tab.on { background: var(--yellow); color: #101012; }
+.ulegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink2); }
+.ulegend span { display: inline-flex; align-items: center; gap: 6px; }
+.ulegend i { display: inline-block; }
+.lg-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink2); box-shadow: 0 0 0 2px var(--card); }
+.lg-ok { width: 18px; height: 3px; border-radius: 2px; background: #4A4A53; }
+.lg-late { width: 18px; height: 5px; border-radius: 3px; background: #E5534B; }
+.lg-due { width: 9px; height: 9px; transform: rotate(45deg); box-shadow: inset 0 0 0 1.5px var(--yellow); }
+.upscroll { overflow-x: auto; }
+.upscroll svg { display: block; min-width: 760px; }
+.uplanes svg .wk { stroke: #26262C; stroke-width: 1; }
+.uplanes svg .today { stroke: var(--yellow); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.uplanes svg .tick { fill: var(--ink3); font: 600 10.5px var(--ui); }
+.uplanes svg .today-l { fill: var(--yellow); }
+.uplanes svg .lname { fill: var(--ink); font: 600 12.5px var(--ui); }
+.uplanes svg .ring { stroke: var(--card); stroke-width: 2; }
+.uplanes svg .track { stroke: #202026; stroke-width: 1; }
+.uplanes svg .nolink { fill: var(--ink3); font: 12px var(--ui); }
+.uplanes svg .seg line { stroke-linecap: round; }
+.uplanes svg .seg.ok line { stroke: #4A4A53; stroke-width: 3; }
+.uplanes svg .seg.late line { stroke: #E5534B; stroke-width: 5; }
+.uplanes svg .seg.wait line { stroke-dasharray: 2 5; }
+.uplanes svg .seg.wait.late line { stroke-dasharray: 5 4; }
+.uplanes svg .glab { fill: #FF9C94; font: 700 10.5px var(--ui); }
+.uplanes svg .hit { fill: transparent; }
+.uplanes svg .due-mark path { fill: none; stroke: var(--yellow); stroke-width: 1.5; }
+.uplanes svg .due-mark .ahead { stroke: #5A5520; stroke-width: 1.5; stroke-dasharray: 1 4; }
+.uplanes svg .up:hover .ring { stroke: var(--ink); }
+.uplanes svg [data-tip] { cursor: default; }
+.uplanes svg a.up { cursor: pointer; }
+.uplanes svg .lstate { font: 700 12px var(--ui); fill: var(--ink2); }
+.uplanes svg .lstate.ok { fill: #7FE0AE; } .uplanes svg .lstate.late { fill: #FF9C94; } .uplanes svg .lstate.due { fill: #F8C58F; }
+.uptip {
+  position: absolute; z-index: 5; pointer-events: none; max-width: 340px; padding: 8px 11px; border-radius: 10px;
+  background: #2E2E35; color: var(--ink); font-size: 12.5px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.uptip[hidden] { display: none; }
+.utable-wrap { overflow-x: auto; }
+.utable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.utable th { text-align: left; color: var(--ink3); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding: 0 10px 10px; white-space: nowrap; }
+.utable td { padding: 10px; border-top: 1px solid #26262C; white-space: nowrap; }
+.utable td small { color: var(--ink3); margin-left: 4px; }
+.utable .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ch); margin-right: 8px; box-shadow: 0 0 0 1px var(--ring); vertical-align: 0; }
+.pace { display: inline-flex; gap: 4px; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; background: var(--sunk); color: var(--ink2); }
+.pace.ok { background: rgba(86,201,144,.14); color: #8FE3B6; }
+.pace.due { background: rgba(238,154,85,.14); color: #F8C58F; }
+.pace.late { background: rgba(242,104,94,.14); color: #FF9C94; }
+.panel + .panel { margin-top: 14px; }
+.ulatest-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; }
+.ulatest { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 0; padding: 9px 10px; border-radius: 12px; }
+.ulatest:hover { background: var(--sunk); }
+.ulatest .cdot { grid-row: span 2; margin-top: 5px; }
+.ulatest .ut { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ulatest .uc, .ulatest .ud { grid-column: 2; font-size: 12px; color: var(--ink3); }
+.ulatest .uc { display: none; }
+.ulinks { margin-top: 14px; }
+.ulinks summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 12px; }
+.ulinks summary::-webkit-details-marker { display: none; }
+.ulinks summary h2 { margin: 0; }
+.ulinks summary .sub { color: var(--ink3); font-size: 12.5px; }
+.ulinks summary::after { content: "▾"; margin-left: auto; color: var(--ink3); }
+.linkform { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.linkrow { display: grid; grid-template-columns: 220px minmax(0, 1fr) 260px; align-items: center; gap: 12px; }
+.linkrow .lname { font-weight: 600; font-size: 13.5px; }
+.linkrow input { padding: 9px 12px; border-radius: 10px; border: 1px solid transparent; background: var(--sunk); color: var(--ink); font: inherit; font-size: 13px; }
+.linkrow input:focus { outline: 0; border-color: var(--salmon); }
+.lstat { font-size: 12px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lstat.ok { color: #8FE3B6; } .lstat.err { color: #FF9C94; white-space: normal; }
+.linkform .clear { align-self: flex-start; margin-top: 10px; }
+@media (max-width: 1000px) {
+  .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ulatest-list { grid-template-columns: minmax(0, 1fr); }
+  .linkrow { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-bottom: 8px; }
+}
+
 /* ── working ahead ──────────────────────────────────────────────────────── */
 .aheadbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
 .aheadbar .nav {
@@ -978,7 +1070,7 @@ export interface Shell {
   /** Which sidebar entry is lit. */
   active: string;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number; calendar: number };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null };
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
@@ -1048,6 +1140,7 @@ function sidebar(s: Shell): string {
       ${item("/queue", "Queue", s.nav.queue, "queue")}
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
       ${s.scripts ? item("/scripts", "Scripts", null, "scripts") : ""}
+      ${item("/uploads", "Uploads", s.nav.behind ?? null, "uploads")}
     </nav>
     <h3>Categories</h3>
     <div class="cats">${cats}</div>
@@ -2530,6 +2623,288 @@ export function renderScriptBoard(shell: Shell, url: string, report: ScriptRepor
           }</span></div>
           ${groups || `<div class="empty">No scripts on Josh's board right now.</div>`}`
     }`,
+  );
+}
+
+// ── uploads ───────────────────────────────────────────────────────────────
+
+const PACE: Record<PaceState, { label: string; icon: string; cls: string }> = {
+  "on-pace": { label: "On pace", icon: "✓", cls: "ok" },
+  due: { label: "Due today", icon: "◷", cls: "due" },
+  behind: { label: "Behind", icon: "!", cls: "late" },
+  none: { label: "No uploads yet", icon: "–", cls: "none" },
+};
+
+/**
+ * The Uploads tab: whether each Stories channel is keeping to one long-form
+ * upload every four days. Tiles for the headline, a timeline lane per channel
+ * — every upload a dot, every gap coloured by whether it kept the pace, the
+ * wait since the last one running up to today and on to when the next is due
+ * — then the same thing as a table, the latest uploads, and the links.
+ */
+export function renderUploads(
+  shell: Shell,
+  data: {
+    channels: string[];
+    links: ChannelLink[];
+    uploads: Upload[];
+    cadence: ChannelCadence[];
+    range: number;
+    hasKey: boolean;
+  },
+  now = new Date(),
+): string {
+  const every = STORIES_EVERY_DAYS;
+  const today = dayOf(now);
+  const linkOf = new Map(data.links.map((l) => [l.channel, l]));
+  const cad = new Map(data.cadence.map((c) => [c.channel, c]));
+  const linked = data.channels.filter((c) => linkOf.get(c)?.youtubeId);
+  const tracked = data.cadence.filter((c) => linked.includes(c.channel));
+
+  // ── tiles
+  const onPace = tracked.filter((c) => c.state === "on-pace" || c.state === "due").length;
+  const behind = tracked.filter((c) => c.state === "behind").length;
+  const last30 = tracked.reduce((n, c) => n + c.uploads30, 0);
+  const target30 = Math.round((linked.length * 30) / every);
+  const gaps90 = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)));
+  const onTime = gaps90.length ? Math.round((gaps90.filter((g) => g.days <= every).length / gaps90.length) * 100) : null;
+  const tiles = [
+    { n: linked.length ? `${onPace}/${linked.length}` : "—", l: "on pace", cls: "t-ok" },
+    { n: String(behind), l: "behind", cls: behind ? "t-late" : "" },
+    { n: `${last30}`, l: `uploads · 30 days · target ${target30}`, cls: "" },
+    { n: onTime === null ? "—" : `${onTime}%`, l: "gaps on time · 90 days", cls: "" },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+
+  // ── the timeline
+  const W = 1100, LABEL = 188, RIGHT = 70, ROW = 36, TOP = 34;
+  const start = addDays(today, -data.range);
+  const end = addDays(today, every + 2);
+  const span = daysBetween(start, end);
+  const x = (day: string) => LABEL + (daysBetween(start, day) / span) * (W - LABEL - RIGHT);
+  const H = TOP + data.channels.length * ROW + 8;
+  const byChannel = new Map<string, Upload[]>();
+  for (const u of data.uploads) {
+    if (!byChannel.has(u.channel)) byChannel.set(u.channel, []);
+    byChannel.get(u.channel)!.push(u);
+  }
+
+  // Week lines, labelled on Mondays; the tick labels are M/D.
+  const grid: string[] = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    if (new Date(`${d}T12:00:00Z`).getUTCDay() !== 1) continue;
+    const gx = x(d).toFixed(1);
+    grid.push(`<line x1="${gx}" x2="${gx}" y1="${TOP - 6}" y2="${H - 6}" class="wk"/>`);
+    // Today's own label wins where the two would collide.
+    if (Math.abs(x(d) - x(today)) > 34) {
+      grid.push(`<text x="${gx}" y="${TOP - 14}" class="tick" text-anchor="middle">${esc(usDate(d).replace(/\/\d{4}$/, ""))}</text>`);
+    }
+  }
+  const tx = x(today).toFixed(1);
+  grid.push(`<line x1="${tx}" x2="${tx}" y1="${TOP - 6}" y2="${H - 6}" class="today"/>`);
+  grid.push(`<text x="${tx}" y="${TOP - 14}" class="tick today-l" text-anchor="middle">Today</text>`);
+
+  const lanes = data.channels
+    .map((name, i) => {
+      const y = TOP + i * ROW + ROW / 2;
+      const c = cad.get(name);
+      const link = linkOf.get(name);
+      const colour = channelColour(name);
+      const label = `<g class="lane-l"><circle cx="12" cy="${y}" r="5" fill="${colour}" class="ring"/>
+        <text x="24" y="${y + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text></g>`;
+      const track = `<line x1="${LABEL}" x2="${W - RIGHT}" y1="${y}" y2="${y}" class="track"/>`;
+      if (!link?.youtubeId) {
+        return `${label}${track}<text x="${LABEL + 8}" y="${y + 4}" class="nolink">${
+          link?.error ? `Couldn't read: ${esc(link.error)}` : "No link yet — add it below"
+        }</text>`;
+      }
+      const vids = (byChannel.get(name) ?? []).slice().sort((a, b) => a.publishedAt.getTime() - b.publishedAt.getTime());
+      const days = [...new Set(vids.map((v) => dayOf(v.publishedAt)))].sort();
+      const clamp = (d: string) => (d < start ? start : d);
+
+      // Gaps between uploads, the late ones in red with their length.
+      const segs = (c?.gaps ?? [])
+        .filter((g) => g.to >= start)
+        .map((g) => {
+          const late = g.days > every;
+          const x1 = x(clamp(g.from)), x2 = x(g.to);
+          const mid = (x1 + x2) / 2;
+          const tip = `${g.days}-day gap · ${usDate(g.from)} → ${usDate(g.to)}${late ? ` · ${g.days - every} over` : " · on pace"}`;
+          return `<g class="seg ${late ? "late" : "ok"}" data-tip="${esc(tip)}">
+            <line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y}" y2="${y}"/>
+            <rect x="${x1.toFixed(1)}" y="${y - 9}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="18" class="hit"/>
+            ${late && x2 - x1 > 28 ? `<text x="${mid.toFixed(1)}" y="${y - 8}" text-anchor="middle" class="glab">${g.days}d</text>` : ""}
+          </g>`;
+        })
+        .join("");
+
+      // The wait since the last upload, and the target beyond it.
+      let wait = "";
+      if (c?.lastDay && c.nextDue) {
+        const over = c.state === "behind";
+        const x1 = x(clamp(c.lastDay)), x2 = x(today);
+        wait = `<g class="seg wait ${over ? "late" : "ok"}" data-tip="${esc(
+          `${c.daysSince} day${c.daysSince === 1 ? "" : "s"} since the last upload${over ? ` · ${c.behindBy} over` : ""}`,
+        )}"><line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y}" y2="${y}"/>
+          <rect x="${x1.toFixed(1)}" y="${y - 9}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="18" class="hit"/></g>`;
+        if (c.nextDue >= today) {
+          const dx = x(c.nextDue);
+          wait += `<g class="due-mark" data-tip="${esc(`Next due ${usDate(c.nextDue)} · ${relativeDay(c.nextDue)}`)}">
+            <line x1="${x2.toFixed(1)}" x2="${dx.toFixed(1)}" y1="${y}" y2="${y}" class="ahead"/>
+            <path d="M${dx.toFixed(1)} ${y - 6} l6 6 l-6 6 l-6 -6 z"/>
+            <rect x="${(dx - 10).toFixed(1)}" y="${y - 10}" width="20" height="20" class="hit"/></g>`;
+        }
+      }
+
+      const dots = vids
+        .filter((v) => dayOf(v.publishedAt) >= start)
+        .map((v) => {
+          const vx = x(dayOf(v.publishedAt)).toFixed(1);
+          const tip = `${v.title} · ${usDate(dayOf(v.publishedAt))}${v.views !== null ? ` · ${v.views.toLocaleString()} views` : ""}`;
+          return `<a href="${esc(v.url)}" target="_blank" rel="noreferrer" class="up" data-tip="${esc(tip)}">
+            <circle cx="${vx}" cy="${y}" r="11" class="hit"/>
+            <circle cx="${vx}" cy="${y}" r="5.5" fill="${colour}" class="ring"/></a>`;
+        })
+        .join("");
+
+      const state = c ? PACE[c.state] : PACE.none;
+      const status = `<text x="${W - RIGHT + 12}" y="${y + 4}" class="lstate ${state.cls}">${state.icon} ${
+        c?.state === "behind" ? `${c.behindBy}d` : c?.state === "on-pace" ? (c.daysSince === 0 ? "today" : `${c.daysSince}d`) : c?.state === "due" ? "today" : ""
+      }</text>`;
+      void days;
+      return `${label}${track}${segs}${wait}${dots}${status}`;
+    })
+    .join("");
+
+  const ranges = [30, 90, 180]
+    .map((r) => `<a class="tab${data.range === r ? " on" : ""}" href="/uploads?range=${r}">${r} days</a>`)
+    .join("");
+
+  const timeline = `<div class="panel uplanes">
+    <div class="uphead">
+      <h2>Every ${every} days, per channel</h2>
+      <div class="ulegend" aria-label="Legend">
+        <span><i class="lg-dot"></i>Upload</span>
+        <span><i class="lg-ok"></i>✓ Gap on pace (≤${every}d)</span>
+        <span><i class="lg-late"></i>! Gap over ${every} days</span>
+        <span><i class="lg-due"></i>Next due</span>
+      </div>
+      <div class="tabs">${ranges}</div>
+    </div>
+    <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+      aria-label="Uploads per Stories channel over the last ${data.range} days, with gaps over ${every} days marked">
+      ${grid.join("")}${lanes}</svg></div>
+    <div class="uptip" id="uptip" hidden></div>
+  </div>`;
+
+  // ── the table — the same facts, readable without the chart
+  const order: Record<PaceState, number> = { behind: 0, due: 1, "on-pace": 2, none: 3 };
+  const rowsHtml = data.channels
+    .map((name) => ({ name, c: cad.get(name), link: linkOf.get(name) }))
+    .sort((a, b) => order[a.c?.state ?? "none"] - order[b.c?.state ?? "none"] || (b.c?.daysSince ?? -1) - (a.c?.daysSince ?? -1))
+    .map(({ name, c, link }) => {
+      const st = link?.youtubeId && c ? PACE[c.state] : PACE.none;
+      const ch = channelColour(name);
+      return `<tr>
+        <td><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</td>
+        <td><span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span></td>
+        <td>${c?.lastDay ? `${esc(usDate(c.lastDay))} <small>${esc(relativeDay(c.lastDay))}</small>` : "—"}</td>
+        <td>${c?.nextDue ? `${esc(usDate(c.nextDue))} <small>${esc(relativeDay(c.nextDue))}</small>` : "—"}</td>
+        <td class="num">${c?.streak ?? "—"}</td>
+        <td class="num">${c ? c.uploads30 : "—"}</td>
+        <td class="num">${c?.avgGap90 != null ? `${c.avgGap90.toFixed(1)}d` : "—"}</td>
+        <td class="num">${c?.onTime90 != null ? `${Math.round(c.onTime90 * 100)}%` : "—"}</td>
+      </tr>`;
+    })
+    .join("");
+  const table = `<div class="panel">
+    <h2>By channel</h2>
+    <div class="utable-wrap"><table class="utable">
+      <thead><tr><th>Channel</th><th>Status</th><th>Last upload</th><th>Next due</th>
+        <th class="num" title="On-time uploads in a row">Streak</th><th class="num">30 days</th>
+        <th class="num">Avg gap · 90d</th><th class="num">On time · 90d</th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table></div>
+  </div>`;
+
+  // ── latest uploads
+  const latest = data.uploads
+    .slice()
+    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+    .slice(0, 12)
+    .map((u) => `<a class="ulatest" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+      <span class="cdot" style="--ch:${channelColour(u.channel)}"></span>
+      <span class="ut">${esc(u.title)}</span>
+      <span class="uc">${esc(u.channel)}</span>
+      <span class="ud">${esc(usDate(dayOf(u.publishedAt)))} · ${esc(relativeDay(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${u.views.toLocaleString()} views` : ""}</span>
+    </a>`)
+    .join("");
+
+  // ── the links
+  const set = data.links.filter((l) => data.channels.includes(l.channel)).length;
+  const links = `<details class="panel ulinks"${set ? "" : " open"}>
+    <summary><h2>Channel links</h2><span class="sub">${set} of ${data.channels.length} set</span></summary>
+    <p class="hint">Paste each Stories channel's YouTube link — its page, like youtube.com/@SpecularStudios, is
+    enough. The board looks up the rest, reads every channel once an hour, and keeps every long-form upload it
+    sees. Shorts don't count. ${
+      data.hasKey
+        ? "A YouTube API key is set, so each channel's full history comes in on its first read."
+        : "Without a YouTube API key, each channel starts from its latest 15 uploads — about two months at this pace — and builds from there. Set YOUTUBE_API_KEY to pull full history."
+    }</p>
+    <form method="post" action="/uploads/links" class="linkform">
+      ${data.channels
+        .map((name) => {
+          const l = linkOf.get(name);
+          const note = !l
+            ? ""
+            : l.error
+              ? `<span class="lstat err">! ${esc(l.error)}</span>`
+              : l.youtubeId
+                ? `<span class="lstat ok">✓ ${esc(l.title ?? "found")}</span>`
+                : `<span class="lstat">waiting for the next read</span>`;
+          return `<label class="linkrow"><span class="lname"><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</span>
+            <input type="text" name="${esc(name)}" value="${esc(l?.input ?? "")}" placeholder="youtube.com/@…" autocomplete="off" spellcheck="false">
+            ${note}</label>`;
+        })
+        .join("")}
+      <button class="clear">Save and read now</button>
+    </form>
+  </details>`;
+
+  const checked = data.links.map((l) => l.checkedAt?.getTime() ?? 0).reduce((a, b) => Math.max(a, b), 0);
+
+  return layout(
+    "Uploads",
+    shell,
+    `${pageHeader(
+      "Uploads",
+      `<form method="post" action="/uploads/check" class="checknow"><button class="clear secondary">Read YouTube now</button></form>`,
+    )}
+    <div class="usub">Stories · one long-form upload every ${every} days per channel${
+      checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
+    }</div>
+    ${linked.length ? `<div class="utiles">${tiles}</div>${timeline}${table}` : ""}
+    ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
+    ${links}
+    <script>
+    // Hover any upload or gap for what it is.
+    (function () {
+      var tip = document.getElementById("uptip");
+      if (!tip) return;
+      var box = tip.parentElement;
+      box.addEventListener("mousemove", function (e) {
+        var t = e.target.closest && e.target.closest("[data-tip]");
+        if (!t) { tip.hidden = true; return; }
+        tip.textContent = t.getAttribute("data-tip");
+        tip.hidden = false;
+        var r = box.getBoundingClientRect();
+        var left = Math.min(e.clientX - r.left + 14, r.width - tip.offsetWidth - 8);
+        tip.style.left = Math.max(8, left) + "px";
+        tip.style.top = (e.clientY - r.top + 16) + "px";
+      });
+      box.addEventListener("mouseleave", function () { tip.hidden = true; });
+    })();
+    </script>`,
   );
 }
 

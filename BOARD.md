@@ -154,6 +154,36 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Uploads — is Stories keeping to every four days?
+
+**Uploads** in the rail tracks the fourteen Stories channels against their
+target: one long-form upload every four days each. The rail's number is how
+many are behind.
+
+- **Tiles** — how many channels are on pace, how many are behind, uploads in
+  the last 30 days against the target, and the share of gaps on time over 90.
+- **The timeline** — one lane per channel over 30, 90 or 180 days. Every
+  upload is a dot in the channel's colour (click it for the video). The gap
+  between two uploads is grey when it kept the pace and red, with its length,
+  when it ran over four days. The dashed line from the last upload to today is
+  the current wait — red once it's past four days — and the yellow diamond is
+  when the next one is due. Hover anything for the details.
+- **By channel** — the same as a table, worst first: status (on pace, due
+  today, behind by N days), last upload, next due, on-time streak, uploads in
+  30 days, average gap and on-time share over 90.
+- **Latest uploads**, newest first.
+
+Counted in whole days in New York time. Shorts and live streams don't count:
+the board reads each channel's long-form-only upload list.
+
+**Setting it up.** Open *Channel links* at the bottom of the page and paste
+each Stories channel's YouTube link (its page, `youtube.com/@name`, is
+enough). The board finds the channel, reads it at once, and then every hour.
+YouTube's free feed shows only a channel's latest fifteen uploads — about two
+months at this pace — but every video the board sees is kept, so history only
+grows. For each channel's full history from day one, set `YOUTUBE_API_KEY` to
+a free YouTube Data API key; the next read pulls everything, with view counts.
+
 ## Google Calendar
 
 **Calendar → Google Calendar** (top right of the calendar) gives you a private
