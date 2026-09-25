@@ -12,8 +12,10 @@ import { formatMultiple, scoreAll, type VideoViews } from "../web/performance.js
 import { listSnapshots, listUploads, markAlerted, unalertedSince } from "./youtube.js";
 
 /** Uploads with their snapshots, for scoring. */
-export async function loadVideoViews(since: Date): Promise<VideoViews[]> {
-  const uploads = await listUploads(since);
+export async function loadVideoViews(since: Date, channels?: string[]): Promise<VideoViews[]> {
+  const all = await listUploads(since);
+  const only = channels ? new Set(channels) : null;
+  const uploads = only ? all.filter((u) => only.has(u.channel)) : all;
   const snaps = await listSnapshots(uploads.map((u) => u.videoId));
   return uploads.map((u) => ({
     videoId: u.videoId,

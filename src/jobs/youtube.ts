@@ -14,6 +14,7 @@
  */
 import { CHANNELS } from "../catalog.js";
 import { pool } from "../db/pool.js";
+import { formatFor } from "../web/targets.js";
 
 type Fetcher = typeof fetch;
 
@@ -130,15 +131,39 @@ export async function readLongFormFeed(id: string, fetcher: Fetcher = fetch): Pr
   throw new Error(`YouTube's feed answered ${lastStatus}.`);
 }
 
-/** With a key: the channel's whole long-form history, newest first, with views. */
-export async function readFullHistory(id: string, key: string, fetcher: Fetcher = fetch): Promise<FeedVideo[]> {
+/**
+ * The channel's Shorts only — for Bits and Reading. Its Shorts-only list
+ * ("UUSH") first; failing that, the whole feed, keeping /shorts/ links.
+ */
+export async function readShortsFeed(id: string, fetcher: Fetcher = fetch): Promise<{ title: string | null; videos: FeedVideo[] }> {
+  const list = await fetcher(`https://www.youtube.com/feeds/videos.xml?playlist_id=UUSH${id.slice(2)}`, { signal: AbortSignal.timeout(10_000) });
+  if (list.ok) {
+    const feed = parseFeed(await list.text());
+    return { title: feed.title, videos: feed.videos.map((v) => ({ ...v, url: `https://www.youtube.com/shorts/${v.videoId}` })) };
+  }
+  const res = await fetcher(`https://www.youtube.com/feeds/videos.xml?channel_id=${id}`, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`YouTube's feed answered ${res.status}.`);
+  const feed = parseFeed(await res.text());
+  return { title: feed.title, videos: feed.videos.filter((v) => /\/shorts\//.test(v.url)) };
+}
+
+/**
+ * With a key: the channel's whole history, newest first, with views — its
+ * long-form list ("UULF") or its Shorts list ("UUSH").
+ */
+export async function readFullHistory(
+  id: string,
+  key: string,
+  fetcher: Fetcher = fetch,
+  format: "long" | "short" = "long",
+): Promise<FeedVideo[]> {
   const api = "https://www.googleapis.com/youtube/v3";
   const out: FeedVideo[] = [];
   let page = "";
   for (let i = 0; i < 40; i += 1) {
     const u = new URL(`${api}/playlistItems`);
     u.search = new URLSearchParams({
-      part: "contentDetails,snippet", playlistId: `UULF${id.slice(2)}`, maxResults: "50", key, ...(page ? { pageToken: page } : {}),
+      part: "contentDetails,snippet", playlistId: `${format === "long" ? "UULF" : "UUSH"}${id.slice(2)}`, maxResults: "50", key, ...(page ? { pageToken: page } : {}),
     }).toString();
     const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) throw new Error(`YouTube API answered ${res.status} — check YOUTUBE_API_KEY.`);
@@ -150,7 +175,7 @@ export async function readFullHistory(id: string, key: string, fetcher: Fetcher 
       const videoId = it.contentDetails?.videoId;
       const at = it.contentDetails?.videoPublishedAt ?? it.snippet?.publishedAt;
       if (!videoId || !at) continue;
-      out.push({ videoId, title: it.snippet?.title ?? "", publishedAt: new Date(at), url: `https://www.youtube.com/watch?v=${videoId}`, views: null });
+      out.push({ videoId, title: it.snippet?.title ?? "", publishedAt: new Date(at), url: format === "short" ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`, views: null });
     }
     if (!data.nextPageToken) break;
     page = data.nextPageToken;
@@ -245,18 +270,25 @@ async function saveVideos(channel: string, videos: FeedVideo[]): Promise<number>
       [v.videoId, channel, v.title, v.publishedAt, v.url, v.views],
     );
     if (rows[0]?.inserted) added += 1;
-    if (v.views !== null) await snapshot(v.videoId, v.views);
+    if (v.views !== null) await snapshot(v.videoId, v.views, v.publishedAt);
   }
   return added;
 }
 
-/** Keep a video's views as of now — at most one snapshot per 40 minutes. */
-async function snapshot(videoId: string, views: number): Promise<void> {
+/**
+ * Keep a video's views as of now, tapering with age: hourly for its first
+ * two days, every six hours to ten days, then none — the comparisons only
+ * need its curve to seven days, and Bits and Reading post dozens a day.
+ */
+async function snapshot(videoId: string, views: number, publishedAt: Date): Promise<void> {
+  const ageHours = (Date.now() - publishedAt.getTime()) / 3_600_000;
+  if (ageHours > 240) return;
+  const gap = ageHours < 48 ? "40 minutes" : "330 minutes";
   await pool.query(
     `INSERT INTO video_views (video_id, at, views)
      SELECT $1, now(), $2
-     WHERE NOT EXISTS (SELECT 1 FROM video_views WHERE video_id = $1 AND at > now() - interval '40 minutes')`,
-    [videoId, views],
+     WHERE NOT EXISTS (SELECT 1 FROM video_views WHERE video_id = $1 AND at > now() - $3::interval)`,
+    [videoId, views, gap],
   );
 }
 
@@ -265,9 +297,10 @@ async function snapshot(videoId: string, views: number): Promise<void> {
  * fifteen the feed shows — so older videos keep their curve too.
  */
 async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
-  const { rows } = await pool.query<{ video_id: string }>(
-    "SELECT video_id FROM uploads WHERE published_at > now() - interval '60 days'",
+  const { rows } = await pool.query<{ video_id: string; published_at: Date }>(
+    "SELECT video_id, published_at FROM uploads WHERE published_at > now() - interval '60 days'",
   );
+  const published = new Map(rows.map((r) => [r.video_id, r.published_at]));
   for (let i = 0; i < rows.length; i += 50) {
     const ids = rows.slice(i, i + 50).map((r) => r.video_id);
     const u = new URL("https://www.googleapis.com/youtube/v3/videos");
@@ -279,7 +312,7 @@ async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
       const views = Number(item.statistics?.viewCount ?? NaN);
       if (!Number.isFinite(views)) continue;
       await pool.query("UPDATE uploads SET views = $2 WHERE video_id = $1", [item.id, views]);
-      await snapshot(item.id, views);
+      await snapshot(item.id, views, published.get(item.id) ?? new Date(0));
     }
   }
 }
@@ -318,19 +351,21 @@ export async function markAlerted(videoId: string): Promise<void> {
 }
 
 /**
- * Read every linked Stories channel once: resolve any new link, pull its
+ * Read every linked channel once — long form or Shorts, by its category: resolve any new link, pull its
  * feed (or, with a key, its whole history the first time), keep every
  * video. One channel failing never stops the rest.
  */
 export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels: number; added: number; errors: number }> {
   const key = process.env.YOUTUBE_API_KEY?.trim() ?? "";
-  const stories = new Set(storiesChannels());
+  const known = new Set(CHANNELS.map((c) => c.name));
   const { rows } = await pool.query<{ channel: string; input: string; youtube_id: string | null; backfilled_at: Date | null }>(
     "SELECT channel, input, youtube_id, backfilled_at FROM youtube_channels",
   );
   let added = 0;
   let errors = 0;
-  for (const row of rows.filter((r) => stories.has(r.channel))) {
+  for (const row of rows.filter((r) => known.has(r.channel))) {
+    const category = CHANNELS.find((c) => c.name === row.channel)!.category;
+    const format = formatFor(category);
     try {
       let id = row.youtube_id;
       if (!id) {
@@ -339,10 +374,10 @@ export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels:
         id = resolved.id;
         await pool.query("UPDATE youtube_channels SET youtube_id = $2 WHERE channel = $1", [row.channel, id]);
       }
-      const feed = await readLongFormFeed(id, fetcher);
+      const feed = format === "long" ? await readLongFormFeed(id, fetcher) : await readShortsFeed(id, fetcher);
       added += await saveVideos(row.channel, feed.videos);
       if (key && !row.backfilled_at) {
-        added += await saveVideos(row.channel, await readFullHistory(id, key, fetcher));
+        added += await saveVideos(row.channel, await readFullHistory(id, key, fetcher, format));
         await pool.query("UPDATE youtube_channels SET backfilled_at = now() WHERE channel = $1", [row.channel]);
       }
       await pool.query(

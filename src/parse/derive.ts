@@ -73,13 +73,17 @@ function zoneLabel(zone: string, at: Date): string {
 }
 
 /** Local calendar date in a zone, as YYYY-MM-DD. */
+// Building a formatter is slow and this runs thousands of times a page, so
+// one is kept per zone.
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+
 export function dateIn(zone: string, at: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(at);
+  let f = dayFormats.get(zone);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+    dayFormats.set(zone, f);
+  }
+  return f.format(at);
 }
 
 /** Shift a YYYY-MM-DD by whole days without touching clock time. */

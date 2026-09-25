@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
-import { CATEGORIES, CHANNELS } from "../catalog.js";
+import { CATEGORIES, CHANNELS, type CategoryId } from "../catalog.js";
 import { ORG_TZ, dateIn } from "../parse/derive.js";
 import {
   calendarRange,
@@ -45,7 +45,9 @@ import {
 import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
 import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
-import { STORIES_EVERY_DAYS, cadenceFor, dayOf, daysBetween } from "./cadence.js";
+import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, channelsIn, perDayFor } from "./targets.js";
+import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
@@ -476,50 +478,81 @@ export async function startWeb(): Promise<void> {
   });
 
   // Uploads: whether each Stories channel is keeping to its four-day pace.
-  app.get<{ Querystring: { range?: string } }>("/uploads", async (request, reply) => {
-    const range = [30, 90, 180].includes(Number(request.query.range)) ? Number(request.query.range) : 90;
-    const channels = storiesChannels();
+  app.get<{ Querystring: { range?: string; cat?: string; idea?: string } }>("/uploads", async (request, reply) => {
+    const category = (UPLOAD_CATEGORIES.find((c) => c.id === request.query.cat)?.id ?? "stories") as CategoryId;
+    const target = UPLOAD_TARGETS[category];
+    const ranges = target.kind === "daily" ? [14, 30, 60] : [30, 90, 180];
+    const range = ranges.includes(Number(request.query.range)) ? Number(request.query.range) : ranges[1]!;
+    const channels = channelsIn(category);
     const now = new Date();
-    // Enough history for the chart, the 90-day figures, and a quiet channel's last upload.
     const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
-    const [s, links, uploads, viewData] = await Promise.all([
+    const [s, links, allUploads, allViews] = await Promise.all([
       shell("uploads"),
       listChannelLinks(),
       listUploads(since),
       // A year and more of views, so every channel has twenty to compare with.
-      loadVideoViews(new Date(now.getTime() - 400 * 86_400_000)),
+      // Twenty earlier videos to compare with: a year and more for long form,
+      // a couple of months for Shorts at five a day.
+      loadVideoViews(new Date(now.getTime() - (target.kind === "daily" ? 75 : 400) * 86_400_000), channels),
     ]);
+    const inCat = new Set(channels);
+    const uploads = allUploads.filter((u) => inCat.has(u.channel));
+    const viewData = allViews.filter((v) => inCat.has(v.channel));
+    const every = target.kind === "every" ? target.days : 36_500;
     const cadence = channels.map((name) =>
-      cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now),
+      cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now, every),
     );
+    const daily =
+      target.kind === "daily"
+        ? channels.map((name) => dailyFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), perDayFor(name), now))
+        : undefined;
     const perf = scoreAll(viewData, now);
     const typical = new Map(
       channels.map((name) => [name, typicalViews(viewData.filter((v) => v.channel === name), now)] as const),
     );
+    const byId = new Map(allUploads.map((u) => [u.videoId, u]));
+    const ideas = analyzeIdeas(
+      viewData.map((v) => ({
+        title: byId.get(v.videoId)?.title ?? "",
+        channel: v.channel,
+        publishedAt: v.publishedAt,
+        url: byId.get(v.videoId)?.url ?? "",
+        multiple: perf.get(v.videoId)?.multiple ?? null,
+      })).filter((v) => v.title),
+      now,
+    );
+    const ideaTitle = (request.query.idea ?? "").trim().slice(0, 200);
     return reply.type("text/html").send(
       renderUploads(
         s,
-        { channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()), perf, typical },
+        {
+          channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()), perf, typical,
+          category, daily, ideas, idea: ideaTitle ? { title: ideaTitle, check: checkIdea(ideaTitle, ideas) } : null,
+        },
         now,
       ),
     );
   });
 
+  const backToCategory = (cat: unknown) =>
+    `/uploads?cat=${UPLOAD_CATEGORIES.find((c) => c.id === cat)?.id ?? "stories"}`;
+
   app.post<{ Body: Record<string, string | undefined> }>("/uploads/links", async (request, reply) => {
     const body = request.body ?? {};
-    for (const name of storiesChannels()) {
-      if (typeof body[name] === "string") await setChannelLink(name, body[name]!);
+    for (const c of CHANNELS) {
+      if (typeof body[c.name] === "string") await setChannelLink(c.name, body[c.name]!);
     }
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
     await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
-    return reply.redirect("/uploads");
+    return reply.redirect(backToCategory(body._cat));
   });
 
-  app.post("/uploads/check", async (_req, reply) => {
+  app.post<{ Body: Record<string, string | undefined> }>("/uploads/check", async (request, reply) => {
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
     await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
-    return reply.redirect("/uploads");
+    return reply.redirect(backToCategory(request.body?._cat));
   });
+
 
   // Today, and any day ahead — ?day= picks it, tomorrow by default.
   app.get<{ Querystring: { day?: string } }>("/recurring", async (request, reply) => {

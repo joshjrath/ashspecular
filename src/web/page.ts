@@ -10,12 +10,15 @@
  * carried by category so a glance tells you which side of the business a row
  * belongs to.
  */
-import { CATEGORIES, CHANNELS, channelInk, type CategoryId } from "../catalog.js";
+import { CATEGORIES, CHANNELS, channelInk, contrastRatio, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
 import { compactViews, formatMultiple, type Performance } from "./performance.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, formatFor } from "./targets.js";
+import type { DailyCadence } from "./cadence.js";
+import type { FeatureStat, IdeaAnalysis, IdeaCheck } from "./ideas.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -919,8 +922,53 @@ header.page a.clear { align-self: center; }
 .vbadge { font-weight: 700; margin-left: 4px; padding: 1px 7px; border-radius: 999px; }
 .vbadge.breakout { background: rgba(243,233,108,.14); color: #F8E27A; }
 .vbadge.under { background: var(--sunk); color: #B4B4BE; }
+.catswitch { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 4px 14px; }
+.catswitch a {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+  background: var(--rail); color: #C9C9D0; font-weight: 700; font-size: 13.5px;
+}
+.catswitch a i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.catswitch a:hover { background: #26262A; color: #fff; }
+.catswitch a.on { background: var(--c); color: var(--on); }
+.catswitch a.on i { background: var(--on); }
+.lg-cell { width: 12px; height: 12px; border-radius: 3px; margin-right: -2px; }
+.uplanes svg .hc { fill: var(--ink2); font: 700 10.5px var(--ui); pointer-events: none; }
+.uplanes svg .hc.dark { fill: #0B0B0D; }
+.uplanes svg .hot-today { stroke: var(--yellow); stroke-width: 1.5; }
+.ideas h2 .sub { font-family: var(--ui); font-size: 12.5px; font-weight: 500; color: var(--ink3); letter-spacing: 0; margin-left: 8px; }
+.ichecker { display: flex; gap: 8px; margin-bottom: 12px; }
+.panel .ichecker { margin-top: 4px; }
+.ichecker input[type=text] {
+  flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid transparent;
+  background: var(--sunk); color: var(--ink); font: inherit; font-size: 14px;
+}
+.ichecker input[type=text]:focus { outline: 0; border-color: var(--salmon); }
+.iresult { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: var(--sunk); border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; }
+.ipred b { font-family: var(--display); font-size: 30px; letter-spacing: -0.04em; display: block; line-height: 1; }
+.ipred span { color: var(--ink3); font-size: 12px; }
+.ipred.up b { color: #8FE3B6; } .ipred.down b { color: #FF9C94; }
+.ireasons { display: flex; gap: 6px; flex-wrap: wrap; }
+.ichip { padding: 4px 10px; border-radius: 999px; background: var(--raised); font-size: 12.5px; color: var(--ink2); }
+.ichip b { margin-left: 2px; } .ichip small { color: var(--ink3); margin-left: 4px; }
+.ichip.up b { color: #8FE3B6; } .ichip.down b { color: #FF9C94; }
+.icols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 6px; }
+.icol h3, .ihead { font-size: 13px; margin: 0 0 8px; color: var(--ink2); letter-spacing: 0.02em; }
+.ihead { margin-top: 18px; }
+.ilist { list-style: none; margin: 0; padding: 0; }
+.ilist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 2px; border-top: 1px solid #26262C; font-size: 13px; }
+.ilist .ik { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ilist .il { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ilist .il.up { color: #8FE3B6; } .ilist .il.down { color: #FF9C94; }
+.ilist .in { color: var(--ink3); font-size: 11.5px; min-width: 62px; text-align: right; }
+.isugg { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.isugg li { background: var(--sunk); border-radius: 12px; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; }
+.ikind { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+.ikind.pairing { color: #B5BEF7; } .ikind.sequel { color: #F8E27A; } .ikind.revisit { color: #8FE3B6; }
+.iidea { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.02em; }
+.iwhy { color: var(--ink3); font-size: 12px; line-height: 1.5; }
 @media (max-width: 1000px) {
-  .pcols { grid-template-columns: minmax(0, 1fr); }
+  .pcols, .icols, .isugg { grid-template-columns: minmax(0, 1fr); }
+  .ichecker { flex-wrap: wrap; }
   .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ulatest-list { grid-template-columns: minmax(0, 1fr); }
   .linkrow { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-bottom: 8px; }
@@ -2646,6 +2694,205 @@ export function renderScriptBoard(shell: Shell, url: string, report: ScriptRepor
   );
 }
 
+// ── uploads: the daily view (Bits, Reading) ───────────────────────────────
+
+/** Five greens from nothing to on target: magnitude is one hue, dark to light. */
+const HEAT = ["#26262C", "#1E3A2D", "#22553C", "#2A734F", "#3A9A6B", "#56C990"];
+
+function dailyView(
+  channels: string[],
+  linkOf: Map<string, ChannelLink>,
+  daily: DailyCadence[],
+  range: number,
+  typical: Map<string, { views: number; basis: string } | null>,
+  category: CategoryId,
+  now: Date,
+): string {
+  const today = dayOf(now);
+  const byName = new Map(daily.map((d) => [d.channel, d]));
+  const linked = channels.filter((c) => linkOf.get(c)?.youtubeId);
+  const live = linked.map((c) => byName.get(c)).filter((d): d is DailyCadence => Boolean(d));
+
+  const todayDone = live.reduce((n, d) => n + Math.min(d.today, d.perDay), 0);
+  const todayTarget = live.reduce((n, d) => n + d.perDay, 0);
+  const onTargetToday = live.filter((d) => d.today >= d.perDay).length;
+  const hits = live.filter((d) => d.hit30 !== null);
+  const hit30 = hits.length ? Math.round((hits.reduce((n, d) => n + d.hit30!, 0) / hits.length) * 100) : null;
+  const perDay7 = live.reduce((n, d) => n + (d.avg7 ?? 0), 0);
+  const tiles = [
+    { n: `${todayDone}/${todayTarget}`, l: "Shorts up today", cls: todayDone >= todayTarget && todayTarget ? "t-ok" : "" },
+    { n: `${onTargetToday}/${live.length}`, l: "channels on target today", cls: "" },
+    { n: hit30 === null ? "—" : `${hit30}%`, l: "days on target · 30 days", cls: "" },
+    { n: perDay7.toFixed(1), l: `a day · last 7 · target ${todayTarget}`, cls: "" },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+
+  const days: string[] = [];
+  for (let i = range - 1; i >= 0; i -= 1) days.push(addDays(today, -i));
+  const W = 1100, LABEL = 188, RIGHT = 70, ROW = 30, TOP = 30;
+  const cw = (W - LABEL - RIGHT) / days.length;
+  const H = TOP + channels.length * ROW + 6;
+  const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
+
+  const heads = days
+    .map((d, i) => {
+      const cx = LABEL + i * cw + cw / 2;
+      const isToday = d === today;
+      const show = isToday || (i % 7 === 0 && days.length - i > 3);
+      return show ? `<text x="${cx.toFixed(1)}" y="${TOP - 10}" class="tick${isToday ? " today-l" : ""}" text-anchor="middle">${isToday ? "Today" : esc(usDate(d).replace(/\/\d{4}$/, ""))}</text>` : "";
+    })
+    .join("");
+
+  const rowsSvg = channels
+    .map((name, r) => {
+      const y = TOP + r * ROW;
+      const d = byName.get(name);
+      const link = linkOf.get(name);
+      const label = `<circle cx="12" cy="${y + ROW / 2}" r="5" fill="${channelColour(name)}" class="ring"/>
+        <text x="24" y="${y + ROW / 2 + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text>`;
+      if (!link?.youtubeId || !d) {
+        return `${label}<text x="${LABEL + 8}" y="${y + ROW / 2 + 4}" class="nolink">${
+          link?.error ? `Couldn't read: ${esc(link.error)}` : "No link yet — add it below"
+        }</text>`;
+      }
+      const cells = days
+        .map((day, i) => {
+          const n = d.counts.get(day) ?? 0;
+          const step = n === 0 ? 0 : n >= d.perDay ? 5 : 1 + Math.min(3, Math.floor((n / d.perDay) * 4));
+          const cx = LABEL + i * cw;
+          const tip = `${name} · ${wd.format(new Date(`${day}T12:00:00Z`))} ${usDate(day)}: ${n} of ${d.perDay}${n >= d.perDay ? " ✓" : ""}`;
+          return `<g data-tip="${esc(tip)}"><rect x="${(cx + 1).toFixed(1)}" y="${y + 3}" width="${Math.max(2, cw - 2).toFixed(1)}" height="${ROW - 6}" rx="4"
+            fill="${HEAT[step]}"${day === today ? ' class="hot-today"' : ""}/>${
+              cw >= 16 && n > 0
+                ? `<text x="${(cx + cw / 2).toFixed(1)}" y="${y + ROW / 2 + 4}" text-anchor="middle" class="hc${step >= 4 ? " dark" : ""}">${n}</text>`
+                : ""
+            }</g>`;
+        })
+        .join("");
+      const met = d.today >= d.perDay;
+      return `${label}${cells}<text x="${W - RIGHT + 12}" y="${y + ROW / 2 + 4}" class="lstate ${met ? "ok" : d.today ? "due" : ""}">${met ? "✓" : ""} ${d.today}/${d.perDay}</text>`;
+    })
+    .join("");
+
+  const ranges = [14, 30, 60]
+    .map((r) => `<a class="tab${range === r ? " on" : ""}" href="/uploads?cat=${category}&amp;range=${r}">${r} days</a>`)
+    .join("");
+
+  const heatmap = `<div class="panel uplanes">
+    <div class="uphead">
+      <h2>Shorts a day, per channel</h2>
+      <div class="ulegend" aria-label="Legend">
+        <span><i class="lg-cell" style="background:${HEAT[0]}"></i>None</span>
+        <span><i class="lg-cell" style="background:${HEAT[2]}"></i><i class="lg-cell" style="background:${HEAT[3]}"></i>Part of the day's number</span>
+        <span><i class="lg-cell" style="background:${HEAT[5]}"></i>✓ On target</span>
+      </div>
+      <div class="tabs">${ranges}</div>
+    </div>
+    <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Shorts per channel per day over the last ${range} days, against each channel's daily number">
+      ${heads}${rowsSvg}</svg></div>
+    <div class="uptip" id="uptip" hidden></div>
+  </div>`;
+
+  const tableRows = channels
+    .map((name) => ({ name, d: byName.get(name), linked: Boolean(linkOf.get(name)?.youtubeId) }))
+    .sort((a, b) => (a.d && b.d ? a.d.today / a.d.perDay - b.d.today / b.d.perDay : a.d ? -1 : 1))
+    .map(({ name, d, linked: ok }) => {
+      const t = typical.get(name);
+      const met = d && d.today >= d.perDay;
+      return `<tr>
+        <td><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</td>
+        <td>${ok && d ? `<span class="pace ${met ? "ok" : d.today ? "due" : "late"}">${met ? "✓" : d.today ? "◷" : "!"} ${d.today} of ${d.perDay}</span>` : "—"}</td>
+        <td class="num">${d ? d.streak : "—"}</td>
+        <td class="num">${d?.avg7 != null ? d.avg7.toFixed(1) : "—"}</td>
+        <td class="num">${d?.hit30 != null ? `${Math.round(d.hit30 * 100)}%` : "—"}</td>
+        <td>${d?.last ? `${esc(usDate(dayOf(d.last)))} <small>${esc(relativeDay(dayOf(d.last)))}</small>` : "—"}</td>
+        <td class="num">${t ? `${esc(compactViews(Math.round(t.views)))} <small>${esc(t.basis)}</small>` : "—"}</td>
+      </tr>`;
+    })
+    .join("");
+  const table = `<div class="panel">
+    <h2>By channel</h2>
+    <div class="utable-wrap"><table class="utable">
+      <thead><tr><th>Channel</th><th>Today</th><th class="num" title="Days in a row on target">Streak</th>
+        <th class="num">A day · 7d</th><th class="num">On target · 30d</th><th>Last Short</th><th class="num">Typical views</th></tr></thead>
+      <tbody>${tableRows}</tbody></table></div>
+  </div>`;
+
+  return `<div class="utiles">${tiles}</div>${heatmap}${table}`;
+}
+
+// ── uploads: ideas ────────────────────────────────────────────────────────
+
+function liftText(lift: number): string {
+  const pct = Math.round((lift - 1) * 100);
+  return `${pct >= 0 ? "+" : "−"}${Math.abs(pct)}%`;
+}
+
+function ideasPanel(category: CategoryId, a: IdeaAnalysis, idea: { title: string; check: IdeaCheck } | null): string {
+  const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
+  const statRow = (s: FeatureStat) => `<li>
+      <span class="ik">${esc(s.key)}</span>
+      <span class="il ${s.lift >= 1 ? "up" : "down"}">${esc(liftText(s.lift))}</span>
+      <span class="in">${s.count} video${s.count === 1 ? "" : "s"}</span>
+    </li>`;
+  const list = (title: string, xs: FeatureStat[], n: number) =>
+    `<div class="icol"><h3>${esc(title)}</h3>${xs.length ? `<ul class="ilist">${xs.slice(0, n).map(statRow).join("")}</ul>` : `<p class="hint">Not enough yet.</p>`}</div>`;
+
+  const checker = `<form method="get" action="/uploads" class="ichecker">
+      <input type="hidden" name="cat" value="${category}">
+      <input type="text" name="idea" value="${esc(idea?.title ?? "")}" placeholder="Type a title idea — e.g. What If Gojo Joined The Avengers?" autocomplete="off">
+      <button class="clear">Check idea</button>
+    </form>
+    ${
+      idea
+        ? `<div class="iresult">
+            <div class="ipred ${idea.check.predicted >= 1.15 ? "up" : idea.check.predicted <= 0.87 ? "down" : ""}">
+              <b>${esc(formatMultiple(idea.check.predicted))}</b>
+              <span>${idea.check.predicted >= 1.15 ? "likely above usual" : idea.check.predicted <= 0.87 ? "likely below usual" : "about usual"} · ${esc(idea.check.confidence)} confidence</span>
+            </div>
+            <div class="ireasons">${
+              idea.check.reasons.length
+                ? idea.check.reasons
+                    .map((r) => `<span class="ichip ${r.lift >= 1 ? "up" : "down"}">${esc(r.label)} <b>${esc(liftText(r.lift))}</b> <small>${r.count}</small></span>`)
+                    .join("")
+                : `<span class="hint">Nothing in this title matches a format or subject with enough history yet${
+                    idea.check.subjects.length ? ` (read as ${esc(idea.check.subjects.join(", "))})` : ""
+                  }.</span>`
+            }</div>
+          </div>`
+        : ""
+    }`;
+
+  const suggestions = a.suggestions.length
+    ? `<ul class="isugg">${a.suggestions
+        .map(
+          (s) => `<li><span class="ikind ${s.kind}">${s.kind === "pairing" ? "New pairing" : s.kind === "sequel" ? "Follow-up" : "Bring back"}</span>
+            <span class="iidea">${esc(s.idea)}</span><span class="iwhy">${esc(s.why)}</span></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="hint">No suggestions yet — they need a few formats and subjects with a track record.</p>`;
+
+  return `<div class="panel ideas">
+    <h2>Ideas <span class="sub">from ${a.judged} ${esc(catLabel)} videos judged against their channel's usual</span></h2>
+    ${checker}
+    ${
+      a.judged < 6
+        ? `<p class="hint">Ideas need at least six judged videos in this category — videos are judged once they're two weeks old, or sooner as the hourly view history builds up.</p>`
+        : `<div class="icols">
+            ${list("Formats", a.formats, 6)}
+            ${list("Subjects", a.subjects, 8)}
+            <div class="icol">${list("Best days", a.days, 3).replace('<div class="icol">', "").replace(/<\/div>$/, "")}
+              <h3 style="margin-top:14px">Title length</h3><ul class="ilist">${[a.length.short, a.length.long]
+                .filter((x): x is FeatureStat => Boolean(x))
+                .map(statRow)
+                .join("")}</ul></div>
+          </div>
+          <h3 class="ihead">Suggested ideas</h3>${suggestions}`
+    }
+  </div>`;
+}
+
 // ── uploads ───────────────────────────────────────────────────────────────
 
 /** 🔥 3.4× / 📉 0.4× beside a video, or nothing when it's normal or unscored. */
@@ -2681,10 +2928,20 @@ export function renderUploads(
     hasKey: boolean;
     perf?: Map<string, Performance>;
     typical?: Map<string, { views: number; basis: string } | null>;
+    category?: CategoryId;
+    daily?: DailyCadence[];
+    ideas?: IdeaAnalysis;
+    idea?: { title: string; check: IdeaCheck } | null;
   },
   now = new Date(),
 ): string {
-  const every = STORIES_EVERY_DAYS;
+  const category: CategoryId = data.category ?? "stories";
+  const target = UPLOAD_TARGETS[category];
+  const hasTarget = target.kind === "every";
+  // No target: the lanes still show every gap, but none of them is "late".
+  const every = target.kind === "every" ? target.days : STORIES_EVERY_DAYS;
+  const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "Stories";
+  const q = (extra = "") => `/uploads?cat=${category}${extra}`;
   const perf = data.perf ?? new Map<string, Performance>();
   const typical = data.typical ?? new Map();
   const perfNote = (id: string) => {
@@ -2704,19 +2961,29 @@ export function renderUploads(
   const target30 = Math.round((linked.length * 30) / every);
   const gaps90 = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)));
   const onTime = gaps90.length ? Math.round((gaps90.filter((g) => g.days <= every).length / gaps90.length) * 100) : null;
-  const tiles = [
-    { n: linked.length ? `${onPace}/${linked.length}` : "—", l: "on pace", cls: "t-ok" },
-    { n: String(behind), l: "behind", cls: behind ? "t-late" : "" },
-    { n: `${last30}`, l: `uploads · 30 days · target ${target30}`, cls: "" },
-    { n: onTime === null ? "—" : `${onTime}%`, l: "gaps on time · 90 days", cls: "" },
-  ]
+  const allGaps = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)).map((g) => g.days)).sort((x, y) => x - y);
+  const medGap = allGaps.length ? allGaps[Math.floor(allGaps.length / 2)]! : null;
+  const active7 = tracked.filter((c) => c.daysSince !== null && c.daysSince <= 7).length;
+  const tiles = (hasTarget
+    ? [
+        { n: linked.length ? `${onPace}/${linked.length}` : "—", l: "on pace", cls: "t-ok" },
+        { n: String(behind), l: "behind", cls: behind ? "t-late" : "" },
+        { n: `${last30}`, l: `uploads · 30 days · target ${target30}`, cls: "" },
+        { n: onTime === null ? "—" : `${onTime}%`, l: "gaps on time · 90 days", cls: "" },
+      ]
+    : [
+        { n: linked.length ? `${active7}/${linked.length}` : "—", l: "posted in the last 7 days", cls: "" },
+        { n: `${last30}`, l: "uploads · 30 days", cls: "" },
+        { n: medGap === null ? "—" : `${medGap}d`, l: "typical gap · 90 days", cls: "" },
+        { n: String(linked.length), l: "channels tracked", cls: "" },
+      ])
     .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
     .join("");
 
   // ── the timeline
   const W = 1100, LABEL = 188, RIGHT = 70, ROW = 36, TOP = 34;
   const start = addDays(today, -data.range);
-  const end = addDays(today, every + 2);
+  const end = addDays(today, hasTarget ? every + 2 : 3);
   const span = daysBetween(start, end);
   const x = (day: string) => LABEL + (daysBetween(start, day) / span) * (W - LABEL - RIGHT);
   const H = TOP + data.channels.length * ROW + 8;
@@ -2784,7 +3051,7 @@ export function renderUploads(
           `${c.daysSince} day${c.daysSince === 1 ? "" : "s"} since the last upload${over ? ` · ${c.behindBy} over` : ""}`,
         )}"><line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y}" y2="${y}"/>
           <rect x="${x1.toFixed(1)}" y="${y - 9}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="18" class="hit"/></g>`;
-        if (c.nextDue >= today) {
+        if (hasTarget && c.nextDue >= today) {
           const dx = x(c.nextDue);
           wait += `<g class="due-mark" data-tip="${esc(`Next due ${usDate(c.nextDue)} · ${relativeDay(c.nextDue)}`)}">
             <line x1="${x2.toFixed(1)}" x2="${dx.toFixed(1)}" y1="${y}" y2="${y}" class="ahead"/>
@@ -2815,33 +3082,35 @@ export function renderUploads(
         .join("");
 
       const state = c ? PACE[c.state] : PACE.none;
-      const status = `<text x="${W - RIGHT + 12}" y="${y + 4}" class="lstate ${state.cls}">${state.icon} ${
-        c?.state === "behind" ? `${c.behindBy}d` : c?.state === "on-pace" ? (c.daysSince === 0 ? "today" : `${c.daysSince}d`) : c?.state === "due" ? "today" : ""
-      }</text>`;
+      const status = hasTarget
+        ? `<text x="${W - RIGHT + 12}" y="${y + 4}" class="lstate ${state.cls}">${state.icon} ${
+            c?.state === "behind" ? `${c.behindBy}d` : c?.state === "on-pace" ? (c.daysSince === 0 ? "today" : `${c.daysSince}d`) : c?.state === "due" ? "today" : ""
+          }</text>`
+        : `<text x="${W - RIGHT + 12}" y="${y + 4}" class="lstate">${c?.daysSince == null ? "" : c.daysSince === 0 ? "today" : `${c.daysSince}d ago`}</text>`;
       void days;
       return `${label}${track}${segs}${wait}${dots}${status}`;
     })
     .join("");
 
   const ranges = [30, 90, 180]
-    .map((r) => `<a class="tab${data.range === r ? " on" : ""}" href="/uploads?range=${r}">${r} days</a>`)
+    .map((r) => `<a class="tab${data.range === r ? " on" : ""}" href="${q(`&amp;range=${r}`)}">${r} days</a>`)
     .join("");
 
   const timeline = `<div class="panel uplanes">
     <div class="uphead">
-      <h2>Every ${every} days, per channel</h2>
+      <h2>${hasTarget ? `Every ${every} days, per channel` : "Uploads per channel"}</h2>
       <div class="ulegend" aria-label="Legend">
         <span><i class="lg-dot"></i>Upload</span>
-        <span><i class="lg-ok"></i>✓ Gap on pace (≤${every}d)</span>
+        ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace (≤${every}d)</span>
         <span><i class="lg-late"></i>! Gap over ${every} days</span>
-        <span><i class="lg-due"></i>Next due</span>
+        <span><i class="lg-due"></i>Next due</span>` : `<span><i class="lg-ok"></i>Gap between uploads</span>`}
         <span><i class="lg-up"></i>🔥 Breakout (≥2× usual)</span>
         <span><i class="lg-down"></i>📉 Under (≤½ usual)</span>
       </div>
       <div class="tabs">${ranges}</div>
     </div>
     <div class="upscroll"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-      aria-label="Uploads per Stories channel over the last ${data.range} days, with gaps over ${every} days marked">
+      aria-label="Uploads per ${esc(catLabel)} channel over the last ${data.range} days">
       ${grid.join("")}${lanes}</svg></div>
     <div class="uptip" id="uptip" hidden></div>
   </div>`;
@@ -2856,7 +3125,7 @@ export function renderUploads(
       const ch = channelColour(name);
       return `<tr>
         <td><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</td>
-        <td><span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span></td>
+        <td>${hasTarget ? `<span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span>` : c?.daysSince != null ? `${c.daysSince}d ago` : "—"}</td>
         <td>${c?.lastDay ? `${esc(usDate(c.lastDay))} <small>${esc(relativeDay(c.lastDay))}</small>` : "—"}</td>
         <td>${c?.nextDue ? `${esc(usDate(c.nextDue))} <small>${esc(relativeDay(c.nextDue))}</small>` : "—"}</td>
         <td class="num">${c?.streak ?? "—"}</td>
@@ -2921,14 +3190,16 @@ export function renderUploads(
   const set = data.links.filter((l) => data.channels.includes(l.channel)).length;
   const links = `<details class="panel ulinks"${set ? "" : " open"}>
     <summary><h2>Channel links</h2><span class="sub">${set} of ${data.channels.length} set</span></summary>
-    <p class="hint">Paste each Stories channel's YouTube link — its page, like youtube.com/@SpecularStudios, is
-    enough. The board looks up the rest, reads every channel once an hour, and keeps every long-form upload it
-    sees. Shorts don't count. ${
+    <p class="hint">Paste each ${esc(catLabel)} channel's YouTube link — its page, like youtube.com/@SpecularStudios, is
+    enough. The board looks up the rest, reads every channel once an hour, and keeps every ${
+      formatFor(category) === "short" ? "Short it sees — long-form videos don't count here" : "long-form upload it sees — Shorts don't count"
+    }. ${
       data.hasKey
         ? "A YouTube API key is set, so each channel's full history comes in on its first read."
-        : "Without a YouTube API key, each channel starts from its latest 15 uploads — about two months at this pace — and builds from there. Set YOUTUBE_API_KEY to pull full history."
+        : "Without a YouTube API key, each channel starts from its latest 15 uploads — and builds from there. Set YOUTUBE_API_KEY to pull full history."
     }</p>
     <form method="post" action="/uploads/links" class="linkform">
+      <input type="hidden" name="_cat" value="${category}">
       ${data.channels
         .map((name) => {
           const l = linkOf.get(name);
@@ -2955,12 +3226,24 @@ export function renderUploads(
     shell,
     `${pageHeader(
       "Uploads",
-      `<form method="post" action="/uploads/check" class="checknow"><button class="clear secondary">Read YouTube now</button></form>`,
+      `<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><button class="clear secondary">Read YouTube now</button></form>`,
     )}
-    <div class="usub">Stories · one long-form upload every ${every} days per channel${
+    <nav class="catswitch" aria-label="Category">${UPLOAD_CATEGORIES.map(
+      (c) => `<a class="${c.id === category ? "on" : ""}" style="--c:${c.color};--on:${
+        contrastRatio("#0B0B0D", c.color) >= contrastRatio("#FFFFFF", c.color) ? "#0B0B0D" : "#FFFFFF"
+      }" href="/uploads?cat=${c.id}"><i></i>${esc(c.label)}</a>`,
+    ).join("")}</nav>
+    <div class="usub">${esc(catLabel)} · ${esc(describeTarget(category))}${
       checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
     }</div>
-    ${linked.length ? `<div class="utiles">${tiles}</div>${timeline}${performers}${table}` : ""}
+    ${
+      linked.length
+        ? target.kind === "daily"
+          ? `${dailyView(data.channels, linkOf, data.daily ?? [], data.range, typical, category, now)}${performers}`
+          : `<div class="utiles">${tiles}</div>${timeline}${performers}${table}`
+        : ""
+    }
+    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null) : ""}
     ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>

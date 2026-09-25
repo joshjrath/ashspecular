@@ -26,8 +26,9 @@ import { readFileSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
-import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed } from "../src/jobs/youtube.js";
-import { cadenceFor } from "../src/web/cadence.js";
+import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed, readShortsFeed } from "../src/jobs/youtube.js";
+import { cadenceFor, dailyFor } from "../src/web/cadence.js";
+import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from "../src/web/ideas.js";
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
@@ -673,6 +674,49 @@ t("views read compactly", [compactViews(950), compactViews(184_203), compactView
 t("the Discord alert says what, how much and against what",
   breakoutMessage({ channel: "Specular FNAF", title: "Every FNAF Ending", url: "https://youtu.be/x", views: 184203, multiple: 3.42, basis: "at 24 hours", ageHours: 30 }),
   "🔥 **Breakout on Specular FNAF**\n**Every FNAF Ending** — 184,203 views after 30 hours, **3.4×** the channel's usual at 24 hours.\nhttps://youtu.be/x");
+
+section("Ideas — what the numbers say works");
+t("formats", ["What If Gojo Joined The Avengers?", "Could Deadpool Survive The Hunger Games?", "Could Walter White Build Compound V?", "Every FNAF Ending, Ranked", "Goku vs Superman", "How Does Goku Actually Train?", "Spider-Man And The Webs"].map(formatOf),
+  ["What If", "Could … Survive", "Could / Would …", "Ranked", "Versus", "How …", "Other"]);
+t("subjects: the names, not the capitalised words", subjectsOf("Could Walter White Build Compound V?"), ["Walter White", "Compound V"]);
+t("possessives dropped", subjectsOf("How Do Spider-Man's Webs Work?"), ["Spider-Man", "Webs"]);
+t("acronyms count", subjectsOf("What If FNAF Was Real?"), ["FNAF"]);
+t("numbers aren't subjects", subjectsOf("Studios Bits short 34-3 in 2024"), ["Studios Bits"]);
+const idea = (title: string, multiple: number, daysAgo: number): IdeaVideo =>
+  ({ title, channel: "Specular FNAF", publishedAt: new Date(Date.UTC(2026, 8, 25) - daysAgo * 86_400_000), url: "", multiple });
+const pool = [
+  idea("What If Gojo Joined The Avengers?", 2.4, 80), idea("What If Gojo Fought Thanos?", 2.0, 70), idea("What If Deadpool Was In FNAF?", 1.6, 30),
+  idea("What If Batman Joined The Seven?", 1.4, 20), idea("Could Batman Survive Hogwarts?", 0.8, 40), idea("Could Deadpool Survive The Purge?", 0.9, 35),
+  idea("Could Goku Survive Squid Game?", 0.7, 25), idea("Every FNAF Ending, Ranked", 0.6, 15), idea("Every Batman Villain, Ranked", 0.5, 10),
+  idea("Every Marvel Movie, Ranked", 0.7, 5), idea("Gojo vs Sukuna", 1.0, 3),
+];
+const analysis = analyzeIdeas(pool, new Date(Date.UTC(2026, 8, 25)));
+t("What If beats the usual, Ranked lags", [analysis.formats[0]?.key, analysis.formats.at(-1)?.key], ["What If", "Ranked"]);
+t("Gojo is the strongest subject", analysis.subjects[0]?.key, "Gojo");
+t("a proven hit two months back suggests a follow-up", analysis.suggestions.some((x) => x.kind === "sequel" && x.idea.includes("Gojo Joined The Avengers")), true);
+const good = checkIdea("What If Gojo Joined The X-Men?", analysis);
+const bad = checkIdea("Every Naruto Villain, Ranked", analysis);
+t("a What If with Gojo checks out above usual", good.predicted > 1.15, true);
+t("a Ranked list checks out below", bad.predicted < 0.9, true);
+t("the checker says why", good.reasons.map((r) => r.label), ["What If format", "Gojo"]);
+t("too few judged videos: no conclusions", analyzeIdeas(pool.slice(0, 4)).formats, []);
+
+section("Daily targets — Bits and Reading");
+const dAt = (d: string, hh = 12) => new Date(`${d}T${String(hh).padStart(2, "0")}:00:00-04:00`);
+const five = (d: string) => [9, 11, 13, 15, 17].map((h) => dAt(d, h));
+const dc = dailyFor("Specular DC", [...five("2026-09-21"), ...five("2026-09-22"), ...five("2026-09-23"), ...five("2026-09-24").slice(0, 3), dAt("2026-09-25", 9), dAt("2026-09-25", 10)], 5, dAt("2026-09-25", 15));
+t("today so far, against five", [dc.today, dc.perDay], [2, 5]);
+t("streak broken by yesterday's three", dc.streak, 0);
+t("three of four full days on target", dc.hit30, 0.75);
+const kay = dailyFor("Specular & Kay Bits", [dAt("2026-09-23"), dAt("2026-09-24"), dAt("2026-09-25", 9)], 1, dAt("2026-09-25", 15));
+t("a one-a-day channel: on target today, three days running", [kay.today >= kay.perDay, kay.streak], [true, 3]);
+const shortAtom = atom.replace("https://www.youtube.com/watch?v=aaaaaaaaaaa", "https://www.youtube.com/shorts/aaaaaaaaaaa");
+let firstAsk = "";
+const shorts = await readShortsFeed("UCabcdefghijklmnopqrstuv", (async (u: string) => { firstAsk ||= String(u); return new Response(atom); }) as unknown as typeof fetch);
+t("Shorts: the Shorts-only list first", firstAsk, "https://www.youtube.com/feeds/videos.xml?playlist_id=UUSHabcdefghijklmnopqrstuv");
+t("everything on that list is a Short", shorts.videos.every((v) => v.url.includes("/shorts/")), true);
+const fallback = await readShortsFeed("UCabcdefghijklmnopqrstuv", (async (u: string) => (String(u).includes("UUSH") ? new Response("", { status: 404 }) : new Response(shortAtom))) as unknown as typeof fetch);
+t("without that list, long-form videos are left out", fallback.videos.map((v) => v.videoId), ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

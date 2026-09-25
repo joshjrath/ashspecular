@@ -92,3 +92,52 @@ export function cadenceFor(
     gaps,
   };
 }
+
+// ── daily categories (Bits, Reading) ──────────────────────────────────────
+
+export interface DailyCadence {
+  channel: string;
+  perDay: number;
+  /** Uploads per ET day. */
+  counts: Map<string, number>;
+  today: number;
+  /** Days in a row on target: today if already met, then back from yesterday. */
+  streak: number;
+  /** Share of the last 30 full days on target (from the first upload, if later). */
+  hit30: number | null;
+  /** Uploads a day over the last 7 full days. */
+  avg7: number | null;
+  last: Date | null;
+}
+
+export function dailyFor(channel: string, uploads: Date[], perDay: number, now: Date = new Date()): DailyCadence {
+  const today = dayOf(now);
+  const counts = new Map<string, number>();
+  for (const u of uploads) counts.set(dayOf(u), (counts.get(dayOf(u)) ?? 0) + 1);
+  const first = uploads.length ? dayOf(new Date(Math.min(...uploads.map((u) => u.getTime())))) : null;
+  const met = (d: string) => (counts.get(d) ?? 0) >= perDay;
+
+  let streak = met(today) ? 1 : 0;
+  for (let d = addDays(today, -1); first && d >= first && met(d); d = addDays(d, -1)) streak += 1;
+
+  const window = (n: number) => {
+    const days: string[] = [];
+    for (let i = 1; i <= n; i += 1) {
+      const d = addDays(today, -i);
+      if (first && d >= first) days.push(d);
+    }
+    return days;
+  };
+  const last30 = window(30);
+  const last7 = window(7);
+  return {
+    channel,
+    perDay,
+    counts,
+    today: counts.get(today) ?? 0,
+    streak,
+    hit30: last30.length ? last30.filter(met).length / last30.length : null,
+    avg7: last7.length ? last7.reduce((n, d) => n + (counts.get(d) ?? 0), 0) / last7.length : null,
+    last: uploads.length ? new Date(Math.max(...uploads.map((u) => u.getTime()))) : null,
+  };
+}

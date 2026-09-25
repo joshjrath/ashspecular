@@ -154,6 +154,35 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Uploads — every category, its own way
+
+The switch at the top of **Uploads** picks a category, and the whole page
+changes to suit it:
+
+| Category | Counts | Target | View |
+|---|---|---|---|
+| **Stories** | long form only | one every 4 days per channel | timeline lanes, gaps red when over 4 days |
+| **Gaming, Movies** | long form only | none yet — tracked | the same lanes, no late gaps |
+| **Bits, Reading** | **Shorts only** | each channel's daily number (the Recurring page's `units`) | a heatmap: a row per channel, a square per day, shaded by how much of that day's number went up |
+
+Long form is read from each channel's long-form-only list, Shorts from its
+Shorts-only list, so the two never mix. Change a target in
+`src/web/targets.ts`. Channel links are per category, under *Channel links*
+on each tab.
+
+**Ideas.** Every tab has an Ideas panel built from that category's own
+numbers. Each video counts as how it did against its channel's usual, and
+titles are taken apart into a *format* (What If, Could … Survive, Ranked,
+Versus, How, Why, Explained…), *subjects* (the names in it — Gojo, Deadpool,
+FNAF) and the *day* it went up. The panel shows which formats, subjects,
+days and title lengths run above or below the usual, and by how much;
+suggests ideas — strong formats paired with strong subjects not done in 60
+days, follow-ups to past breakouts, subjects worth bringing back; and has an
+**idea checker**: type a title and get an estimate ("2.3× — likely above
+usual") with the reasons ("What If +55%", "Gojo +57%"). Small samples are
+pulled toward "no effect", so one lucky video doesn't make a rule. No AI or
+key needed — it's the board's own statistics.
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their
