@@ -245,8 +245,76 @@ async function saveVideos(channel: string, videos: FeedVideo[]): Promise<number>
       [v.videoId, channel, v.title, v.publishedAt, v.url, v.views],
     );
     if (rows[0]?.inserted) added += 1;
+    if (v.views !== null) await snapshot(v.videoId, v.views);
   }
   return added;
+}
+
+/** Keep a video's views as of now — at most one snapshot per 40 minutes. */
+async function snapshot(videoId: string, views: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO video_views (video_id, at, views)
+     SELECT $1, now(), $2
+     WHERE NOT EXISTS (SELECT 1 FROM video_views WHERE video_id = $1 AND at > now() - interval '40 minutes')`,
+    [videoId, views],
+  );
+}
+
+/**
+ * With a key, views for every upload of the last sixty days — not only the
+ * fifteen the feed shows — so older videos keep their curve too.
+ */
+async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
+  const { rows } = await pool.query<{ video_id: string }>(
+    "SELECT video_id FROM uploads WHERE published_at > now() - interval '60 days'",
+  );
+  for (let i = 0; i < rows.length; i += 50) {
+    const ids = rows.slice(i, i + 50).map((r) => r.video_id);
+    const u = new URL("https://www.googleapis.com/youtube/v3/videos");
+    u.search = new URLSearchParams({ part: "statistics", id: ids.join(","), key }).toString();
+    const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return;
+    const data = (await res.json()) as { items?: Array<{ id: string; statistics?: { viewCount?: string } }> };
+    for (const item of data.items ?? []) {
+      const views = Number(item.statistics?.viewCount ?? NaN);
+      if (!Number.isFinite(views)) continue;
+      await pool.query("UPDATE uploads SET views = $2 WHERE video_id = $1", [item.id, views]);
+      await snapshot(item.id, views);
+    }
+  }
+}
+
+export interface Snapshot {
+  at: Date;
+  views: number;
+}
+
+/** Every snapshot for these videos, oldest first. */
+export async function listSnapshots(videoIds: string[]): Promise<Map<string, Snapshot[]>> {
+  const out = new Map<string, Snapshot[]>();
+  if (!videoIds.length) return out;
+  const { rows } = await pool.query<{ video_id: string; at: Date; views: string }>(
+    "SELECT video_id, at, views FROM video_views WHERE video_id = ANY($1) ORDER BY at ASC",
+    [videoIds],
+  );
+  for (const r of rows) {
+    if (!out.has(r.video_id)) out.set(r.video_id, []);
+    out.get(r.video_id)!.push({ at: r.at, views: Number(r.views) });
+  }
+  return out;
+}
+
+/** Recent uploads not yet announced as breakouts. */
+export async function unalertedSince(since: Date): Promise<Set<string>> {
+  const { rows } = await pool.query<{ video_id: string }>(
+    "SELECT video_id FROM uploads WHERE published_at >= $1 AND breakout_alerted_at IS NULL",
+    [since],
+  );
+  return new Set(rows.map((r) => r.video_id));
+}
+
+export async function markAlerted(videoId: string): Promise<void> {
+  await pool.query("UPDATE uploads SET breakout_alerted_at = now() WHERE video_id = $1", [videoId]);
 }
 
 /**
@@ -289,5 +357,6 @@ export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels:
       ]);
     }
   }
+  if (key) await refreshViews(key, fetcher).catch(() => {});
   return { channels: rows.length, added, errors };
 }

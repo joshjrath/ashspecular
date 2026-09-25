@@ -15,6 +15,7 @@ import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, render
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
+import { compactViews, formatMultiple, type Performance } from "./performance.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -900,7 +901,26 @@ header.page a.clear { align-self: center; }
 .lstat { font-size: 12px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lstat.ok { color: #8FE3B6; } .lstat.err { color: #FF9C94; white-space: normal; }
 .linkform .clear { align-self: flex-start; margin-top: 10px; }
+.uplanes svg .halo-up { fill: none; stroke: #F3E96C; stroke-width: 2; }
+.uplanes svg .halo-down { fill: none; stroke: #8A8A94; stroke-width: 1.5; stroke-dasharray: 2 2.5; }
+.lg-up { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 2px #F3E96C; }
+.lg-down { width: 12px; height: 12px; border-radius: 50%; border: 1.5px dashed #8A8A94; }
+.performers h2 .sub { font-family: var(--ui); font-size: 12.5px; font-weight: 500; color: var(--ink3); letter-spacing: 0; margin-left: 8px; }
+.pcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.pcols h3 { font-size: 14px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+.pcols h3 span { color: var(--ink3); font-family: var(--ui); font-size: 12px; }
+.prow { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; }
+.prow:hover { background: var(--sunk); }
+.pmult { font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -0.03em; text-align: right; font-variant-numeric: tabular-nums; }
+.pmult.breakout { color: #F8E27A; } .pmult.under { color: #B4B4BE; }
+.pbody { display: flex; flex-direction: column; min-width: 0; }
+.pbody .ut { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pmeta { font-size: 12px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vbadge { font-weight: 700; margin-left: 4px; padding: 1px 7px; border-radius: 999px; }
+.vbadge.breakout { background: rgba(243,233,108,.14); color: #F8E27A; }
+.vbadge.under { background: var(--sunk); color: #B4B4BE; }
 @media (max-width: 1000px) {
+  .pcols { grid-template-columns: minmax(0, 1fr); }
   .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ulatest-list { grid-template-columns: minmax(0, 1fr); }
   .linkrow { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-bottom: 8px; }
@@ -2628,6 +2648,14 @@ export function renderScriptBoard(shell: Shell, url: string, report: ScriptRepor
 
 // ── uploads ───────────────────────────────────────────────────────────────
 
+/** 🔥 3.4× / 📉 0.4× beside a video, or nothing when it's normal or unscored. */
+function verdictBadge(p: Performance | undefined): string {
+  if (!p || p.verdict === "normal") return "";
+  return ` <span class="vbadge ${p.verdict}">${p.verdict === "breakout" ? "🔥" : "📉"} ${esc(formatMultiple(p.multiple))}</span>`;
+}
+
+
+
 const PACE: Record<PaceState, { label: string; icon: string; cls: string }> = {
   "on-pace": { label: "On pace", icon: "✓", cls: "ok" },
   due: { label: "Due today", icon: "◷", cls: "due" },
@@ -2651,10 +2679,18 @@ export function renderUploads(
     cadence: ChannelCadence[];
     range: number;
     hasKey: boolean;
+    perf?: Map<string, Performance>;
+    typical?: Map<string, { views: number; basis: string } | null>;
   },
   now = new Date(),
 ): string {
   const every = STORIES_EVERY_DAYS;
+  const perf = data.perf ?? new Map<string, Performance>();
+  const typical = data.typical ?? new Map();
+  const perfNote = (id: string) => {
+    const p = perf.get(id);
+    return p ? ` · ${formatMultiple(p.multiple)} usual (${p.basis})` : "";
+  };
   const today = dayOf(now);
   const linkOf = new Map(data.links.map((l) => [l.channel, l]));
   const cad = new Map(data.cadence.map((c) => [c.channel, c]));
@@ -2761,9 +2797,19 @@ export function renderUploads(
         .filter((v) => dayOf(v.publishedAt) >= start)
         .map((v) => {
           const vx = x(dayOf(v.publishedAt)).toFixed(1);
-          const tip = `${v.title} · ${usDate(dayOf(v.publishedAt))}${v.views !== null ? ` · ${v.views.toLocaleString()} views` : ""}`;
+          const p = perf.get(v.videoId);
+          const tip = `${p?.verdict === "breakout" ? "🔥 " : p?.verdict === "under" ? "📉 " : ""}${v.title} · ${usDate(dayOf(v.publishedAt))}${
+            v.views !== null ? ` · ${v.views.toLocaleString()} views` : ""
+          }${perfNote(v.videoId)}`;
+          // A breakout wears a gold halo; an underperformer a dashed one.
+          const halo =
+            p?.verdict === "breakout"
+              ? `<circle cx="${vx}" cy="${y}" r="9.5" class="halo-up"/>`
+              : p?.verdict === "under"
+                ? `<circle cx="${vx}" cy="${y}" r="9" class="halo-down"/>`
+                : "";
           return `<a href="${esc(v.url)}" target="_blank" rel="noreferrer" class="up" data-tip="${esc(tip)}">
-            <circle cx="${vx}" cy="${y}" r="11" class="hit"/>
+            <circle cx="${vx}" cy="${y}" r="11" class="hit"/>${halo}
             <circle cx="${vx}" cy="${y}" r="5.5" fill="${colour}" class="ring"/></a>`;
         })
         .join("");
@@ -2789,6 +2835,8 @@ export function renderUploads(
         <span><i class="lg-ok"></i>✓ Gap on pace (≤${every}d)</span>
         <span><i class="lg-late"></i>! Gap over ${every} days</span>
         <span><i class="lg-due"></i>Next due</span>
+        <span><i class="lg-up"></i>🔥 Breakout (≥2× usual)</span>
+        <span><i class="lg-down"></i>📉 Under (≤½ usual)</span>
       </div>
       <div class="tabs">${ranges}</div>
     </div>
@@ -2815,6 +2863,10 @@ export function renderUploads(
         <td class="num">${c ? c.uploads30 : "—"}</td>
         <td class="num">${c?.avgGap90 != null ? `${c.avgGap90.toFixed(1)}d` : "—"}</td>
         <td class="num">${c?.onTime90 != null ? `${Math.round(c.onTime90 * 100)}%` : "—"}</td>
+        <td class="num">${(() => {
+          const t = typical.get(name);
+          return t ? `${esc(compactViews(Math.round(t.views)))} <small>${esc(t.basis)}</small>` : "—";
+        })()}</td>
       </tr>`;
     })
     .join("");
@@ -2823,7 +2875,7 @@ export function renderUploads(
     <div class="utable-wrap"><table class="utable">
       <thead><tr><th>Channel</th><th>Status</th><th>Last upload</th><th>Next due</th>
         <th class="num" title="On-time uploads in a row">Streak</th><th class="num">30 days</th>
-        <th class="num">Avg gap · 90d</th><th class="num">On time · 90d</th></tr></thead>
+        <th class="num">Avg gap · 90d</th><th class="num">On time · 90d</th><th class="num" title="Median views of the last twenty uploads">Typical views</th></tr></thead>
       <tbody>${rowsHtml}</tbody></table></div>
   </div>`;
 
@@ -2836,9 +2888,34 @@ export function renderUploads(
       <span class="cdot" style="--ch:${channelColour(u.channel)}"></span>
       <span class="ut">${esc(u.title)}</span>
       <span class="uc">${esc(u.channel)}</span>
-      <span class="ud">${esc(usDate(dayOf(u.publishedAt)))} · ${esc(relativeDay(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${u.views.toLocaleString()} views` : ""}</span>
+      <span class="ud">${esc(usDate(dayOf(u.publishedAt)))} · ${esc(relativeDay(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${u.views.toLocaleString()} views` : ""}${verdictBadge(perf.get(u.videoId))}</span>
     </a>`)
     .join("");
+
+  // ── breakouts and underperformers, last 30 days
+  const since30 = now.getTime() - 30 * 86_400_000;
+  const scored = data.uploads
+    .filter((u) => u.publishedAt.getTime() >= since30 && perf.has(u.videoId))
+    .map((u) => ({ u, p: perf.get(u.videoId)! }));
+  const perfRow = ({ u, p }: { u: Upload; p: Performance }) => `<a class="prow" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+      <span class="pmult ${p.verdict}">${esc(formatMultiple(p.multiple))}</span>
+      <span class="pbody"><span class="ut">${esc(u.title)}</span>
+        <span class="pmeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span>${esc(u.channel)} · ${esc(
+          compactViews(p.value),
+        )} ${esc(p.basis)} vs ${esc(compactViews(Math.round(p.baseline)))} usual</span></span>
+    </a>`;
+  const ups = scored.filter((x) => x.p.verdict === "breakout").sort((a, b) => b.p.multiple - a.p.multiple).slice(0, 8);
+  const downs = scored.filter((x) => x.p.verdict === "under").sort((a, b) => a.p.multiple - b.p.multiple).slice(0, 8);
+  const performers = linked.length
+    ? `<div class="panel performers">
+        <h2>Breakouts &amp; underperformers <span class="sub">last 30 days, against each channel's usual at the same age</span></h2>
+        <div class="pcols">
+          <div><h3>🔥 Breakouts <span>${ups.length}</span></h3>${ups.map(perfRow).join("") || `<p class="hint">None this month yet.</p>`}</div>
+          <div><h3>📉 Underperforming <span>${downs.length}</span></h3>${downs.map(perfRow).join("") || `<p class="hint">None this month.</p>`}</div>
+        </div>
+        ${scored.length ? "" : `<p class="hint">Scores appear once a channel has three earlier videos to compare with at the same age — from the first read for videos two weeks and older, and within days for new ones as the hourly view snapshots build up.</p>`}
+      </div>`
+    : "";
 
   // ── the links
   const set = data.links.filter((l) => data.channels.includes(l.channel)).length;
@@ -2883,7 +2960,7 @@ export function renderUploads(
     <div class="usub">Stories · one long-form upload every ${every} days per channel${
       checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
     }</div>
-    ${linked.length ? `<div class="utiles">${tiles}</div>${timeline}${table}` : ""}
+    ${linked.length ? `<div class="utiles">${tiles}</div>${timeline}${performers}${table}` : ""}
     ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>

@@ -184,6 +184,41 @@ months at this pace — but every video the board sees is kept, so history only
 grows. For each channel's full history from day one, set `YOUTUBE_API_KEY` to
 a free YouTube Data API key; the next read pulls everything, with view counts.
 
+### Views, breakouts and underperformers
+
+Every hourly read keeps a snapshot of each video's views, so the board knows
+what a video had *at a given age*. Each upload is then compared with its own
+channel's normal at the same age — the median of that channel's previous
+twenty videos:
+
+- under a day old: its views so far, against the others at this many hours
+- one to seven days: its views at 24 hours
+- a week and older: its views at 7 days
+
+**2× the usual or more is a breakout 🔥; half or less is underperforming 📉.**
+Until the snapshots have built up (they start when this is deployed), videos
+two weeks and older are compared on lifetime views, so there's something to
+see from the first day. A median needs at least three earlier videos.
+
+On the Uploads page: a **Breakouts & underperformers** panel for the last 30
+days (each with its multiple and what it was compared against), gold halos
+on breakout dots and dashed ones on underperformers in the timeline, badges
+in *Latest uploads*, and each channel's **typical views** in the table.
+
+**Discord alert.** When a video from the last week breaks out, the board
+posts once: *"🔥 Breakout on Specular FNAF — What If Gojo Was In FNAF? —
+627,000 views after 30 hours, 4.0× the channel's usual at 24 hours."* It
+posts to the first of these that's set:
+
+| Variable | |
+|---|---|
+| `BREAKOUT_WEBHOOK_URL` | a Discord webhook — Channel settings → Integrations → Webhooks → New Webhook → Copy URL. Works whether or not the bot is running. |
+| `BREAKOUT_CHANNEL_ID` | a channel the bot can post in |
+| `DIGEST_CHANNEL_ID` | the morning digest's channel |
+
+With a `YOUTUBE_API_KEY`, views are refreshed hourly for every upload of the
+last 60 days rather than only the feed's latest fifteen.
+
 ## Google Calendar
 
 **Calendar → Google Calendar** (top right of the calendar) gives you a private

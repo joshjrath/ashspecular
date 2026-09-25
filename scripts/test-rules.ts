@@ -28,6 +28,8 @@ import { config, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
 import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed } from "../src/jobs/youtube.js";
 import { cadenceFor } from "../src/web/cadence.js";
+import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
+import { breakoutMessage } from "../src/jobs/breakouts.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
@@ -634,6 +636,43 @@ const upPage = renderUploads(shellFix, {
 t("the Uploads page's script compiles", [...upPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 t("a video title is escaped", upPage.includes("A <b>video</b>"), false);
 t("an unlinked channel asks for its link", upPage.includes("No link yet"), true);
+
+section("Views — breakouts and underperformers");
+const H = 3_600_000;
+const t0 = new Date("2026-08-01T16:00:00Z");
+// A video whose views grow as n * sqrt(hours), snapshotted hourly from publish.
+const grow = (id: string, days: number, n: number, trackedFromHour = 1, ageHours = 400): VideoViews => {
+  const publishedAt = new Date(t0.getTime() + days * 86_400_000);
+  const snapshots = [];
+  for (let h = trackedFromHour; h <= ageHours; h += 1) snapshots.push({ at: new Date(publishedAt.getTime() + h * H), views: Math.round(n * Math.sqrt(h)) });
+  return { videoId: id, channel: "Specular FNAF", publishedAt, views: snapshots.at(-1)?.views ?? null, snapshots };
+};
+const vA = grow("a", 0, 1000);
+t("views at 24 hours, from a snapshot", viewsAtAge(vA, 24), Math.round(1000 * Math.sqrt(24)));
+t("between snapshots, interpolated", viewsAtAge({ ...vA, snapshots: [{ at: new Date(vA.publishedAt.getTime() + 20 * H), views: 100 }, { at: new Date(vA.publishedAt.getTime() + 28 * H), views: 180 }] }, 24), 140);
+t("tracking began too late for that age: unknown", viewsAtAge(grow("late", 0, 1000, 300), 24), null);
+
+const history = [grow("h1", 0, 1000), grow("h2", 4, 1100), grow("h3", 8, 900), grow("h4", 12, 1000)];
+const nowPerf = new Date(t0.getTime() + 30 * 86_400_000);
+const hit = grow("hit", 16, 3200, 1, (nowPerf.getTime() - t0.getTime()) / H - 16 * 24);
+const hitScore = scoreVideo(hit, [...history, hit], nowPerf)!;
+t("3.2× the channel at 7 days is a breakout", [hitScore.verdict, hitScore.basis, formatMultiple(hitScore.multiple)], ["breakout", "at 7 days", "3.2×"]);
+const flop = grow("flop", 16, 400, 1, 14 * 24);
+t("0.4× is underperforming", scoreVideo(flop, [...history, flop], nowPerf)!.verdict, "under");
+const fresh = { ...grow("fresh", 16, 2500, 1, 10), publishedAt: new Date(nowPerf.getTime() - 10 * H) };
+fresh.snapshots = fresh.snapshots.map((sn, i) => ({ at: new Date(fresh.publishedAt.getTime() + (i + 1) * H), views: sn.views }));
+t("ten hours old, judged against the others at ten hours", [scoreVideo(fresh, [...history, fresh], nowPerf)?.basis, scoreVideo(fresh, [...history, fresh], nowPerf)?.verdict], ["so far", "breakout"]);
+t("too young to judge", scoreVideo({ ...fresh, publishedAt: new Date(nowPerf.getTime() - 2 * H) }, history, nowPerf), null);
+t("fewer than three to compare with: no verdict", scoreVideo(hit, [history[0]!, hit], nowPerf), null);
+// Day one: no snapshots, only lifetime views on videos two weeks and older.
+const bareVid = (id: string, day: number, views: number): VideoViews => ({ videoId: id, channel: "Specular Law", publishedAt: new Date(t0.getTime() + day * 86_400_000), views, snapshots: [] });
+const law = [bareVid("l1", 0, 50_000), bareVid("l2", 4, 60_000), bareVid("l3", 8, 40_000), bareVid("l4", 12, 150_000)];
+t("with no snapshots yet, lifetime views on older videos", [scoreVideo(law[3]!, law, nowPerf)?.basis, formatMultiple(scoreVideo(law[3]!, law, nowPerf)!.multiple)], ["lifetime", "3.0×"]);
+t("a channel's typical views", typicalViews(law, nowPerf), { views: 55_000, basis: "lifetime" });
+t("views read compactly", [compactViews(950), compactViews(184_203), compactViews(1_250_000)], ["950", "184K", "1.3M"]);
+t("the Discord alert says what, how much and against what",
+  breakoutMessage({ channel: "Specular FNAF", title: "Every FNAF Ending", url: "https://youtu.be/x", views: 184203, multiple: 3.42, basis: "at 24 hours", ageHours: 30 }),
+  "🔥 **Breakout on Specular FNAF**\n**Every FNAF Ending** — 184,203 views after 30 hours, **3.4×** the channel's usual at 24 hours.\nhttps://youtu.be/x");
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

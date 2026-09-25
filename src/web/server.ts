@@ -46,6 +46,8 @@ import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
 import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, cadenceFor, dayOf, daysBetween } from "./cadence.js";
+import { scoreAll, typicalViews } from "./performance.js";
+import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
@@ -480,12 +482,26 @@ export async function startWeb(): Promise<void> {
     const now = new Date();
     // Enough history for the chart, the 90-day figures, and a quiet channel's last upload.
     const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
-    const [s, links, uploads] = await Promise.all([shell("uploads"), listChannelLinks(), listUploads(since)]);
+    const [s, links, uploads, viewData] = await Promise.all([
+      shell("uploads"),
+      listChannelLinks(),
+      listUploads(since),
+      // A year and more of views, so every channel has twenty to compare with.
+      loadVideoViews(new Date(now.getTime() - 400 * 86_400_000)),
+    ]);
     const cadence = channels.map((name) =>
       cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now),
     );
+    const perf = scoreAll(viewData, now);
+    const typical = new Map(
+      channels.map((name) => [name, typicalViews(viewData.filter((v) => v.channel === name), now)] as const),
+    );
     return reply.type("text/html").send(
-      renderUploads(s, { channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()) }, now),
+      renderUploads(
+        s,
+        { channels, links, uploads, cadence, range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()), perf, typical },
+        now,
+      ),
     );
   });
 
@@ -495,11 +511,13 @@ export async function startWeb(): Promise<void> {
       if (typeof body[name] === "string") await setChannelLink(name, body[name]!);
     }
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
+    await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
     return reply.redirect("/uploads");
   });
 
   app.post("/uploads/check", async (_req, reply) => {
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
+    await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
     return reply.redirect("/uploads");
   });
 
@@ -698,6 +716,8 @@ export async function startWeb(): Promise<void> {
     const read = (why: string) =>
       syncUploads()
         .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
+        .then(() => announceBreakouts())
+        .then((n) => n && console.log(`[uploads] announced ${n} breakout${n === 1 ? "" : "s"}`))
         .catch((err) => console.error("[uploads] read failed:", err));
     cron.schedule("7 * * * *", () => void read("hourly"));
     setTimeout(() => void read("boot"), 20_000).unref();
