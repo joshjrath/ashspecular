@@ -7,7 +7,7 @@
  * Runs with no API key and no database, so it stays fast enough to run on
  * every change to derive.ts or the catalog.
  */
-import { CATEGORIES, CHANNELS, matchChannel } from "../src/catalog.js";
+import { CATEGORIES, CHANNELS, channelInk, matchChannel } from "../src/catalog.js";
 import {
   ORG_TZ,
   dateIn,
@@ -371,9 +371,19 @@ const ratio = (a: string, b: string) => {
 t("every channel has a colour", CHANNELS.every((c) => /^#[0-9A-F]{6}$/i.test(c.color)), true);
 t("all 30 are different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, 30);
 t("none reuses a category colour", CHANNELS.some((c) => CATEGORIES.some((k) => k.color.toUpperCase() === c.color.toUpperCase())), false);
-t("each reads as text on the white cards (4.5:1)", CHANNELS.filter((c) => ratio(c.color, "#FFFFFF") < 4.5).map((c) => c.name), []);
-t("and on the hover row (4.5:1)", CHANNELS.filter((c) => ratio(c.color, "#F4F4F5") < 4.5).map((c) => c.name), []);
-t("each shows as a dot on the dark rail (3:1)", CHANNELS.filter((c) => ratio(c.color, "#161618") < 3).map((c) => c.name), []);
+t("each name reads as text on the white cards (4.5:1)", CHANNELS.filter((c) => ratio(channelInk(c.color), "#FFFFFF") < 4.5).map((c) => c.name), []);
+t("and on the hover row (4.5:1)", CHANNELS.filter((c) => ratio(channelInk(c.color), "#F4F4F5") < 4.5).map((c) => c.name), []);
+t("a readable colour is written as itself", channelInk("#D21B20"), "#D21B20");
+t("FNAF yellow is written darker", ratio(channelInk("#D2BD1B"), "#FFFFFF") >= 4.5 && channelInk("#D2BD1B") !== "#D2BD1B", true);
+
+const avatar: Record<string, string> = {
+  "Specular Studios": "#D21B20", "Specular Anime": "#360D7B", "Specular FNAF": "#D2BD1B",
+  "Specular Horror": "#7AC0D1", "Specular Manga": "#959B9D", "Specular Verse": "#05157D",
+  "Specular Animation": "#D39B7C", "Specular Comics": "#1BC0D2", "Specular Documentaries": "#1BD058",
+  "Specular Force": "#E26570", "Specular YOU": "#F17949", "Specular Battles": "#A20E82",
+};
+t("Stories channels wear their avatar colours exactly",
+  Object.entries(avatar).filter(([n, hex]) => CHANNELS.find((c) => c.name === n)?.color !== hex).map(([n]) => n), []);
 t("category colours are unchanged", CATEGORIES.map((c) => c.color), ["#35986A", "#4A5CD4", "#CE7118", "#AC63C8", "#A63F66"]);
 
 // ── sorting lists ─────────────────────────────────────────────────────────

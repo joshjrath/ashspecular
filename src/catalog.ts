@@ -67,12 +67,13 @@ export interface Channel {
   /**
    * The channel's own colour, distinct from every other channel's. Its
    * category keeps its colour for category-level things — the chart, the
-   * tiles, the toggles — and the channel's name and dot wear this one.
+   * tiles, the toggles — and the channel's dot and name wear this one.
    *
-   * Generated, not picked: each reads as text on the white cards (4.5:1, and
-   * on the hover row) and as a dot on the dark rail (3:1), and the thirty are
-   * spread as far apart as those limits allow, with channels in the same
-   * category kept furthest apart — they are the ones shown side by side.
+   * The Stories channels use their YouTube avatar colours, sampled from the
+   * avatars themselves. The rest were generated to sit apart from each other.
+   * This is the exact colour, and every dot shows it exactly; channelInk()
+   * gives the shade its name is written in, which is this colour whenever
+   * that can be read and a darker shade of it when it can't.
    */
   color: string;
   category: CategoryId;
@@ -107,20 +108,20 @@ export const CHANNELS: Channel[] = [
   { id: "roblox", name: "Specular Roblox", color: "#047E67", category: "gaming", aliases: ["roblox"] },
 
   // ── Stories ─────────────────────────────────────────────────────────────
-  { id: "studios", name: "Specular Studios", color: "#0B66D6", category: "stories", aliases: ["studios", "specular studio"] },
-  { id: "anime", name: "Specular Anime", color: "#CB3904", category: "stories" },
-  { id: "comics", name: "Specular Comics", color: "#1C7F02", category: "stories" },
-  { id: "animation", name: "Specular Animation", color: "#A83DAA", category: "stories" },
+  { id: "studios", name: "Specular Studios", color: "#D21B20", category: "stories", aliases: ["studios", "specular studio"] },
+  { id: "anime", name: "Specular Anime", color: "#360D7B", category: "stories" },
+  { id: "comics", name: "Specular Comics", color: "#1BC0D2", category: "stories" },
+  { id: "animation", name: "Specular Animation", color: "#D39B7C", category: "stories" },
   { id: "law", name: "Specular Law", color: "#327780", category: "stories" },
-  { id: "manga", name: "Specular Manga", color: "#8A691B", category: "stories" },
-  { id: "fnaf", name: "Specular FNAF", color: "#8D5E76", category: "stories", aliases: ["fnaf", "five nights"] },
-  { id: "force", name: "Specular Force", color: "#7957D9", category: "stories" },
-  { id: "verse", name: "Specular Verse", color: "#C93573", category: "stories" },
-  { id: "horror", name: "Specular Horror", color: "#5C66A5", category: "stories" },
-  { id: "you", name: "Specular YOU", color: "#527446", category: "stories" },
-  { id: "battles", name: "Specular Battles", color: "#A45540", category: "stories" },
+  { id: "manga", name: "Specular Manga", color: "#959B9D", category: "stories" },
+  { id: "fnaf", name: "Specular FNAF", color: "#D2BD1B", category: "stories", aliases: ["fnaf", "five nights"] },
+  { id: "force", name: "Specular Force", color: "#E26570", category: "stories" },
+  { id: "verse", name: "Specular Verse", color: "#05157D", category: "stories" },
+  { id: "horror", name: "Specular Horror", color: "#7AC0D1", category: "stories" },
+  { id: "you", name: "Specular YOU", color: "#F17949", category: "stories" },
+  { id: "battles", name: "Specular Battles", color: "#A20E82", category: "stories" },
   { id: "survives", name: "Specular Survives", color: "#885AAA", category: "stories" },
-  { id: "documentaries", name: "Specular Documentaries", color: "#0275B3", category: "stories", aliases: ["specular docs"] },
+  { id: "documentaries", name: "Specular Documentaries", color: "#1BD058", category: "stories", aliases: ["specular docs"] },
 
   // ── Reading (each opens its day's batch automatically, like bits) ───────
   { id: "dc", name: "Specular DC", color: "#B75015", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
@@ -196,3 +197,36 @@ export function matchChannel(text: string | null): Channel | undefined {
 }
 
 export const BITS_CHANNELS = CHANNELS.filter((c) => c.recurring);
+
+// ── channel colours as text ─────────────────────────────────────────────────
+
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+/**
+ * The shade a channel's name is written in on the white cards. Its own colour
+ * when that reads at 4.5:1 — on the grey hover row too — and otherwise the
+ * same colour taken darker, step by step, only as far as it needs to go.
+ * FNAF's yellow can't be read as text on white; its name is written in a
+ * darker gold, and its dot stays the exact yellow.
+ */
+export function channelInk(hex: string): string {
+  const readable = (h: string) => contrastRatio(h, "#FFFFFF") >= 4.5 && contrastRatio(h, "#F4F4F5") >= 4.5;
+  if (readable(hex)) return hex.toUpperCase();
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  for (let f = 0.98; f > 0.2; f -= 0.02) {
+    const h = "#" + rgb.map((c) => Math.round(c * f).toString(16).padStart(2, "0")).join("").toUpperCase();
+    if (readable(h)) return h;
+  }
+  return "#3A3A40";
+}

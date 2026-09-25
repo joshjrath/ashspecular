@@ -55,11 +55,18 @@ square — on the chart, the tiles, the toggles and beside every title. Each of
 the thirty channels has its own colour on top of that, shown as a circle and
 on the channel's name. Square is category, circle is channel.
 
-The channel colours were generated rather than picked: every one reads as text
-on the white cards (4.5:1, on the grey hover row too) and as a dot on the dark
-rail (3:1), and the thirty are spread as far apart as those limits allow, with
-channels in the same category kept furthest from each other. The tests check
-all of that, so a hand-edited colour that fails it is caught.
+The Stories channels wear their YouTube avatar colours — sampled from the
+avatars, the background ring clear of the character — so Studios is #D21B20,
+FNAF #D2BD1B, Comics #1BC0D2. The other channels' colours were generated to sit
+apart from each other. Change any of them with `color` on the channel in
+`src/catalog.ts`.
+
+Every dot shows the exact colour, with a hairline ring so a pale one stays
+visible on white and a dark one on the rail. A channel's *name* is written in
+its exact colour whenever that can be read, and otherwise in a darker shade of
+the same colour, only as dark as it needs to be — FNAF's yellow can't be read
+as text on white, so its name is a deep gold and its dot is the yellow. The
+tests check every name reads at 4.5:1.
 
 **Sort** above every list — air date, video number, deadline, channel, title,
 newest. Pressing the active one reverses it. Blanks (no air date, no code)

@@ -10,7 +10,7 @@
  * carried by category so a glance tells you which side of the business a row
  * belongs to.
  */
-import { CATEGORIES, CHANNELS, type CategoryId } from "../catalog.js";
+import { CATEGORIES, CHANNELS, channelInk, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Stats, StoredRecord } from "../db/records.js";
 
@@ -240,8 +240,11 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   grid-column: 1; color: var(--ink3); font-size: 12.5px; display: flex; gap: 10px;
   flex-wrap: wrap; align-items: center; padding-left: 20px; letter-spacing: -0.005em;
 }
-.row .meta .chan { color: var(--ch); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
-.row .meta .chan i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); display: block; }
+.row .meta .chan { color: var(--ink, var(--ch)); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+/* Every dot is the channel's exact colour. The hairline ring keeps a pale one
+   (FNAF's yellow) visible on white and a dark one (Verse's navy) on the rail. */
+.row .meta .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); display: block;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
 .row .when { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row .when .d { font-family: var(--display); font-size: 14.5px; font-weight: 600; letter-spacing: -0.022em; }
 .row .when .z { color: var(--ink3); font-size: 11.5px; }
@@ -268,7 +271,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   letter-spacing: -0.012em;
 }
 .chanlist a:hover { background: #26262A; color: #fff; }
-.chanlist a .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.chanlist a .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(255,255,255,.28); }
 .chanlist .n { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 12.5px; opacity: .7; }
 .back { color: #6A6A73; font-size: 13px; }
 .brief {
@@ -344,7 +347,7 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cattoggle.all { background: transparent; color: #9A9AA3; }
 .draghint { color: #6A6A73; font-size: 12px; margin-left: auto; }
 .cal .chip { box-shadow: inset 3px 0 0 var(--c); }
-.cal .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; }
+.cal .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
 .cal .more { font-size: 11px; color: var(--ink3); padding: 2px 8px; font-weight: 700; }
 .cal .more:hover { color: var(--ink); }
@@ -404,7 +407,7 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .batch .who { display: flex; align-items: center; gap: 12px; min-width: 250px; }
 .batch .tick button { width: 26px; height: 26px; font-size: 12px; }
 .tick-space { width: 26px; flex: none; }
-.batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; }
+.batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
 .batch .name { font-weight: 600; min-width: 160px; }
 .batch .bar {
   flex: 1; height: 7px; border-radius: 999px; background: #E2E2E5; overflow: hidden; min-width: 60px;
@@ -663,7 +666,7 @@ function row(r: StoredRecord): string {
   const meta: string[] = [];
   if (r.channel) {
     meta.push(
-      `<a class="chan" style="--ch:${channelColour(r.channel)}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`,
+      `<a class="chan" style="--ch:${channelColour(r.channel)};--ink:${channelInk(channelColour(r.channel))}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`,
     );
   } else {
     meta.push(`<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`);
