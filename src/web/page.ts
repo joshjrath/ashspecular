@@ -697,6 +697,52 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   .batch .bar, .batch .pips { order: 3; flex-basis: 100%; }
 }
 
+/* ── working ahead ──────────────────────────────────────────────────────── */
+.aheadbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.aheadbar .nav {
+  background: var(--sunk); border-radius: 999px; padding: 8px 14px; font-size: 13px; color: var(--ink2); font-weight: 600;
+}
+.aheadbar .nav:hover { background: var(--line); color: var(--ink); }
+.aheadbar .nav[aria-disabled="true"] { pointer-events: none; color: #6E6E78; }
+.aheadbar input[type="date"] {
+  padding: 8px 12px; border-radius: 12px; border: 0; background: var(--sunk); color: var(--ink);
+  font: inherit; font-size: 13px; color-scheme: dark;
+}
+.panel .aheadbar form { margin-top: 0; }
+.aheadbar .quick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.aheadbar .quick:first-of-type { margin-left: auto; }
+.aheadbar .quick span { color: var(--ink3); font-size: 12.5px; }
+.chipbtn {
+  border: 0; cursor: pointer; border-radius: 999px; padding: 8px 13px; background: var(--sunk);
+  color: var(--ink2); font: 600 12.5px var(--ui);
+}
+.chipbtn:hover { background: var(--line); color: var(--ink); }
+.chipbtn.go { background: var(--salmon); color: #101012; }
+.daychips { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 6px; margin-bottom: 18px; }
+.daychip {
+  display: flex; flex-direction: column; gap: 3px; padding: 9px 9px 8px; border-radius: 12px;
+  background: var(--sunk); color: var(--ink2); min-width: 0;
+}
+.daychip:hover { background: var(--line); }
+.daychip.on { box-shadow: inset 0 0 0 2px var(--yellow); }
+.daychip b { font-family: var(--display); font-size: 13px; color: var(--ink); letter-spacing: -0.02em; }
+.daychip span { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.daychip i { display: block; height: 4px; border-radius: 999px; background: #3A3A42; overflow: hidden; margin-top: 2px; }
+.daychip i em { display: block; height: 100%; background: var(--ok); }
+.daychip small { font-size: 10.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daychip.none { background: transparent; box-shadow: inset 0 0 0 1px #34343B; }
+.daychip.none.on { box-shadow: inset 0 0 0 2px var(--yellow); }
+.daychip.part small { color: var(--warn); }
+.aheadday { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
+.aheadday h3 { font-family: var(--display); font-size: 17px; letter-spacing: -0.03em; margin: 0; }
+.panel .aheadday form { margin-top: 0; }
+@media (max-width: 1100px) {
+  .daychips { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84px; overflow-x: auto; padding-bottom: 6px; }
+}
+@media (max-width: 760px) {
+  .aheadbar .quick:first-of-type { margin-left: 0; }
+}
+
 /* ── phone ─────────────────────────────────────────────────────────────────
    Not a shrunken desktop. The rail becomes a scrolling strip of pills at the
    top, every row drops to one column so a title has the full width instead of
@@ -2352,6 +2398,8 @@ export function renderRecurring(
   today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
   ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
   list: StoredRecord[],
+  strip: Array<{ date: string; channels: number; total: number; done: number }> = [],
+  maxAhead = 90,
 ): string {
   const categoryOf = (channel: string) => CHANNELS.find((ch) => ch.name === channel)?.category ?? "bits";
 
@@ -2409,7 +2457,35 @@ export function renderRecurring(
       weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
     }).format(new Date(`${d}T12:00:00Z`));
 
-  const aheadOpen = ahead.rows.some((r) => r.total > 0);
+  // A channel is missing on a day when nothing of it is there — not even a
+  // batch someone removed on purpose, which must stay removed.
+  const missing = ahead.rows.filter((r) => r.total === 0 && r.removed === 0).length;
+  const channelCount = ahead.rows.length;
+  const firstAhead = strip[0]?.date ?? ahead.date;
+  const shift = (d: string, by: number) => {
+    const x = new Date(`${d}T12:00:00Z`);
+    x.setUTCDate(x.getUTCDate() + by);
+    return x.toISOString().slice(0, 10);
+  };
+  const lastAllowed = shift(firstAhead, maxAhead - 1);
+
+  // Two weeks at a glance: how much of each day is open, and how much is done.
+  const chips = strip
+    .map((d) => {
+      const at = new Date(`${d.date}T12:00:00Z`);
+      const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(at);
+      const state = d.channels === 0 ? "none" : d.channels < channelCount ? "part" : "full";
+      const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+      return `<a class="daychip ${state}${d.date === ahead.date ? " on" : ""}" href="/recurring?day=${d.date}"
+          title="${esc(usDate(d.date))}: ${
+            d.channels === 0 ? "not open" : `${d.channels}/${channelCount} channels open · ${d.done}/${d.total} uploads done`
+          }">
+        <b>${esc(wd)}</b><span>${esc(usDate(d.date).replace(/\/\d{4}$/, ""))}</span>
+        <i><em style="width:${pct}%"></em></i>
+        <small>${d.channels === 0 ? "not open" : d.channels < channelCount ? `${d.channels}/${channelCount} open` : `${d.done}/${d.total}`}</small>
+      </a>`;
+    })
+    .join("");
 
   // One labelled block per recurring category — Reading, then Bits — so a
   // dozen lines read as two short lists rather than one long one.
@@ -2440,17 +2516,50 @@ export function renderRecurring(
       ${sections(today.rows, today.date)}
     </div>
 
-    <div class="panel" style="margin-bottom:14px">
-      <h2>Tomorrow · ${esc(pretty(ahead.date))}</h2>
+    <div class="panel ahead" style="margin-bottom:14px">
+      <h2>Ahead</h2>
+      <div class="aheadbar">
+        <a class="nav" href="/recurring?day=${shift(ahead.date, -1)}" aria-label="Previous day"${
+          ahead.date <= firstAhead ? ' aria-disabled="true" tabindex="-1"' : ""
+        }>←</a>
+        <form method="get" action="/recurring" class="daypick">
+          <input type="date" name="day" value="${ahead.date}" min="${firstAhead}" aria-label="Pick a day"
+            onchange="this.form.submit()">
+        </form>
+        <a class="nav" href="/recurring?day=${shift(ahead.date, 1)}" aria-label="Next day">→</a>
+        <form method="post" action="/recurring/ahead" class="quick">
+          <span>Open the next</span>
+          <button class="chipbtn" name="days" value="7">7 days</button>
+          <button class="chipbtn" name="days" value="14">14 days</button>
+          <button class="chipbtn" name="days" value="30">30 days</button>
+        </form>
+        <form method="post" action="/recurring/ahead" class="quick">
+          <span>or through</span>
+          <input type="date" name="through" min="${firstAhead}" max="${lastAllowed}" value="${shift(firstAhead, 6)}" aria-label="Open every day through">
+          <button class="chipbtn go">Open</button>
+        </form>
+      </div>
+      <div class="daychips">${chips}</div>
+
+      <div class="aheadday">
+        <h3>${esc(pretty(ahead.date))}</h3>
+        ${
+          missing
+            ? `<form method="post" action="/recurring/ahead" class="openday">
+                 <input type="hidden" name="day" value="${ahead.date}">
+                 <button class="clear">${
+                   missing === channelCount ? "Open this day" : `Open the ${missing} channel${missing === 1 ? "" : "s"} not open yet`
+                 }</button>
+               </form>`
+            : ""
+        }
+      </div>
       ${
-        aheadOpen
-          ? `${sections(ahead.rows, ahead.date)}
-             <p class="hint">Already open. Clear anything you get ahead on and it stays cleared —
-             the morning run finds these and leaves them alone.</p>`
-          : `<p class="hint">Not open yet. They open by themselves in the morning.</p>
-             <form method="post" action="/recurring/ahead">
-               <button class="clear">Work ahead — open tomorrow now</button>
-             </form>`
+        missing === channelCount
+          ? `<p class="hint">Nothing open for this day yet. It opens by itself that morning — or open it now to work ahead.</p>`
+          : `${sections(ahead.rows, ahead.date)}
+             <p class="hint">Clear anything you get ahead on and it stays cleared — the morning run finds
+             these and leaves them alone.</p>`
       }
     </div>
 

@@ -188,10 +188,15 @@ cleared and counts once toward "cleared this week"; stepping back reopens it.
 Each group header totals its uploads — "7/25", "12/27". Change a number with
 `units` on the channel in `src/catalog.ts`.
 
-**Working ahead** is the button on that page. It opens tomorrow's batches now,
-so you can clear them today. Tomorrow morning's run finds them already there
-and leaves them exactly as you left them, cleared ones included — the opener
-keys every batch by channel, date and index, so it can never double-open.
+**Working ahead** — the Ahead panel on that page goes as far forward as you
+like. Step a day at a time with the arrows, jump with the date box, or pick
+from the next two weeks, each shown with how much of it is open and done.
+Open the next 7, 14 or 30 days in one press, or every day through a date (up
+to 90 days out). A day that is only partly open — a channel added since it
+was opened — offers to open just the channels it's missing. Each morning's
+run finds opened days already there and leaves them exactly as you left
+them, cleared ones included — the opener keys every batch by channel, date
+and index, so it can never double-open. Ticking a day ahead keeps you on it.
 
 Run it by hand any time:
 

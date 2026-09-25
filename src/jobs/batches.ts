@@ -14,7 +14,7 @@
  */
 import { CHANNELS, type Channel } from "../catalog.js";
 import { pool } from "../db/pool.js";
-import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
+import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate } from "../parse/derive.js";
 
 /** Bits channels, in catalog order. */
 export function recurringChannels(): Channel[] {
@@ -75,6 +75,49 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
   }
 
   return { date, opened, alreadyThere };
+}
+
+/** The furthest ahead one press may open: a quarter of a year. */
+export const MAX_AHEAD_DAYS = 90;
+
+/**
+ * Open every day from `from` to `to`, inclusive. The opener is idempotent, so
+ * a day that is already open is left exactly as it is — and a day that is
+ * only partly open (a channel added since) gets just the channels it lacks.
+ */
+export async function openBatchesThrough(from: string, to: string): Promise<{ opened: number; days: number }> {
+  let opened = 0;
+  let days = 0;
+  for (let d = from; d <= to && days < MAX_AHEAD_DAYS; d = shiftDate(d, 1)) {
+    opened += (await openBatchesFor(d)).opened;
+    days += 1;
+  }
+  return { opened, days };
+}
+
+/** For each day in a range: how many channels are open, and uploads done of total. */
+export async function batchDays(
+  from: string,
+  to: string,
+): Promise<Array<{ date: string; channels: number; total: number; done: number }>> {
+  const { rows } = await pool.query<{ date: string; channels: string; total: string; done: string }>(
+    `SELECT to_char(air_date, 'YYYY-MM-DD') AS date,
+            COUNT(DISTINCT channel) FILTER (WHERE status <> 'removed') AS channels,
+            COALESCE(SUM(COALESCE(batch_target, 1)) FILTER (WHERE status <> 'removed'), 0) AS total,
+            COALESCE(SUM(CASE WHEN status = 'done' THEN COALESCE(batch_target, 1)
+                              WHEN status = 'open' THEN batch_done ELSE 0 END), 0) AS done
+     FROM records
+     WHERE batch_no IS NOT NULL AND air_date BETWEEN $1 AND $2
+     GROUP BY air_date`,
+    [from, to],
+  );
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+  const out: Array<{ date: string; channels: number; total: number; done: number }> = [];
+  for (let d = from; d <= to; d = shiftDate(d, 1)) {
+    const r = byDate.get(d);
+    out.push({ date: d, channels: Number(r?.channels ?? 0), total: Number(r?.total ?? 0), done: Number(r?.done ?? 0) });
+  }
+  return out;
 }
 
 /** Tomorrow, in the studio's zone. */

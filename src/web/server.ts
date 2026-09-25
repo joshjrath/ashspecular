@@ -41,7 +41,7 @@ import {
   instantIn,
   shiftDate,
 } from "../parse/derive.js";
-import { batchStatus, openBatchesFor, setBatchProgress, tomorrow } from "../jobs/batches.js";
+import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -366,31 +366,57 @@ export async function startWeb(): Promise<void> {
       .send(renderList(s, "Late", "Nothing is late.", list, listSort(request, reply)));
   });
 
-  app.get("/recurring", async (_req, reply) => {
-    const t = tomorrow();
-    const [s, todayRows, aheadRows, list] = await Promise.all([
+  // Today, and any day ahead — ?day= picks it, tomorrow by default.
+  app.get<{ Querystring: { day?: string } }>("/recurring", async (request, reply) => {
+    const today = dateIn(ORG_TZ);
+    const first = tomorrow();
+    const picked = safeDate(request.query.day);
+    const day = picked && picked >= first ? picked : first;
+    const [s, todayRows, aheadRows, list, strip] = await Promise.all([
       shell("recurring"),
-      batchStatus(dateIn(ORG_TZ)),
-      batchStatus(t),
-      listBatchesOn(dateIn(ORG_TZ)),
+      batchStatus(today),
+      batchStatus(day),
+      listBatchesOn(today),
+      batchDays(first, shiftDate(first, 13)),
     ]);
     return reply
       .type("text/html")
       .send(
         renderRecurring(
           s,
-          { date: dateIn(ORG_TZ), rows: todayRows },
-          { date: t, rows: aheadRows },
+          { date: today, rows: todayRows },
+          { date: day, rows: aheadRows },
           list,
+          strip,
+          MAX_AHEAD_DAYS,
         ),
       );
   });
 
-  // Working ahead: the opener is idempotent, so tomorrow's morning run finds
-  // these already there and leaves them — including anything already cleared.
-  app.post("/recurring/ahead", async (_req, reply) => {
-    await openBatchesFor(tomorrow());
-    return reply.redirect("/recurring");
+  // Working ahead, as far as you like: one day (day=), the next N days
+  // (days=), or every day through a date (through=). The opener is
+  // idempotent, so a morning run later finds these and leaves them alone —
+  // cleared ones included — and a partly open day gets only what it lacks.
+  app.post<{ Body: { day?: string; days?: string; through?: string } }>("/recurring/ahead", async (request, reply) => {
+    const first = tomorrow();
+    const body = request.body ?? {};
+    const day = safeDate(body.day);
+    const through = safeDate(body.through);
+    const n = Math.min(Math.max(Number(body.days) || 0, 0), MAX_AHEAD_DAYS);
+    let show = first;
+    if (day && day >= first) {
+      await openBatchesFor(day);
+      show = day;
+    } else if (through && through >= first) {
+      const last = through <= shiftDate(first, MAX_AHEAD_DAYS - 1) ? through : shiftDate(first, MAX_AHEAD_DAYS - 1);
+      await openBatchesThrough(first, last);
+      show = first;
+    } else if (n > 0) {
+      await openBatchesThrough(first, shiftDate(first, n - 1));
+    } else {
+      await openBatchesFor(first);
+    }
+    return reply.redirect(`/recurring?day=${show}`);
   });
 
   app.get<{ Params: { name: string } }>("/channel/:name", async (request, reply) => {
@@ -517,7 +543,7 @@ export async function startWeb(): Promise<void> {
       if (channel && date && Number.isInteger(done) && CHANNELS.some((c) => c.name === channel)) {
         await setBatchProgress(channel, date, done);
       }
-      return reply.redirect("/recurring");
+      return reply.redirect(backTo(request.headers.referer, "/recurring"));
     },
   );
 
@@ -527,7 +553,7 @@ export async function startWeb(): Promise<void> {
     if (channel && date && CHANNELS.some((c) => c.name === channel)) {
       await clearBatches(channel, date);
     }
-    return reply.redirect("/recurring");
+    return reply.redirect(backTo(request.headers.referer, "/recurring"));
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
