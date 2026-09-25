@@ -29,6 +29,8 @@ export interface StoredRecord extends DerivedRecord {
   sourceAuthor: string | null;
   /** The message as it arrived, so a row with no title can show its own words. */
   raw: string;
+  /** Set on recurring batches only. */
+  batchNo: number | null;
   createdAt: Date;
 }
 
@@ -101,6 +103,48 @@ export async function refile(id: number, r: DerivedRecord, parsedBy: string): Pr
   );
 }
 
+/**
+ * Move a record's air date — a drag on the calendar, or the date box on its
+ * page. A VO deadline that was worked out from the old air date is worked out
+ * again from the new one; one that someone stated is theirs and is left alone.
+ * Recurring batches never get a VO. Null clears the air date.
+ */
+export async function moveAir(id: number, airDate: string | null, calculatedVo: Date | null): Promise<void> {
+  await pool.query(
+    `UPDATE records SET
+       air_date = $2::date,
+       vo_due = CASE
+         WHEN batch_no IS NOT NULL THEN vo_due
+         WHEN vo_source IN ('calculated', 'none') THEN $3::timestamptz
+         ELSE vo_due END,
+       vo_source = CASE
+         WHEN batch_no IS NOT NULL THEN vo_source
+         WHEN vo_source IN ('calculated', 'none') THEN CASE WHEN $3::timestamptz IS NULL THEN 'none' ELSE 'calculated' END
+         ELSE vo_source END,
+       updated_at = now()
+     WHERE id = $1`,
+    [id, airDate, calculatedVo],
+  );
+  // Moved means it may no longer be late — and if it goes late again, it
+  // deserves a fresh nudge rather than silence.
+  await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+}
+
+/**
+ * Move whichever deadline the calendar is showing for a record — the VO time
+ * if it has one, then any other deadline, then the script's — to another day,
+ * keeping its time of day. A hand-moved VO time is a stated one from then on.
+ */
+export async function moveDue(
+  id: number,
+  field: "vo_due" | "deadline" | "script_due",
+  at: Date,
+): Promise<void> {
+  const extra = field === "vo_due" ? ", vo_source = 'stated'" : "";
+  await pool.query(`UPDATE records SET ${field} = $2${extra}, updated_at = now() WHERE id = $1`, [id, at]);
+  await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+}
+
 /** Correct where a record is filed, from the Discord card. */
 export async function updateFiling(
   id: number,
@@ -148,6 +192,7 @@ interface Row {
   source_url: string | null;
   source_author: string | null;
   raw_content: string;
+  batch_no: number | null;
   created_at: Date;
 }
 
@@ -179,6 +224,7 @@ function hydrate(r: Row): StoredRecord {
     sourceUrl: r.source_url,
     sourceAuthor: r.source_author,
     raw: r.raw_content ?? "",
+    batchNo: r.batch_no ?? null,
     createdAt: r.created_at,
   };
 }
@@ -186,7 +232,7 @@ function hydrate(r: Row): StoredRecord {
 const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
   air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, created_at FROM records`;
+  source_url, source_author, raw_content, batch_no, created_at FROM records`;
 
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
@@ -397,6 +443,15 @@ export async function clearBatches(channel: string, date: string): Promise<numbe
   return rowCount ?? 0;
 }
 
+/** Today's recurring batches still open — the Recurring count in the rail. */
+export async function openBatchCount(date: string): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `SELECT COUNT(*) AS n FROM records WHERE batch_no IS NOT NULL AND air_date = $1 AND status = 'open'`,
+    [date],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** What has been removed, newest first — where Restore lives. */
 export async function listRemoved(limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
@@ -462,12 +517,12 @@ export async function calendarRange(
     `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
        air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
        version, links, brief, note, status, parsed_by, confidence, warnings,
-       source_url, source_author, raw_content, created_at
+       source_url, source_author, raw_content, batch_no, created_at
      FROM records
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed'
-     -- Bits sort last within a day: 35 batches would otherwise bury the one
-     -- video that is actually airing.
-     ORDER BY 1 ASC, (category = 'bits') ASC, category ASC, created_at ASC
+     -- Recurring batches sort last within a day: a dozen of them would
+     -- otherwise bury the one video that is actually airing.
+     ORDER BY 1 ASC, (batch_no IS NOT NULL) ASC, category ASC, created_at ASC
      LIMIT 1000`,
     params,
   );

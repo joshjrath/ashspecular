@@ -61,7 +61,7 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
         `INSERT INTO records (
            kind, category, channel, code, title, air_date, deadline, vo_source,
            status, parsed_by, confidence, batch_no, source_message_id, raw_content
-         ) VALUES ('bits', 'bits', $1, $2, $3, $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '')
+         ) VALUES ($8, $9, $1, $2, $3, $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '')
          ON CONFLICT (source_message_id) DO NOTHING`,
         [
           channel.name,
@@ -71,6 +71,9 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
           deadline,
           n,
           key(channel, date, i),
+          // A batch takes its channel's category — Reading batches are Reading.
+          channel.category === "bits" ? "bits" : "update",
+          channel.category,
         ],
       );
 

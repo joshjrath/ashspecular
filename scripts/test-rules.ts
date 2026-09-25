@@ -22,6 +22,7 @@ import { parseAssignment, parseReview } from "../src/parse/structured.js";
 import { calendarGrid, shiftMonth } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
+import { relativeDay, usDate } from "../src/parse/derive.js";
 
 let pass = 0;
 let fail = 0;
@@ -331,6 +332,22 @@ t("an unreadable VO label goes to the model, not a guess", parseReview("smp ep 9
 const unread = parseReview("smp ep 9 https://f.io/a\nDeadline: soonish", thu)!;
 t("an unreadable deadline is left blank", unread.deadline, null);
 t("and says so", (unread.note ?? "").includes("couldn't read it"), true);
+
+// ── how dates are shown ───────────────────────────────────────────────────
+section("dates on screen");
+
+const fri = new Date("2026-09-25T16:00:00Z");
+t("M/D/YYYY", usDate("2026-10-09"), "10/9/2026");
+t("no leading zeros", usDate("2026-01-05"), "1/5/2026");
+t("the Gojo case: airs in 3 days", relativeDay("2026-09-28", fri), "in 3 days");
+t("today", relativeDay("2026-09-25", fri), "today");
+t("tomorrow", relativeDay("2026-09-26", fri), "tomorrow");
+t("yesterday", relativeDay("2026-09-24", fri), "yesterday");
+t("already aired", relativeDay("2026-09-20", fri), "5 days ago");
+t("late evening ET is still today, not tomorrow in UTC", relativeDay("2026-09-25", new Date("2026-09-26T03:30:00Z")), "today");
+
+t("the five reading channels open daily", CHANNELS.filter((c) => c.category === "reading").every((c) => c.recurring?.perDay === 1), true);
+t("twelve recurring channels in all", CHANNELS.filter((c) => c.recurring).length, 12);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

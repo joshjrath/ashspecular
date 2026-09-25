@@ -14,7 +14,7 @@ import { CATEGORIES } from "../catalog.js";
 import { config } from "../config.js";
 import { pool } from "../db/pool.js";
 import { listBatchesOn, type StoredRecord } from "../db/records.js";
-import { ORG_TZ, TEAM_TZ, dateIn, renderIn } from "../parse/derive.js";
+import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, renderIn } from "../parse/derive.js";
 
 const COLOUR = Number.parseInt(
   (CATEGORIES.find((c) => c.id === "stories")?.color ?? "#4A5CD4").slice(1),
@@ -49,9 +49,10 @@ export async function buildDigest(date = dateIn(ORG_TZ)): Promise<Digest> {
     .sort((a, b) => (a.voDue!.getTime() - b.voDue!.getTime()))
     .slice(0, config.digestCount);
 
-  // Bits are summarised on their own line, so they stay out of these two or
-  // seven batches would drown the four things that actually need deciding.
-  const rest = open.filter((r) => r.category !== "bits");
+  // Recurring batches (bits and reading) are summarised on their own line, so
+  // they stay out of these two or a dozen batches would drown the four things
+  // that actually need deciding.
+  const rest = open.filter((r) => r.parsedBy !== "recurring");
 
   const late = rest
     .filter((r) => {
@@ -83,14 +84,14 @@ function line(r: StoredRecord): string {
     : r.deadline
       ? `due ${renderIn(r.deadline, ORG_TZ, "ET")}`
       : "no deadline";
-  const derived = r.voSource === "calculated" ? " *(air − 6d)*" : "";
+  const derived = r.voSource === "calculated" ? ` *(${VO_BUFFER_DAYS} days before air)*` : "";
   const where = r.channel ? ` · ${r.channel}` : "";
   const link = config.publicUrl ? ` · [open](${config.publicUrl}/r/${r.id})` : "";
   return `**${r.code ? `${r.code} ` : ""}${r.title ?? "(untitled)"}**${where}\n${when}${derived}${link}`;
 }
 
 export function renderDigestEmbed(d: Digest): EmbedBuilder {
-  const pretty = new Intl.DateTimeFormat("en-GB", {
+  const pretty = new Intl.DateTimeFormat("en-US", {
     weekday: "long", day: "numeric", month: "long", timeZone: ORG_TZ,
   }).format(new Date(`${d.date}T12:00:00Z`));
 
@@ -123,7 +124,7 @@ export function renderDigestEmbed(d: Digest): EmbedBuilder {
   }
 
   embed.addFields({
-    name: "Bits",
+    name: "Recurring",
     value: d.batches.total
       ? `${d.batches.done}/${d.batches.total} batches cleared${
           d.batches.late ? ` · **${d.batches.late} past their time**` : ""

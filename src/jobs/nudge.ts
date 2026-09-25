@@ -6,8 +6,8 @@
  * nudge is recorded against the record, which is what stops an hourly check
  * turning into an hourly nag about the same late video.
  *
- * Bits are left out: their batches go past 6pm most days by design, and a
- * notification you learn to ignore is worse than none.
+ * Recurring batches (bits and reading) are left out: they go past 6pm most
+ * days by design, and a notification you learn to ignore is worse than none.
  */
 import { EmbedBuilder, type SendableChannels } from "discord.js";
 import { config } from "../config.js";
@@ -30,7 +30,7 @@ export async function unNudged(): Promise<LateRow[]> {
      FROM records r
      LEFT JOIN nudges n ON n.record_id = r.id
      WHERE r.status = 'open'
-       AND r.category <> 'bits'
+       AND r.batch_no IS NULL
        AND n.record_id IS NULL
        AND COALESCE(r.vo_due, r.deadline, r.script_due) < now()
      ORDER BY due ASC

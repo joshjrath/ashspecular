@@ -34,28 +34,21 @@ to mean scrolling back through DMs.
 ![The calendar](docs/calendar.png)
 
 Two modes, switched top right: **Posting** plots the air date, **Deadlines**
-plots the day the work is due. Colour is category; a cell shows three and
-hides the rest behind "+N more". Click a chip for that record, a date for
-that whole day, and the arrows to move a month or a day at a time.
+plots the day the work is due.
 
-**Search** sits at the top of the rail on every page — titles, codes, channels,
-briefs, and the original message text.
+- **Drag** anything to another day to move it. In Posting that moves the air
+  date; in Deadlines it moves the deadline and keeps its time of day. A VO
+  deadline that was worked out from the air date follows it; one someone
+  stated stays put.
+- **Category toggles** above the grid hide or show a category. They double as
+  the legend, and the calendar remembers how you left them.
+- Click a chip for that record, a date for that whole day.
 
-**Two buttons on every row**, one tap each, and you stay on the same page:
+Every record's page also has an **air date box** — for a phone, where dragging
+is awkward, or for a date weeks out.
 
-- **✓ Clear** — the work is done. Counts toward "cleared this week".
-- **× Remove** — takes it off the board without counting it. For duplicates,
-  messages filed by mistake, a batch that isn't happening. It doesn't touch
-  "cleared this week".
-
-Removed records aren't deleted. They go to **Removed** at the bottom of the
-rail, where ↺ puts any of them back. That matters for bits: a removed batch
-stays removed, where a deleted one would be reopened by the next morning run.
-
-**Re-read**, on any record's page, reads the original message again with the
-parser as it is now. When the parser gets better, older records don't have to
-be posted again. A channel set by hand is kept when the fresh reading can't
-find one.
+Dates read M/D/YYYY everywhere, and every air date carries a live countdown:
+"airs 9/28/2026 · in 3 days", turning amber inside three days.
 
 **Channels** — every channel with its open count. Click one and you get
 everything filed under it, cleared items included.
@@ -67,15 +60,15 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
-## Recurring — the daily bits batches
+## Recurring — the daily batches
 
 ![Recurring](docs/recurring.png)
 
-Every bits channel opens its batches by itself each morning at 06:00 ET. You
-send nothing. Numbers run continuously per channel, so "FNAF Bits batch 141" is
+Every bits channel and every reading channel opens its batch by itself each
+morning at 06:00 ET — twelve a day, shown as two groups. You send nothing. Numbers run continuously per channel, so "FNAF Bits batch 141" is
 that channel's 141st batch ever, not its 141st this month.
 
-One batch per channel, seven a day. To change that, edit `perDay` on the
+One batch per channel, twelve a day. To change that, edit `perDay` on the
 channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
 morning follows it. Removing a channel's `recurring` block stops it opening at
 all.

@@ -9,7 +9,7 @@ import {
   type MessageActionRowComponentBuilder,
 } from "discord.js";
 import { CATEGORIES, CHANNELS } from "../catalog.js";
-import { renderBothZones, type DerivedRecord } from "../parse/derive.js";
+import { VO_BUFFER_DAYS, relativeDay, renderBothZones, usDate, type DerivedRecord } from "../parse/derive.js";
 
 const UNSORTED = "#8b8b8b";
 
@@ -39,7 +39,9 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
     { name: "Channel", value: record.channel ?? "— *not named*", inline: true },
   ];
 
-  if (record.airDate) fields.push({ name: "Airs", value: record.airDate, inline: true });
+  if (record.airDate) {
+    fields.push({ name: "Airs", value: `${usDate(record.airDate)} · ${relativeDay(record.airDate)}`, inline: true });
+  }
   if (record.stage) fields.push({ name: "Stage", value: record.stage, inline: true });
   if (record.wordCount) {
     fields.push({ name: "Words", value: record.wordCount.toLocaleString(), inline: true });
@@ -55,7 +57,7 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
 
   if (record.voDue) {
     const { org, team } = renderBothZones(record.voDue);
-    const suffix = record.voSource === "calculated" ? "  *(air date − 6 days)*" : "";
+    const suffix = record.voSource === "calculated" ? `  *(set ${VO_BUFFER_DAYS} days before air)*` : "";
     fields.push({ name: `VO due — ${record.voSource}`, value: `${org}\n${team}${suffix}` });
   } else if (record.kind === "assignment") {
     fields.push({ name: "VO due", value: "— *no air date to work from*" });

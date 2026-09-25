@@ -231,3 +231,29 @@ export function reconcileLinks(raw: string, modelLinks: Extraction["links"]): Ex
   }
   return [...byUrl.values()];
 }
+
+// ── how dates are shown ────────────────────────────────────────────────────
+
+/** "2026-09-28" → "9/28/2026", the way the studio writes dates. */
+export function usDate(dateISO: string | null): string {
+  if (!dateISO) return "";
+  const m = dateISO.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return dateISO;
+  return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+}
+
+/** Whole days from today (in the studio's zone) to a date. Negative is past. */
+export function daysUntil(dateISO: string, now: Date = new Date()): number {
+  const today = new Date(`${dateIn(ORG_TZ, now)}T12:00:00Z`).getTime();
+  const then = new Date(`${dateISO.slice(0, 10)}T12:00:00Z`).getTime();
+  return Math.round((then - today) / 86_400_000);
+}
+
+/** "today", "tomorrow", "in 3 days", "yesterday", "3 days ago". */
+export function relativeDay(dateISO: string, now: Date = new Date()): string {
+  const n = daysUntil(dateISO, now);
+  if (n === 0) return "today";
+  if (n === 1) return "tomorrow";
+  if (n === -1) return "yesterday";
+  return n > 0 ? `in ${n} days` : `${-n} days ago`;
+}

@@ -22,13 +22,22 @@ import {
   stats,
   listRemoved,
   removedCount,
+  openBatchCount,
   clearBatches,
   refile,
+  moveAir,
+  moveDue,
   type CalendarMode,
 } from "../db/records.js";
 import { migrate } from "../db/migrate.js";
 import { classify } from "../parse/classify.js";
-import { derive } from "../parse/derive.js";
+import {
+  DEADLINE_TIME,
+  VO_BUFFER_DAYS,
+  derive,
+  instantIn,
+  shiftDate,
+} from "../parse/derive.js";
 import { batchStatus, openBatchesFor, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import type { Shell } from "./page.js";
@@ -52,13 +61,14 @@ const PUBLIC = new Set(["/login", "/healthz"]);
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
     lastIntake(),
     monthEntries(monthOf()),
     removedCount(),
+    openBatchCount(dateIn(ORG_TZ)),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
@@ -67,7 +77,7 @@ async function shell(active: string): Promise<Shell> {
     nav: {
       reviews: reviews.length,
       queue,
-      recurring: counts.bits ?? 0,
+      recurring: batchesOpen,
       calendar: month.length,
     },
     lastIntake: at,
@@ -150,22 +160,40 @@ export async function startWeb(): Promise<void> {
 
   app.get<{ Params: { ym?: string }; Querystring: { mode?: string } }>(
     "/calendar/:ym",
-    async (request, reply) => calendar(request.params.ym, request.query.mode, reply),
+    async (request, reply) => calendar(request.params.ym, request.query.mode, request, reply),
   );
 
   app.get<{ Querystring: { mode?: string } }>("/calendar", async (request, reply) =>
-    calendar(undefined, request.query.mode, reply),
+    calendar(undefined, request.query.mode, request, reply),
   );
+
+  /**
+   * Which categories the calendar hides. An explicit ?hide= wins and is
+   * remembered in a cookie, so the calendar opens the way it was left.
+   */
+  function hiddenCategories(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply): string[] {
+    const q = (request.query as { hide?: string }).hide;
+    const raw = q ?? request.cookies.cal_hide ?? "";
+    const known = new Set(CATEGORIES.map((c) => c.id));
+    const hide = raw.split(",").filter((id) => known.has(id as never));
+    if (q !== undefined) {
+      reply.setCookie("cal_hide", hide.join(","), { path: "/", sameSite: "lax", httpOnly: true, maxAge: 60 * 60 * 24 * 365 });
+    }
+    return hide;
+  }
 
   async function calendar(
     ymRaw: string | undefined,
     modeRaw: string | undefined,
+    request: import("fastify").FastifyRequest,
     reply: import("fastify").FastifyReply,
   ) {
     const ym = safeMonth(ymRaw);
     const mode = safeMode(modeRaw);
+    const hide = hiddenCategories(request, reply);
     const [s, entries] = await Promise.all([shell("calendar"), monthEntries(ym, mode)]);
-    return reply.type("text/html").send(renderCalendar(s, ym, mode, entries));
+    const shown = entries.filter((e) => !hide.includes(e.record.category));
+    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide));
   }
 
   app.get<{ Params: { date: string }; Querystring: { mode?: string } }>(
@@ -316,6 +344,48 @@ export async function startWeb(): Promise<void> {
       fresh.category = current.category;
     }
     await refile(id, fresh, result.parsedBy);
+    return reply.redirect(`/r/${id}`);
+  });
+
+  /** The VO a new air date implies, by the studio's rule. */
+  const voFor = (air: string | null) =>
+    air ? instantIn(shiftDate(air, -VO_BUFFER_DAYS), DEADLINE_TIME, ORG_TZ) : null;
+
+  // A calendar drag. Posting mode moves the air date; Deadlines mode moves
+  // whichever deadline the calendar was showing, keeping its time of day.
+  app.post<{ Params: { id: string }; Body: { date?: string; mode?: string } }>(
+    "/r/:id/move",
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const date = safeDate(request.body?.date);
+      const record = await getRecord(id);
+      if (!record || !date) return reply.code(400).send({ ok: false });
+
+      if (safeMode(request.body?.mode) === "posting") {
+        await moveAir(id, date, voFor(date));
+      } else {
+        const field = record.voDue ? "vo_due" : record.deadline ? "deadline" : record.scriptDue ? "script_due" : null;
+        const current = record.voDue ?? record.deadline ?? record.scriptDue;
+        if (!field || !current) return reply.code(400).send({ ok: false });
+        const hhmm = new Intl.DateTimeFormat("en-GB", {
+          timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+        }).format(current);
+        const at = instantIn(date, hhmm, ORG_TZ);
+        if (!at) return reply.code(400).send({ ok: false });
+        await moveDue(id, field, at);
+      }
+      return reply.send({ ok: true });
+    },
+  );
+
+  // The date box on a record's page — for a phone, where dragging is awkward,
+  // or for a date weeks away. Empty clears it.
+  app.post<{ Params: { id: string }; Body: { air?: string } }>("/r/:id/air", async (request, reply) => {
+    const id = Number(request.params.id);
+    const raw = (request.body?.air ?? "").trim();
+    const date = raw ? safeDate(raw) : null;
+    if (raw && !date) return reply.redirect(`/r/${id}`);
+    await moveAir(id, date, voFor(date));
     return reply.redirect(`/r/${id}`);
   });
 

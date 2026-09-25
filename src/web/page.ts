@@ -11,7 +11,7 @@
  * belongs to.
  */
 import { CATEGORIES, CHANNELS, type CategoryId } from "../catalog.js";
-import { ORG_TZ, TEAM_TZ, dateIn, renderIn } from "../parse/derive.js";
+import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -238,7 +238,8 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 .row .when { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row .when .d { font-family: var(--display); font-size: 14.5px; font-weight: 600; letter-spacing: -0.022em; }
 .row .when .z { color: var(--ink3); font-size: 11.5px; }
-.row .when .derived { color: var(--warn); font-size: 11.5px; }
+.row .when .derived { color: var(--ink3); font-size: 11.5px; }
+.airs.soon { color: var(--warn); font-weight: 650; }
 .row .when .over { color: var(--late); font-size: 11.5px; font-weight: 700; }
 .pill { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 11px;
   background: var(--sunk); color: var(--ink2); font-weight: 600; }
@@ -320,6 +321,21 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   background: #fff; font-size: 11px; color: var(--ink2); min-width: 0; font-weight: 600;
 }
 .cal .chip:hover { background: var(--line); color: var(--ink); }
+.cal .chip[draggable] { cursor: grab; }
+.cal .chip.dragging { opacity: .35; }
+.cal .chip.saving { opacity: .6; }
+.cal .cell.over { box-shadow: inset 0 0 0 2px var(--ink); }
+.cattoggles { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 4px 14px; }
+.cattoggle {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  background: var(--rail); color: #D8D8DE; font-size: 13px; font-weight: 600;
+}
+.cattoggle i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); display: block; }
+.cattoggle:hover { background: #26262A; }
+.cattoggle.off { color: #6A6A73; }
+.cattoggle.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.cattoggle.all { background: transparent; color: #9A9AA3; }
+.draghint { color: #6A6A73; font-size: 12px; margin-left: auto; }
 .cal .chip .dot { width: 6px; height: 6px; border-radius: 2px; background: var(--c); flex: none; }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
 .cal .more { font-size: 11px; color: var(--ink3); padding: 2px 8px; font-weight: 700; }
@@ -382,6 +398,20 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 }
 .batch.done .state { color: var(--gm); }
 .batch.done .bar > span { background: var(--gm); }
+.airform { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.airform label { font-family: var(--display); font-weight: 700; color: #fff; font-size: 15px; }
+.airform input {
+  padding: 10px 14px; border-radius: 12px; border: 0; background: var(--card); color: var(--ink);
+  font: inherit; font-size: 14px; color-scheme: light;
+}
+.airform .hint { margin: 0; }
+.batch-group + .batch-group { margin-top: 18px; }
+.batch-head {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 9px 4px;
+  font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: -0.02em;
+}
+.batch-head .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+.batch-head .n { margin-left: auto; font-family: var(--ui); font-weight: 600; font-size: 12px; color: var(--ink3); padding-right: 4px; }
 .hint { color: var(--ink3); font-size: 12.5px; margin: 14px 0 0; max-width: 560px; line-height: 1.6; }
 .panel form { margin-top: 14px; }
 @media (max-width: 760px) {
@@ -568,7 +598,7 @@ function timeAgo(at: Date): string {
 
 function pageHeader(title: string): string {
   const now = new Date();
-  const day = new Intl.DateTimeFormat("en-GB", {
+  const day = new Intl.DateTimeFormat("en-US", {
     timeZone: ORG_TZ, weekday: "long", day: "numeric", month: "long",
   }).format(now);
   return `<header class="page">
@@ -608,7 +638,7 @@ function row(r: StoredRecord): string {
   if (r.stage) meta.push(esc(r.stage));
   if (r.version) meta.push(`v${r.version}`);
   if (r.wordCount) meta.push(`${r.wordCount.toLocaleString()} words`);
-  if (r.airDate) meta.push(`airs ${esc(r.airDate)}`);
+  if (r.airDate) meta.push(airs(r));
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
 
   const links = r.links.length
@@ -653,6 +683,19 @@ function actions(r: StoredRecord): string {
   </div>`;
 }
 
+/**
+ * "airs 9/28/2026 · in 3 days". The countdown is computed on every page load,
+ * so it is always today's answer — and it turns warm inside three days.
+ */
+function airs(r: StoredRecord): string {
+  if (!r.airDate) return "";
+  const n = daysUntil(r.airDate);
+  const soon = r.status === "open" && n >= 0 && n <= 3;
+  return `<span class="airs${soon ? " soon" : ""}">airs ${esc(usDate(r.airDate))} · ${esc(
+    relativeDay(r.airDate),
+  )}</span>`;
+}
+
 function when(r: StoredRecord): string {
   const at = r.voDue ?? r.deadline ?? r.scriptDue;
   if (!at) return `<div class="stack"><span class="z">—</span></div>`;
@@ -663,7 +706,7 @@ function when(r: StoredRecord): string {
     <div class="d">${esc(renderIn(at, ORG_TZ, "ET"))}</div>
     <div class="z">${esc(label)} · ${esc(renderIn(at, TEAM_TZ, "IST"))}</div>
     ${over ? `<div class="over">past its time</div>` : ""}
-    ${r.voDue && r.voSource === "calculated" ? `<div class="derived">air date − 6 days</div>` : ""}
+    ${r.voDue && r.voSource === "calculated" ? `<div class="derived">VO set ${VO_BUFFER_DAYS} days before air</div>` : ""}
   </div>`;
 }
 
@@ -744,10 +787,10 @@ function dueChart(buckets: DayBucket[]): string {
 
       const at = b.date ? new Date(`${b.date}T12:00:00Z`) : null;
       const weekday = at
-        ? new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" }).format(at)
+        ? new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short" }).format(at)
         : "";
       const dayNum = at
-        ? new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric" }).format(at)
+        ? new Intl.DateTimeFormat("en-US", { timeZone: "UTC", day: "numeric" }).format(at)
         : "";
       const weekend = at ? [0, 6].includes(at.getUTCDay()) : false;
 
@@ -863,7 +906,7 @@ export function renderDashboard(
       </div>
       <div class="panel today">
         <div class="date">${esc(
-          new Intl.DateTimeFormat("en-GB", {
+          new Intl.DateTimeFormat("en-US", {
             timeZone: ORG_TZ, weekday: "short", day: "numeric", month: "short",
           }).format(new Date()),
         )}</div>
@@ -929,12 +972,12 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
   facts.push(["Category", LABELS[r.category] ?? r.category]);
   if (r.tag) facts.push(["Tag", r.tag]);
   if (r.stage) facts.push(["Stage", r.stage]);
-  if (r.airDate) facts.push(["Airs", r.airDate]);
+  if (r.airDate) facts.push(["Airs", `${usDate(r.airDate)} · ${relativeDay(r.airDate)}`]);
   if (r.scriptDue) facts.push(["Script due", renderIn(r.scriptDue, ORG_TZ, "ET")]);
   if (r.voDue) {
     facts.push([
       "VO due",
-      `${renderIn(r.voDue, ORG_TZ, "ET")}${r.voSource === "calculated" ? "  (air date − 6 days)" : "  (stated)"}`,
+      `${renderIn(r.voDue, ORG_TZ, "ET")}${r.voSource === "calculated" ? `  (set ${VO_BUFFER_DAYS} days before air)` : "  (stated)"}`,
     ]);
   }
   if (r.wordCount) facts.push(["Word count", r.wordCount.toLocaleString()]);
@@ -966,6 +1009,20 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
       <h1 style="font-size:34px;font-weight:800;letter-spacing:-0.04em;margin:0 0 12px;line-height:1.02">${esc(displayTitle(r))}</h1>
       ${r.note && r.title ? `<p style="color:var(--dim);margin:-8px 0 14px;font-size:13.5px">${esc(r.note)}</p>` : ""}
       <div class="rows">${table}</div>
+    </section>
+    <section>
+      <form class="airform" method="post" action="/r/${r.id}/air">
+        <label for="air">Air date</label>
+        <input type="date" id="air" name="air" value="${esc(r.airDate ?? "")}">
+        <button class="clear">Save</button>
+        <span class="hint">${
+          r.voSource === "stated"
+            ? "The VO time was stated, so it stays where it is."
+            : r.batchNo
+              ? "Moves this batch's day."
+              : `The VO deadline follows it, ${VO_BUFFER_DAYS} days before.`
+        }</span>
+      </form>
     </section>
     ${links}
     ${r.brief ? `<section><h2>Story brief</h2><div class="brief">${esc(r.brief)}</div></section>` : ""}
@@ -1065,7 +1122,7 @@ export function calendarGrid(ym: string): string[] {
 
 function monthName(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
     .format(new Date(Date.UTC(y!, m! - 1, 1, 12)));
 }
 
@@ -1074,6 +1131,7 @@ export function renderCalendar(
   ym: string,
   mode: CalendarMode,
   entries: CalendarEntry[],
+  hide: string[] = [],
 ): string {
   const byDay = new Map<string, CalendarEntry[]>();
   for (const e of entries) {
@@ -1093,12 +1151,14 @@ export function renderCalendar(
       const num = Number(day.slice(8));
 
       // Three fit before the cell starts scrolling the eye; the rest are one
-      // click away rather than crushed into unreadable slivers.
+      // click away rather than crushed into unreadable slivers. Each chip can
+      // be dragged to another day.
       const chips = list
         .slice(0, 3)
         .map(
-          (e) => `<a class="chip" style="--c:${colourOf(e.record.category)}"
-            href="/r/${e.record.id}" title="${esc(displayTitle(e.record))}">
+          (e) => `<a class="chip" draggable="true" data-id="${e.record.id}"
+            style="--c:${colourOf(e.record.category)}"
+            href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
             <span class="dot"></span><span class="t">${esc(displayTitle(e.record))}</span>
           </a>`,
         )
@@ -1109,7 +1169,7 @@ export function renderCalendar(
           ? `<a class="more" href="/day/${day}?mode=${mode}">+${list.length - 3} more</a>`
           : "";
 
-      return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}">
+      return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}" data-date="${day}">
         <a class="num" href="/day/${day}?mode=${mode}">${num}${
           isToday ? `<span class="tag">today</span>` : ""
         }</a>
@@ -1123,6 +1183,19 @@ export function renderCalendar(
   const tab = (value: CalendarMode, label: string) =>
     `<a class="tab${mode === value ? " on" : ""}" href="/calendar/${ym}?mode=${value}">${label}</a>`;
 
+  // Each category is a toggle, and doubles as the legend. The choice is
+  // remembered, so the calendar opens the way it was last left.
+  const toggles = CATEGORIES.map((c) => {
+    const off = hide.includes(c.id);
+    const next = off ? hide.filter((id) => id !== c.id) : [...hide, c.id];
+    return `<a class="cattoggle${off ? " off" : ""}" style="--c:${c.color}" aria-pressed="${!off}"
+      title="${off ? "Show" : "Hide"} ${esc(c.label)}"
+      href="/calendar/${ym}?mode=${mode}&amp;hide=${next.join(",")}"><i></i>${esc(c.label)}</a>`;
+  }).join("");
+  const showAll = hide.length
+    ? `<a class="cattoggle all" href="/calendar/${ym}?mode=${mode}&amp;hide=">Show all</a>`
+    : "";
+
   return layout(
     "Calendar",
     shell,
@@ -1134,17 +1207,72 @@ export function renderCalendar(
       <a class="nav today" href="/calendar?mode=${mode}">Today</a>
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
+    <div class="cattoggles">${toggles}${showAll}
+      <span class="draghint">Drag anything to another day to move its ${
+        mode === "posting" ? "air date" : "deadline"
+      }.</span>
+    </div>
     <div class="cal">${heads}${cells}</div>
-    <div class="legend" style="margin-top:14px">${CATEGORIES.map(
-      (c) => `<span style="--c:${c.color}"><i></i>${esc(c.label)}</span>`,
-    ).join("")}</div>
     ${
       entries.length
         ? ""
         : `<div class="empty" style="margin-top:16px">Nothing ${
             mode === "posting" ? "airing" : "due"
-          } this month.</div>`
-    }`,
+          } this month${hide.length ? " in the categories shown" : ""}.</div>`
+    }
+    <script>
+    // Drag a chip onto another day: it moves there at once, the change is
+    // saved, and the page reloads so every count on it agrees.
+    (function () {
+      var mode = ${JSON.stringify(mode)};
+      var dragging = null;
+      document.querySelectorAll(".cal .chip[draggable]").forEach(function (chip) {
+        chip.addEventListener("dragstart", function (e) {
+          dragging = chip;
+          chip.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", chip.dataset.id);
+        });
+        chip.addEventListener("dragend", function () {
+          chip.classList.remove("dragging");
+          dragging = null;
+          document.querySelectorAll(".cal .cell.over").forEach(function (c) { c.classList.remove("over"); });
+        });
+      });
+      document.querySelectorAll(".cal .cell[data-date]").forEach(function (cell) {
+        cell.addEventListener("dragover", function (e) {
+          if (!dragging) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          cell.classList.add("over");
+        });
+        cell.addEventListener("dragleave", function (e) {
+          if (!cell.contains(e.relatedTarget)) cell.classList.remove("over");
+        });
+        cell.addEventListener("drop", function (e) {
+          e.preventDefault();
+          cell.classList.remove("over");
+          var chip = dragging;
+          if (!chip) return;
+          var from = chip.closest(".cell");
+          if (from && from.dataset.date === cell.dataset.date) return;
+          cell.insertBefore(chip, cell.querySelector(".more"));
+          chip.classList.add("saving");
+          fetch("/r/" + chip.dataset.id + "/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+            body: new URLSearchParams({ date: cell.dataset.date, mode: mode }),
+          }).then(function (res) {
+            if (!res.ok) alert("Couldn't move that — nothing was changed.");
+            location.reload();
+          }, function () {
+            alert("Couldn't reach the board — nothing was changed.");
+            location.reload();
+          });
+        });
+      });
+    })();
+    </script>`,
   );
 }
 
@@ -1154,7 +1282,7 @@ export function renderDay(
   mode: CalendarMode,
   list: StoredRecord[],
 ): string {
-  const pretty = new Intl.DateTimeFormat("en-GB", {
+  const pretty = new Intl.DateTimeFormat("en-US", {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00Z`));
 
@@ -1190,7 +1318,7 @@ export function renderRecurring(
   ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
   list: StoredRecord[],
 ): string {
-  const c = colourOf("bits");
+  const categoryOf = (channel: string) => CHANNELS.find((ch) => ch.name === channel)?.category ?? "bits";
 
   const line = (
     r: { channel: string; total: number; done: number; removed?: number },
@@ -1208,7 +1336,7 @@ export function renderRecurring(
            </form>`
         : `<span class="tick-space"></span>`;
 
-    return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${c}">
+    return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${colourOf(categoryOf(r.channel))}">
       <a class="who" href="/channel/${encodeURIComponent(r.channel)}">
         <span class="dot"></span><span class="name">${esc(r.channel)}</span>
       </a>
@@ -1219,11 +1347,27 @@ export function renderRecurring(
   };
 
   const pretty = (d: string) =>
-    new Intl.DateTimeFormat("en-GB", {
+    new Intl.DateTimeFormat("en-US", {
       weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
     }).format(new Date(`${d}T12:00:00Z`));
 
   const aheadOpen = ahead.rows.some((r) => r.total > 0);
+
+  // One labelled block per recurring category — Reading, then Bits — so a
+  // dozen lines read as two short lists rather than one long one.
+  type Row_ = { channel: string; total: number; done: number; removed: number };
+  const sections = (list_: Row_[], date: string) =>
+    CATEGORIES.filter((cat) => list_.some((r) => categoryOf(r.channel) === cat.id))
+      .map((cat) => {
+        const mine = list_.filter((r) => categoryOf(r.channel) === cat.id);
+        const done = mine.filter((r) => r.total && r.done === r.total).length;
+        return `<div class="batch-group" style="--c:${cat.color}">
+          <div class="batch-head"><span class="dot"></span>${esc(cat.label)}
+            <span class="n">${done}/${mine.length} cleared</span></div>
+          <div class="batches">${mine.map((r) => line(r, date)).join("")}</div>
+        </div>`;
+      })
+      .join("");
 
   return layout(
     "Recurring",
@@ -1231,14 +1375,14 @@ export function renderRecurring(
     `${pageHeader("Recurring")}
     <div class="panel" style="margin-bottom:14px">
       <h2>Today · ${esc(pretty(today.date))}</h2>
-      <div class="batches">${today.rows.map((r) => line(r, today.date)).join("")}</div>
+      ${sections(today.rows, today.date)}
     </div>
 
     <div class="panel" style="margin-bottom:14px">
       <h2>Tomorrow · ${esc(pretty(ahead.date))}</h2>
       ${
         aheadOpen
-          ? `<div class="batches">${ahead.rows.map((r) => line(r, ahead.date)).join("")}</div>
+          ? `${sections(ahead.rows, ahead.date)}
              <p class="hint">Already open. Clear anything you get ahead on and it stays cleared —
              the morning run finds these and leaves them alone.</p>`
           : `<p class="hint">Not open yet. They open by themselves in the morning.</p>
@@ -1249,7 +1393,7 @@ export function renderRecurring(
     </div>
 
     <div class="group">
-      <div class="head" style="--c:${c}">
+      <div class="head" style="--c:${colourOf("reading")}">
         <span class="dot"></span><span class="name">Today's batches</span>
         <span class="sub">${esc(pretty(today.date))}</span>
         <span class="n">${list.length}</span>

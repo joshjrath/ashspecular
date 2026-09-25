@@ -43,7 +43,7 @@ export const CATEGORIES: Category[] = [
     label: "Reading",
     color: "#CE7118",
     codePrefix: "READ",
-    hint: "The five reading channels, roughly 25 short uploads a day across all of them combined.",
+    hint: "The five reading channels, roughly 25 short uploads a day across all of them combined. Each opens its own numbered batch every day automatically — a message about one is usually about today's batch.",
   },
   {
     id: "bits",
@@ -107,12 +107,12 @@ export const CHANNELS: Channel[] = [
   { id: "survives", name: "Specular Survives", category: "stories" },
   { id: "documentaries", name: "Specular Documentaries", category: "stories", aliases: ["specular docs"] },
 
-  // ── Reading ─────────────────────────────────────────────────────────────
-  { id: "dc", name: "Specular DC", category: "reading", aliases: ["dc"] },
-  { id: "torch", name: "Specular Torch", category: "reading", aliases: ["torch"] },
-  { id: "action", name: "Specular Action", category: "reading", aliases: ["action"] },
-  { id: "balls", name: "Specular Balls", category: "reading", aliases: ["balls"] },
-  { id: "nove", name: "Specular Nove", category: "reading", aliases: ["nove"] },
+  // ── Reading (each opens its day's batch automatically, like bits) ───────
+  { id: "dc", name: "Specular DC", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "torch", name: "Specular Torch", category: "reading", codePrefix: "RTO", aliases: ["torch"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "action", name: "Specular Action", category: "reading", codePrefix: "RAC", aliases: ["action"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "balls", name: "Specular Balls", category: "reading", codePrefix: "RBA", aliases: ["balls"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "nove", name: "Specular Nove", category: "reading", codePrefix: "RNO", aliases: ["nove"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
 
   // ── Bits (each opens a numbered batch daily) ────────────────────────────
   // Ids are unchanged from before the rename: batch keys are built from them.
