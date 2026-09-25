@@ -27,6 +27,7 @@ import {
   moveAir,
   moveDue,
   listLate,
+  feedRecords,
   listNotices,
   setPinned,
   type CalendarMode,
@@ -42,6 +43,7 @@ import {
   shiftDate,
 } from "../parse/derive.js";
 import { fetchScriptReport } from "./scriptcheck.js";
+import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
@@ -93,6 +95,14 @@ async function shell(active: string): Promise<Shell> {
   };
 }
 
+/** This board's own address: PUBLIC_URL, or what the request came in on. */
+function baseUrlOf(request: import("fastify").FastifyRequest): string {
+  if (config.publicUrl) return config.publicUrl;
+  const proto = String(request.headers["x-forwarded-proto"] ?? "http").split(",")[0]!.trim();
+  const host = String(request.headers["x-forwarded-host"] ?? request.headers.host ?? "").split(",")[0]!.trim();
+  return host ? `${proto}://${host}` : "";
+}
+
 /** Whole-month bounds for a YYYY-MM, as the calendar's inclusive range. */
 function monthBounds(ym: string): [string, string] {
   const [y, m] = ym.split("-").map(Number);
@@ -136,11 +146,26 @@ export async function startWeb(): Promise<void> {
 
   app.addHook("onRequest", async (request, reply) => {
     if (PUBLIC.has(request.url.split("?")[0] ?? "")) return;
+    // The calendar feed can't sign in: its own key in the link is the check.
+    if ((request.url.split("?")[0] ?? "") === "/calendar.ics") return;
     if (verifyToken(request.cookies[COOKIE_NAME])) return;
     return reply.redirect("/login");
   });
 
   app.get("/healthz", async () => ({ ok: true }));
+
+  // The subscribable calendar. Two months back, a year ahead.
+  app.get<{ Querystring: Record<string, string | undefined> }>("/calendar.ics", async (request, reply) => {
+    if (!hasDatabase || !checkFeedKey(request.query.key)) return reply.code(404).send("Not found");
+    const opts = parseFeedOptions(request.query);
+    const today = dateIn(ORG_TZ);
+    const list = await feedRecords(shiftDate(today, -60), shiftDate(today, 365), opts.batches);
+    return reply
+      .header("Content-Type", "text/calendar; charset=utf-8")
+      .header("Content-Disposition", 'inline; filename="specular.ics"')
+      .header("Cache-Control", "no-cache")
+      .send(buildIcs(list, list, opts, baseUrlOf(request)));
+  });
   app.get("/login", async (_req, reply) => reply.type("text/html").send(renderLogin()));
 
   app.post<{ Body: { password?: string } }>("/login", async (request, reply) => {
@@ -273,7 +298,7 @@ export async function startWeb(): Promise<void> {
     const shown = entries.filter(
       (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open"),
     );
-    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide, st));
+    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide, st, `${baseUrlOf(request)}/calendar.ics?key=${feedKey()}`));
   }
 
   app.get<{ Params: { date: string }; Querystring: { mode?: string } }>(

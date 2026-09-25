@@ -154,6 +154,21 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Google Calendar
+
+**Calendar → Google Calendar** (top right of the calendar) gives you a private
+link to this board's calendar. Paste it into Google Calendar → *Other
+calendars* → *From URL*, and Google keeps it in step on its own: every air
+date as an all-day event, every deadline at its time with a two-hour
+reminder, cleared work kept with a ✓. Switches in the panel leave out air
+dates or deadlines, or add the daily batches (off by default). Google checks
+subscribed calendars every few hours, so a change here reaches it within
+that. Apple Calendar can subscribe with the same link.
+
+The link carries its own key, because a calendar app can't sign in. Anyone
+with the link can read the calendar; changing the board's password (or
+`SESSION_SECRET`) retires it. `CALENDAR_FEED_KEY` sets the key by hand.
+
 ## Scripts — Josh's board, inside this one
 
 Josh's board is **scriptcheck** (`joshjrath/Scriptwritingchecker`), on the same

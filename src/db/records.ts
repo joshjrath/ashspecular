@@ -489,6 +489,21 @@ export async function openBatchCount(date: string): Promise<number> {
 }
 
 /** What has been removed, newest first — where Restore lives. */
+/**
+ * Everything the calendar feed covers: anything airing or due in the window,
+ * cleared work included (it shows with a ✓), removed work never. Recurring
+ * batches only when asked for — a dozen a day would bury the videos.
+ */
+export async function feedRecords(from: string, to: string, batches: boolean): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status <> 'removed' ${batches ? "" : "AND batch_no IS NULL"}
+       AND (air_date BETWEEN $1 AND $2 OR (${DUE} AT TIME ZONE '${ORG_TZ}')::date BETWEEN $1 AND $2)
+     ORDER BY COALESCE(air_date, (${DUE})::date) ASC LIMIT 5000`,
+    [from, to],
+  );
+  return rows.map(hydrate);
+}
+
 /** Open work past its time, most overdue first — the chart's LATE column. */
 export async function listLate(limit = 300): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(

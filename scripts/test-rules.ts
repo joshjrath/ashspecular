@@ -25,6 +25,7 @@ import { parseWhen } from "../src/parse/when.js";
 import { readFileSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, siteAddress } from "../src/config.js";
+import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
@@ -560,6 +561,29 @@ cfg.scriptsUrl = ""; cfg.scriptsToken = "";
 t("an address without https:// still works", siteAddress("scriptcheck-production.up.railway.app"), "https://scriptcheck-production.up.railway.app");
 t("a pasted link keeps only the site", siteAddress(" \"https://his.up.railway.app/report.json?k=abc\" "), "https://his.up.railway.app");
 t("nonsense is no address", siteAddress("not a url at all"), "");
+
+section("Google Calendar feed");
+const feedVideo = { ...plainRec, id: 41, code: "VIDEO-012", title: "Could Walter White Build Compound V? A long, long title, with commas; and semicolons",
+  airDate: "2026-09-29", voDue: new Date("2026-09-24T03:59:00Z"), status: "open", category: "stories", channel: "Specular Verse", batchNo: null } as typeof plainRec;
+const feedBatch = { ...feedVideo, id: 42, code: null, title: "Specular DC", channel: "Specular DC", category: "reading", batchNo: 1,
+  airDate: "2026-09-25", voDue: null, deadline: new Date("2026-09-25T22:00:00Z") } as typeof plainRec;
+const feedDone = { ...feedVideo, id: 43, status: "done" } as typeof plainRec;
+const ics = buildIcs([feedVideo, feedBatch, feedDone], [feedVideo, feedBatch, feedDone], parseFeedOptions({}), "https://board.example", new Date("2026-09-25T12:00:00Z"));
+const icsLines = ics.split("\r\n");
+t("a calendar, CRLF line endings", [icsLines[0], ics.endsWith("END:VCALENDAR\r\n"), ics.includes("\n") && !ics.split("\r\n").some((l) => l.includes("\n"))], ["BEGIN:VCALENDAR", true, true]);
+t("every line fits 75 octets", icsLines.every((l) => Buffer.byteLength(l) <= 75), true);
+t("an air date is an all-day event", ics.includes("UID:air-41@specular-board") && ics.includes("DTSTART;VALUE=DATE:20260929") && ics.includes("DTEND;VALUE=DATE:20260930"), true);
+t("a deadline sits at its time", ics.includes("UID:due-41@specular-board") && ics.includes("DTEND:20260924T035900Z"), true);
+t("commas and semicolons are escaped", ics.replace(/\r\n /g, "").includes("A long\\, long title\\, with commas\; and semicolons"), true);
+t("daily batches are left out unless asked", [ics.includes("UID:air-42"), buildIcs([feedBatch], [feedBatch], parseFeedOptions({ batches: "1" }), "").includes("UID:air-42")], [false, true]);
+t("cleared work stays, ticked", ics.replace(/\r\n /g, "").includes("SUMMARY:✓ 🎬 Airs: VIDEO-012"), true);
+t("an open deadline carries a reminder, a cleared one doesn't", (ics.match(/BEGIN:VALARM/g) ?? []).length, 1);
+t("air dates or deadlines can be switched off", [buildIcs([feedVideo], [feedVideo], parseFeedOptions({ airs: "0" }), "").includes("UID:air-"), buildIcs([feedVideo], [feedVideo], parseFeedOptions({ due: "0" }), "").includes("UID:due-")], [false, false]);
+t("only= limits categories", buildIcs([feedVideo], [feedVideo], parseFeedOptions({ only: "gaming" }), "").includes("BEGIN:VEVENT"), false);
+(config as { sessionSecret: string }).sessionSecret ||= "test-secret";
+t("the link's key is checked", [checkFeedKey(feedKey()), checkFeedKey("guess"), checkFeedKey(undefined)], [true, false, false]);
+const calWithFeed = renderCalendar(shellFix, "2026-09", "posting", [], [], [], "https://board.example/calendar.ics?key=abc");
+t("the subscribe panel's script compiles", [...calWithFeed.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

@@ -784,6 +784,36 @@ header.page a.clear { align-self: center; }
 .row .title .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cattoggle b { color: var(--ink); margin-left: 2px; }
 
+/* ── google calendar subscribe ────────────────────────────────────────── */
+.subscribe { position: relative; }
+.subscribe summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  background: var(--rail); border-radius: 999px; padding: 10px 16px; font-size: 13px; color: #D8D8DE; font-weight: 600;
+}
+.subscribe summary::-webkit-details-marker { display: none; }
+.subscribe summary svg { width: 16px; height: 16px; }
+.subscribe[open] summary, .subscribe summary:hover { background: #26262A; color: #fff; }
+.subpanel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: 380px; padding: 18px;
+  background: var(--card); color: var(--ink); border-radius: 18px; box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 0 1px #2E2E35;
+}
+.subpanel > b { font-family: var(--display); font-size: 17px; letter-spacing: -0.03em; }
+.subpanel p { color: var(--ink3); font-size: 12.5px; margin: 6px 0 12px; line-height: 1.55; }
+.subpanel p.fine { font-size: 11.5px; margin: 10px 0 0; }
+.subpanel a { color: #AEB8F5; }
+.subopts { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
+.subopts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.subopts input { accent-color: var(--yellow); width: 15px; height: 15px; margin: 0; }
+.subcopy { display: flex; gap: 8px; }
+.subcopy input {
+  flex: 1; min-width: 0; padding: 9px 11px; border-radius: 10px; border: 0; background: var(--sunk);
+  color: var(--ink2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.subpanel ol { margin: 12px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--ink2); }
+@media (max-width: 760px) {
+  .subpanel { position: fixed; left: 10px; right: 10px; top: 80px; width: auto; }
+}
+
 /* ── working ahead ──────────────────────────────────────────────────────── */
 .aheadbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
 .aheadbar .nav {
@@ -2179,6 +2209,68 @@ function columnDragScript(mode: CalendarMode): string {
     </script>`;
 }
 
+/**
+ * "Add to Google Calendar": the private feed link, a few switches for what it
+ * carries, and the three steps to subscribe. Google then keeps it in step on
+ * its own schedule — every few hours.
+ */
+function subscribePanel(feedUrl: string): string {
+  return `<details class="subscribe">
+    <summary>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2.5"/><path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4"/></svg>
+      Google Calendar
+    </summary>
+    <div class="subpanel">
+      <b>Keep Google Calendar in step</b>
+      <p>Air dates and deadlines from this board, updated as the board changes. Google refreshes
+      subscribed calendars every few hours.</p>
+      <div class="subopts" role="group" aria-label="What the calendar carries">
+        <label><input type="checkbox" data-opt="airs" checked> Air dates</label>
+        <label><input type="checkbox" data-opt="due" checked> Deadlines</label>
+        <label><input type="checkbox" data-opt="batches"> Daily batches</label>
+      </div>
+      <div class="subcopy">
+        <input type="text" readonly id="feedurl" value="${esc(feedUrl)}" aria-label="Calendar link" onclick="this.select()">
+        <button type="button" class="chipbtn go" id="feedcopy">Copy</button>
+      </div>
+      <ol>
+        <li>Copy the link.</li>
+        <li><a href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl" target="_blank" rel="noopener">Open Google Calendar → From URL ↗</a></li>
+        <li>Paste it and press <b>Add calendar</b>.</li>
+      </ol>
+      <p class="fine">Apple Calendar: <a id="feedwebcal" href="${esc(feedUrl.replace(/^https?:/, "webcal:"))}">subscribe here</a>.
+      Keep the link private — anyone with it can read the calendar. Changing the board's password retires it.</p>
+    </div>
+  </details>
+  <script>
+  (function () {
+    var base = ${JSON.stringify(feedUrl)};
+    var input = document.getElementById("feedurl"), webcal = document.getElementById("feedwebcal");
+    function update() {
+      var u = new URL(base);
+      document.querySelectorAll(".subopts input").forEach(function (b) {
+        var o = b.dataset.opt;
+        if (o === "batches") { if (b.checked) u.searchParams.set("batches", "1"); }
+        else if (!b.checked) u.searchParams.set(o, "0");
+      });
+      input.value = u.toString();
+      webcal.href = u.toString().replace(/^https?:/, "webcal:");
+    }
+    document.querySelectorAll(".subopts input").forEach(function (b) { b.addEventListener("change", update); });
+    document.getElementById("feedcopy").addEventListener("click", function () {
+      var btn = this;
+      (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.reject()).then(
+        function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1500); },
+        function () { input.select(); document.execCommand("copy"); btn.textContent = "Copied"; });
+    });
+    document.addEventListener("click", function (e) {
+      var d = document.querySelector(".subscribe");
+      if (d && d.open && !d.contains(e.target)) d.open = false;
+    });
+  })();
+  </script>`;
+}
+
 export function renderCalendar(
   shell: Shell,
   ym: string,
@@ -2186,6 +2278,7 @@ export function renderCalendar(
   entries: CalendarEntry[],
   hide: string[] = [],
   st: StatusHide = [],
+  feedUrl = "",
 ): string {
   const q = calQuery(mode, st);
   const byDay = new Map<string, CalendarEntry[]>();
@@ -2254,6 +2347,7 @@ export function renderCalendar(
       <a class="nav today" href="/calendar${q}">Today</a>
       ${viewTabs("month", anchor, q)}
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
+      ${feedUrl ? subscribePanel(feedUrl) : ""}
     </div>
     <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">Drag anything to another day to move its ${
