@@ -403,9 +403,9 @@ export async function startWeb(): Promise<void> {
       const ancestors = csp.match(/frame-ancestors([^;]*)/)?.[1]?.trim() ?? "";
       const self = config.publicUrl ? new URL(config.publicUrl).origin.toLowerCase() : "";
       if (xfo.includes("deny") || xfo.includes("sameorigin")) {
-        result = { ok: false, why: "His site says it may only be shown on its own (X-Frame-Options)." };
+        result = { ok: false, why: "Josh's board says it may only be shown on its own (X-Frame-Options)." };
       } else if (ancestors && !ancestors.includes("*") && !(self && ancestors.includes(self))) {
-        result = { ok: false, why: "His site only allows itself to be shown on the pages it lists (frame-ancestors)." };
+        result = { ok: false, why: "Josh's board only allows itself to be shown on the pages it lists (frame-ancestors)." };
       }
     } catch {
       // Unreachable from here isn't proof it can't be framed; let the browser try.

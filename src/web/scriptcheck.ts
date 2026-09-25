@@ -82,7 +82,7 @@ export async function fetchScriptReport(fetcher: typeof fetch = fetch): Promise<
       rows: [],
       generatedAt: null,
       error: config.scriptsUrlRaw
-        ? `SCRIPTS_URL ("${config.scriptsUrlRaw}") isn't a web address. Use his board's address, like https://something.up.railway.app.`
+        ? `SCRIPTS_URL ("${config.scriptsUrlRaw}") isn't a web address. Use Josh's board's address, like https://something.up.railway.app.`
         : "SCRIPTS_URL isn't set.",
     };
   }
@@ -92,17 +92,17 @@ export async function fetchScriptReport(fetcher: typeof fetch = fetch): Promise<
   try {
     const res = await fetcher(url, { signal: AbortSignal.timeout(8000), headers: { Accept: "application/json" } });
     if (res.status === 404 && !config.scriptsToken) {
-      report = { rows: [], generatedAt: null, error: "His board is password protected: set SCRIPTS_TOKEN to his view-only password (SCRIPTCHECK_VIEW_TOKEN)." };
+      report = { rows: [], generatedAt: null, error: "Josh's board is password protected: set SCRIPTS_TOKEN to its view-only password (SCRIPTCHECK_VIEW_TOKEN)." };
     } else if (res.status === 404) {
-      report = { rows: [], generatedAt: null, error: "His board didn't accept SCRIPTS_TOKEN — check it matches his SCRIPTCHECK_VIEW_TOKEN." };
+      report = { rows: [], generatedAt: null, error: "Josh's board didn't accept SCRIPTS_TOKEN — check it matches SCRIPTCHECK_VIEW_TOKEN on Josh's board." };
     } else if (!res.ok) {
-      report = { rows: [], generatedAt: null, error: `His board answered ${res.status}.` };
+      report = { rows: [], generatedAt: null, error: `Josh's board answered ${res.status}.` };
     } else {
       const data = (await res.json()) as { generated_at?: string };
       report = { rows: readReport(data), generatedAt: data.generated_at ? new Date(data.generated_at) : new Date(), error: null };
     }
   } catch {
-    report = { rows: [], generatedAt: null, error: "Couldn't reach his board." };
+    report = { rows: [], generatedAt: null, error: "Couldn't reach Josh's board." };
   }
   // A failure is cached briefly too, so a down service doesn't slow every page.
   cache = { at: report.error ? Date.now() - 45_000 : Date.now(), report };

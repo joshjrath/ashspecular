@@ -154,25 +154,25 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
-## Scripts — the scriptwriter's board, inside this one
+## Scripts — Josh's board, inside this one
 
-His board is **scriptcheck** (`joshjrath/Scriptwritingchecker`), on the same
+Josh's board is **scriptcheck** (`joshjrath/Scriptwritingchecker`), on the same
 Railway project. It publishes everything it knows at `/report.json`, and with
 its *view-only* password it hands out a read-only copy — the briefs left out.
 This board reads that on the server, so the **Scripts** tab is a page of this
 board: every script grouped by where it stands (overdue, due today, due soon,
 no deadline, pending, delivered late, delivered), with its code, air date,
-deadline, the script doc he delivered and the Discord thread. Cached a minute.
+deadline, the script doc that was delivered and the Discord thread. Cached a minute.
 
-Two variables on this board's Railway service:
+Two variables on tJosh's board's Railway service:
 
 | Variable | Value |
 |---|---|
-| `SCRIPTS_URL` | his board's public address, e.g. `https://scriptcheck-production.up.railway.app` |
-| `SCRIPTS_TOKEN` | his board's view-only password — the value of `SCRIPTCHECK_VIEW_TOKEN` on his service. If he has none yet, he adds one (any long random string) and redeploys. |
+| `SCRIPTS_URL` | Josh's board's public address, e.g. `https://scriptcheck-production.up.railway.app` |
+| `SCRIPTS_TOKEN` | Josh's board's view-only password — the value of `SCRIPTCHECK_VIEW_TOKEN` on Josh's service. If there's none yet, add one (any long random string) and redeploys. |
 
-Without `SCRIPTS_TOKEN`, the tab falls back to showing his page itself in a
-frame, when his site allows that, or a button to open it in its own tab.
+Without `SCRIPTS_TOKEN`, the tab falls back to showing Josh's page itself in a
+frame, when Josh's site allows that, or a button to open it in its own tab.
 
 ## Frame.io links, read without the API
 

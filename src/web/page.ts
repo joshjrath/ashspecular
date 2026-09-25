@@ -2339,10 +2339,10 @@ export function renderScripts(shell: Shell, url: string, embeddable: boolean, wh
       embeddable
         ? `<div class="scriptsframe"><iframe src="${esc(url)}" title="Scripts board"
              referrerpolicy="no-referrer" allow="clipboard-write"></iframe></div>
-           <p class="hint">This is the scriptwriter's own board, live. If it asks you to sign in and the
+           <p class="hint">This is Josh's board, live. If it asks you to sign in and the
            sign-in doesn't stick, use <b>Open in a new tab</b> — some browsers block logins inside another site.</p>`
         : `<div class="panel scriptsblocked">
-             <h2>His board can't be shown inside this one</h2>
+             <h2>Josh's board can't be shown inside this one</h2>
              <p class="hint">${esc(why || "The site doesn't allow being embedded in another page.")}
              It opens in its own tab instead, and stays signed in there.</p>
              <p style="margin-top:18px">${open}</p>
@@ -2368,7 +2368,7 @@ const SCRIPT_GROUPS: Array<{ status: ScriptStatus; label: string; colour: string
  * doc he delivered and the Discord thread.
  */
 export function renderScriptBoard(shell: Shell, url: string, report: ScriptReport): string {
-  const open = `<a class="clear" href="${esc(url)}" target="_blank" rel="noopener">Open his board ↗</a>`;
+  const open = `<a class="clear" href="${esc(url)}" target="_blank" rel="noopener">Open Josh's board ↗</a>`;
   const counts = SCRIPT_GROUPS.map((g) => ({ ...g, n: report.rows.filter((r) => r.status === g.status).length }));
 
   const scriptRow = (r: ScriptRow, colour: string) => {
@@ -2430,11 +2430,11 @@ export function renderScriptBoard(shell: Shell, url: string, report: ScriptRepor
     `${pageHeader("Scripts", open)}
     ${
       report.error
-        ? `<div class="panel"><h2>Couldn't read his board</h2><p class="hint">${esc(report.error)}</p></div>`
-        : `<div class="cattoggles">${chips || ""}<span class="draghint">From his board${
+        ? `<div class="panel"><h2>Couldn't read Josh's board</h2><p class="hint">${esc(report.error)}</p></div>`
+        : `<div class="cattoggles">${chips || ""}<span class="draghint">From Josh's board${
             report.generatedAt ? ` · updated ${esc(timeAgo(report.generatedAt))}` : ""
           }</span></div>
-          ${groups || `<div class="empty">No scripts on his board right now.</div>`}`
+          ${groups || `<div class="empty">No scripts on Josh's board right now.</div>`}`
     }`,
   );
 }
