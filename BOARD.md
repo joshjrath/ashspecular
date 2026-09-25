@@ -205,8 +205,8 @@ days (each with its multiple and what it was compared against), gold halos
 on breakout dots and dashed ones on underperformers in the timeline, badges
 in *Latest uploads*, and each channel's **typical views** in the table.
 
-**Discord alert.** When a video from the last week breaks out, the board
-posts once: *"🔥 Breakout on Specular FNAF — What If Gojo Was In FNAF? —
+**Discord alert (optional, off by default).** When a video from the last
+week breaks out, the board can post once: *"🔥 Breakout on Specular FNAF — What If Gojo Was In FNAF? —
 627,000 views after 30 hours, 4.0× the channel's usual at 24 hours."* It
 posts to the first of these that's set:
 
@@ -214,7 +214,8 @@ posts to the first of these that's set:
 |---|---|
 | `BREAKOUT_WEBHOOK_URL` | a Discord webhook — Channel settings → Integrations → Webhooks → New Webhook → Copy URL. Works whether or not the bot is running. |
 | `BREAKOUT_CHANNEL_ID` | a channel the bot can post in |
-| `DIGEST_CHANNEL_ID` | the morning digest's channel |
+
+With neither set, nothing is sent — breakouts only show on the Uploads page.
 
 With a `YOUTUBE_API_KEY`, views are refreshed hourly for every upload of the
 last 60 days rather than only the feed's latest fifteen.

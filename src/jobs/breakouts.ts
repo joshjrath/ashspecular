@@ -2,14 +2,12 @@
  * Breakout alerts: when a Stories upload from the last week reaches twice its
  * channel's usual views at the same age, say so in Discord — once per video.
  *
- * Where it posts, first that is set:
+ * Off unless asked for. Where it posts, first that is set:
  *   BREAKOUT_WEBHOOK_URL  a Discord webhook (Channel settings → Integrations →
  *                         Webhooks). Works whether or not the bot is running.
  *   BREAKOUT_CHANNEL_ID   a channel the bot can post in
- *   DIGEST_CHANNEL_ID     the morning digest's channel
- * With none set, breakouts still show on the Uploads page; nothing is sent.
+ * With neither set, breakouts show on the Uploads page and nothing is sent.
  */
-import { config } from "../config.js";
 import { formatMultiple, scoreAll, type VideoViews } from "../web/performance.js";
 import { listSnapshots, listUploads, markAlerted, unalertedSince } from "./youtube.js";
 
@@ -46,7 +44,7 @@ async function post(content: string): Promise<boolean> {
     });
     return res.ok;
   }
-  const channelId = process.env.BREAKOUT_CHANNEL_ID?.trim() || config.digestChannelId;
+  const channelId = process.env.BREAKOUT_CHANNEL_ID?.trim();
   if (!channelId) return false;
   try {
     const { client } = await import("../bot/client.js");
@@ -88,7 +86,7 @@ export async function announceBreakouts(now: Date = new Date()): Promise<number>
     ).catch(() => false);
     // Marked either way when there's nowhere to post, so turning an alert
     // channel on later doesn't replay old news; kept pending if a post failed.
-    const configured = Boolean(process.env.BREAKOUT_WEBHOOK_URL?.trim() || process.env.BREAKOUT_CHANNEL_ID?.trim() || config.digestChannelId);
+    const configured = Boolean(process.env.BREAKOUT_WEBHOOK_URL?.trim() || process.env.BREAKOUT_CHANNEL_ID?.trim());
     if (ok || !configured) await markAlerted(h.id);
     if (ok) sent += 1;
   }
