@@ -2708,6 +2708,60 @@ export function renderRecurring(
         <span class="n">${list.length}</span>
       </div>
       ${rows(list, "Nothing open yet today.")}
-    </div>`,
+    </div>
+    <script>
+    // Ticking a segment or clearing a channel saves in the background: the
+    // segment fills at once, then the page's numbers refresh in place. No
+    // reload, so no flash of the dark background between taps.
+    (function () {
+      var busy = Promise.resolve();
+      function fill(form) {
+        var row = form.closest(".batch");
+        if (!row) return;
+        var pips = row.querySelectorAll(".pip");
+        var total = pips.length;
+        var done = new URL(form.action, location.href).pathname === "/recurring/clear" ? total : Number(form.elements.done.value);
+        pips.forEach(function (p, i) {
+          p.classList.toggle("on", i < done);
+          // Tapping the last filled segment again steps back one — so a quick
+          // second tap works before the refresh lands.
+          var input = p.form && p.form.elements.done;
+          if (input) input.value = String(i + 1 === done ? i : i + 1);
+        });
+        var state = row.querySelector(".state");
+        if (state && total) state.textContent = done === total ? "cleared" : done + "/" + total;
+        row.classList.toggle("done", total > 0 && done === total);
+      }
+      function refresh() {
+        return fetch(location.href, { headers: { Accept: "text/html" } })
+          .then(function (r) { return r.text(); })
+          .then(function (html) {
+            var fresh = new DOMParser().parseFromString(html, "text/html").querySelector("main");
+            var main = document.querySelector("main");
+            if (!fresh || !main) return;
+            main.querySelectorAll(".panel, .group").forEach(function (el, i) {
+              var next = fresh.querySelectorAll(".panel, .group")[i];
+              if (next) el.innerHTML = next.innerHTML;
+            });
+            var nav = fresh.ownerDocument.querySelector("aside nav");
+            if (nav) document.querySelector("aside nav").innerHTML = nav.innerHTML;
+          });
+      }
+      document.addEventListener("submit", function (e) {
+        var form = e.target;
+        var path = new URL(form.action, location.href).pathname;
+        if (path !== "/recurring/progress" && path !== "/recurring/clear") return;
+        e.preventDefault();
+        fill(form);
+        var body = new URLSearchParams(new FormData(form));
+        busy = busy.then(function () {
+          return fetch(form.action, { method: "POST", body: body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        }).then(function (r) {
+          if (!r.ok) throw new Error("save failed");
+          return refresh();
+        }).catch(function () { location.reload(); });
+      });
+    })();
+    </script>`,
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
@@ -436,6 +436,8 @@ const pages = {
   calendar: renderCalendar(shellFix, "2026-09", "posting", [], [], ["done"]),
   day: renderDay(shellFix, "2026-09-28", "posting", days),
   week: renderWeek(shellFix, "2026-09-27", "posting", days),
+  recurring: renderRecurring(shellFix, { date: "2026-09-25", rows: [{ channel: "Specular DC", total: 5, done: 2, removed: 0 }] },
+    { date: "2026-09-26", rows: [{ channel: "Specular DC", total: 0, done: 0, removed: 0 }] }, [], []),
   dashboard: renderDashboard({ ...shellFix, active: "dashboard" }, {
     stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
     byDay: [], grouped: new Map([["stories", [plainRec, pinnedRec]]]), channels: {},
