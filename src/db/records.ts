@@ -481,13 +481,40 @@ export async function openBatchCount(date: string): Promise<number> {
 }
 
 /** What has been removed, newest first — where Restore lives. */
-/** Everything pinned, newest pin first. A removed record drops off. */
-export async function listPinned(limit = 50): Promise<StoredRecord[]> {
-  const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE pinned_at IS NOT NULL AND status <> 'removed' ORDER BY pinned_at DESC LIMIT $1`,
-    [limit],
-  );
-  return rows.map(hydrate);
+/**
+ * What the dashboard's bell rings for: a revision that has come in, and work
+ * that has gone past its time. Each carries the moment it happened — when the
+ * revision arrived, when the deadline passed — so "unread" is simply anything
+ * after the last time the bell was opened. Recurring batches are left out:
+ * they fall due every evening and would drown the rest.
+ */
+export interface Notice {
+  kind: "revision" | "overdue";
+  at: Date;
+  record: StoredRecord;
+}
+
+export async function listNotices(limit = 30): Promise<Notice[]> {
+  const [revisions, overdue] = await Promise.all([
+    pool.query<Row>(
+      `${SELECT} WHERE kind = 'review' AND status = 'open' ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    ),
+    pool.query<Row>(
+      `${SELECT} WHERE status = 'open' AND batch_no IS NULL AND ${DUE} < now()
+       ORDER BY ${DUE} DESC LIMIT $1`,
+      [limit],
+    ),
+  ]);
+  const notices: Notice[] = [
+    ...revisions.rows.map(hydrate).map((record) => ({ kind: "revision" as const, at: record.createdAt, record })),
+    ...overdue.rows.map(hydrate).map((record) => ({
+      kind: "overdue" as const,
+      at: (record.voDue ?? record.deadline ?? record.scriptDue)!,
+      record,
+    })),
+  ];
+  return notices.sort((x, y) => y.at.getTime() - x.at.getTime()).slice(0, limit);
 }
 
 export async function listRemoved(limit = 100): Promise<StoredRecord[]> {

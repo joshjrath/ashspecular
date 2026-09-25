@@ -26,7 +26,7 @@ import {
   refile,
   moveAir,
   moveDue,
-  listPinned,
+  listNotices,
   setPinned,
   type CalendarMode,
   type StoredRecord,
@@ -42,7 +42,7 @@ import {
 } from "../parse/derive.js";
 import { batchStatus, openBatchesFor, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { DAY_SPAN, SORTS, type Shell, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -53,6 +53,7 @@ import {
   renderList,
   renderLogin,
   renderRecurring,
+  renderWeek,
   renderRecord,
 } from "./page.js";
 
@@ -144,21 +145,44 @@ export async function startWeb(): Promise<void> {
     return reply.setCookie(COOKIE_NAME, issueToken(), COOKIE_OPTIONS).redirect("/");
   });
 
-  app.get("/", async (_req, reply) => {
+  app.get("/", async (request, reply) => {
     if (!hasDatabase) return reply.type("text/html").send(renderEmptyState());
 
-    const [s, counters, byDay, grouped, channels, pinned] = await Promise.all([
+    const [s, counters, byDay, grouped, channels, notices] = await Promise.all([
       shell("dashboard"),
       stats(ORG_TZ),
       dueByDay(ORG_TZ, 14),
       openByCategory(),
       channelCounts(),
-      listPinned(),
+      listNotices(),
     ]);
 
     return reply
       .type("text/html")
-      .send(renderDashboard(s, { stats: counters, byDay, grouped, channels, pinned }));
+      .send(renderDashboard(s, { stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request) }));
+  });
+
+  /** When this browser last opened the bell. Set by the page itself. */
+  function noticesSeen(request: import("fastify").FastifyRequest): number {
+    const n = Number(request.cookies.notices_seen);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // The bell's contents, for the dashboard to poll: the unread count and, for
+  // desktop alerts, what came in.
+  app.get("/notifications.json", async (request, reply) => {
+    const seen = noticesSeen(request);
+    const notices = await listNotices();
+    return reply.send({
+      unread: notices.filter((n) => n.at.getTime() > seen).length,
+      items: notices.map((n) => ({
+        id: n.record.id,
+        kind: n.kind,
+        at: n.at.getTime(),
+        title: noticeTitle(n.record),
+        channel: n.record.channel,
+      })),
+    });
   });
 
   app.get<{ Params: { ym?: string }; Querystring: { mode?: string } }>(
@@ -185,6 +209,33 @@ export async function startWeb(): Promise<void> {
     return hide;
   }
 
+  /**
+   * Which statuses to hide — "done", "open", both or neither. Read from the
+   * address only, never remembered, so every calendar opens showing both.
+   */
+  function hiddenStatuses(request: import("fastify").FastifyRequest): StatusHide {
+    const raw = (request.query as { st?: string }).st ?? "";
+    return [...new Set(raw.split(",").filter((x): x is "done" | "open" => x === "done" || x === "open"))];
+  }
+
+  /** Entries for a range of days, filtered, one bucket per day in order. */
+  async function dayBuckets(
+    from: string,
+    to: string,
+    mode: CalendarMode,
+    hide: string[],
+    st: StatusHide,
+  ): Promise<Array<{ date: string; list: StoredRecord[] }>> {
+    const entries = (await calendarRange(from, to, mode, ORG_TZ)).filter(
+      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open"),
+    );
+    const days: Array<{ date: string; list: StoredRecord[] }> = [];
+    for (let d = from; d <= to; d = shiftDate(d, 1)) days.push({ date: d, list: [] });
+    const index = new Map(days.map((d) => [d.date, d]));
+    for (const e of entries) index.get(e.day)?.list.push(e.record);
+    return days;
+  }
+
   async function calendar(
     ymRaw: string | undefined,
     modeRaw: string | undefined,
@@ -194,9 +245,12 @@ export async function startWeb(): Promise<void> {
     const ym = safeMonth(ymRaw);
     const mode = safeMode(modeRaw);
     const hide = hiddenCategories(request, reply);
+    const st = hiddenStatuses(request);
     const [s, entries] = await Promise.all([shell("calendar"), monthEntries(ym, mode)]);
-    const shown = entries.filter((e) => !hide.includes(e.record.category));
-    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide));
+    const shown = entries.filter(
+      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open"),
+    );
+    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide, st));
   }
 
   app.get<{ Params: { date: string }; Querystring: { mode?: string } }>(
@@ -209,16 +263,28 @@ export async function startWeb(): Promise<void> {
         return reply.code(404).type("text/html").send(renderList(s, "Not found", "That is not a date.", []));
       }
       const hide = hiddenCategories(request, reply);
-      const from = shiftDate(date, -DAY_SPAN);
-      const to = shiftDate(date, DAY_SPAN);
-      const entries = (await calendarRange(from, to, mode, ORG_TZ)).filter(
-        (e) => !hide.includes(e.record.category),
-      );
-      const days: Array<{ date: string; list: StoredRecord[] }> = [];
-      for (let d = from; d <= to; d = shiftDate(d, 1)) days.push({ date: d, list: [] });
-      const index = new Map(days.map((d) => [d.date, d]));
-      for (const e of entries) index.get(e.day)?.list.push(e.record);
-      return reply.type("text/html").send(renderDay(s, date, mode, days, hide));
+      const st = hiddenStatuses(request);
+      const days = await dayBuckets(shiftDate(date, -DAY_SPAN), shiftDate(date, DAY_SPAN), mode, hide, st);
+      return reply.type("text/html").send(renderDay(s, date, mode, days, hide, st));
+    },
+  );
+
+  // A week, Sunday to Saturday. Any date in it works; no date is this week.
+  app.get<{ Params: { date?: string }; Querystring: { mode?: string } }>(
+    "/week/:date?",
+    async (request, reply) => {
+      const raw = request.params.date;
+      const date = raw ? safeDate(raw) : dateIn(ORG_TZ);
+      const mode = safeMode(request.query.mode);
+      const s = await shell("calendar");
+      if (!date) {
+        return reply.code(404).type("text/html").send(renderList(s, "Not found", "That is not a date.", []));
+      }
+      const start = weekStart(date);
+      const hide = hiddenCategories(request, reply);
+      const st = hiddenStatuses(request);
+      const days = await dayBuckets(start, shiftDate(start, 6), mode, hide, st);
+      return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st));
     },
   );
 

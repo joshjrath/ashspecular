@@ -12,7 +12,7 @@
  */
 import { CATEGORIES, CHANNELS, channelInk, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
-import type { CalendarEntry, CalendarMode, DayBucket, Stats, StoredRecord } from "../db/records.js";
+import type { CalendarEntry, CalendarMode, DayBucket, Notice, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
   return String(s ?? "")
@@ -433,6 +433,105 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .dcard.cleared .t { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
 .dcard.cleared .chan, .dcard.cleared .top { opacity: .55; }
 
+/* ── week ──────────────────────────────────────────────────────────────── */
+.weekgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.weekgrid .daycol {
+  height: auto; min-height: max(460px, calc(100vh - 290px)); padding: 10px; border-radius: 20px;
+}
+.weekgrid .daybody { overflow: visible; }
+.weekgrid .daycol > header { padding: 6px 6px 10px; gap: 6px; flex-wrap: nowrap; }
+.weekgrid .daycol .dname { flex: 1; }
+.weekgrid .daycol .wk { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weekgrid .daycol.today > header { padding: 8px 10px 10px; }
+.weekgrid .daycol .wk { font-size: 18px; }
+.weekgrid .daycol .rel { display: none; }
+.weekgrid .daycol .cnt { margin-left: auto; }
+.weekgrid .dcard { padding: 10px 10px 9px 12px; border-radius: 14px; }
+.weekgrid .dcard .t { font-size: 14px; }
+.weekgrid .dcard .foot { flex-wrap: wrap; }
+.weekgrid .dcard .at { flex-basis: 100%; }
+.weekgrid .dcard .acts { margin-left: auto; }
+
+/* status toggles sit after the categories, behind a hairline */
+.tsep { width: 1px; height: 22px; background: #2A2A2F; margin: 0 4px; }
+.cattoggle.st i { border-radius: 50%; }
+.cal .chip.done .t { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
+.calbar .tabs.views { margin-left: auto; }
+.calbar .tabs.views + .tabs { margin-left: 0; }
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .weekgrid { grid-template-columns: repeat(7, minmax(220px, 1fr)); overflow-x: auto; padding-bottom: 12px; }
+}
+
+/* ── pins ──────────────────────────────────────────────────────────────── */
+.pinform { display: inline-flex; margin: 0; flex: none; }
+.pinform button { border: 0; cursor: pointer; font-family: var(--ui); }
+.pin-ghost {
+  width: 26px; height: 26px; border-radius: 8px; background: transparent; color: var(--ink3);
+  display: grid; place-items: center; opacity: 0; transition: opacity .12s ease, background .12s ease;
+}
+.pin-ghost svg, .pinned-tag svg { width: 13px; height: 13px; }
+.row:hover .pin-ghost, .dcard:hover .pin-ghost, .pin-ghost:focus-visible { opacity: 1; }
+.pin-ghost:hover { background: var(--line); color: var(--ink); }
+@media (hover: none) { .pin-ghost { opacity: .45; } }
+.pinned-tag {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px;
+  background: #101012; color: var(--yellow); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.pinned-tag:hover { background: #2A2A2F; }
+.pinned-tag:hover span { display: none; }
+.pinned-tag:hover::after { content: "Unpin"; }
+.row.pinned { background: #FFF8D9; }
+.row.pinned + .row:not(.pinned) { margin-top: 6px; }
+.dcard .pinform { margin-left: auto; }
+/* In a card the tag is the pin alone; the cream card already says pinned. */
+.dcard .pinned-tag { padding: 5px; }
+.dcard .pinned-tag span, .dcard .pinned-tag:hover::after { display: none; }
+.dcard.pinned { background: #FFF8D9; }
+
+/* ── bell ──────────────────────────────────────────────────────────────── */
+.bellwrap { position: relative; align-self: center; flex: none; }
+.bell {
+  width: 44px; height: 44px; border-radius: 14px; border: 0; cursor: pointer; position: relative;
+  background: var(--rail); color: #D8D8DE; display: grid; place-items: center;
+}
+.bell:hover, .bell[aria-expanded="true"] { background: #26262A; color: #fff; }
+.bell svg { width: 21px; height: 21px; }
+.bell .badge {
+  position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px; background: var(--late); color: #fff; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center; box-shadow: 0 0 0 3px var(--shell); font-variant-numeric: tabular-nums;
+}
+.bell .badge[hidden] { display: none; }
+.notices {
+  position: absolute; right: 0; top: calc(100% + 10px); width: 400px; max-height: min(560px, 72vh);
+  overflow-y: auto; background: var(--card); color: var(--ink); border-radius: 22px; padding: 8px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.45); z-index: 20;
+}
+.notices[hidden] { display: none; }
+.nhead { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; }
+.nhead b { font-family: var(--display); font-size: 17px; letter-spacing: -0.03em; }
+.nhead .alerts {
+  margin-left: auto; border: 0; cursor: pointer; border-radius: 999px; padding: 7px 12px;
+  background: var(--sunk); color: var(--ink2); font: 600 12px var(--ui);
+}
+.nhead .alerts.on { background: var(--gm); color: #fff; }
+.notice { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-radius: 14px; }
+.notice:hover { background: var(--sunk); }
+.notice .ico {
+  width: 32px; height: 32px; border-radius: 10px; flex: none; display: grid; place-items: center;
+  font-size: 12px; font-weight: 800; color: #fff; background: var(--lf);
+}
+.notice.overdue .ico { background: var(--late); font-size: 15px; }
+.notice .body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.notice .nt { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice .ns { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice .ago { color: var(--ink3); font-size: 11.5px; flex: none; }
+.notice.new .ago { color: var(--late); font-weight: 700; }
+.notice.new .ago::before { content: "● "; }
+.nempty { color: var(--ink3); font-size: 13px; padding: 24px 12px 28px; text-align: center; }
+
 /* ── sign in ───────────────────────────────────────────────────────────── */
 .login { max-width: 380px; margin: 15vh auto; padding: 0 20px; }
 .login h1 { font-size: 44px; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 6px; line-height: 1; }
@@ -464,13 +563,6 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .tick button.on { background: var(--gm); border-color: var(--gm); color: #fff; }
 .row.cleared .title { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
 .row.cleared .meta { opacity: .55; }
-.tick.pin button { display: grid; place-items: center; }
-.tick.pin button svg { width: 13px; height: 13px; }
-.tick.pin button:hover { border-color: var(--ink2); color: var(--ink); }
-.tick.pin button.on { background: var(--yellow); border-color: var(--yellow); color: #101012; }
-.group.pinned > .head { margin-top: 0; }
-.group.pinned > .head .dot { background: var(--yellow); }
-.group.pinned { margin-bottom: 18px; }
 .tick.remove button { font-size: 16px; }
 .tick.remove button:hover { border-color: var(--late); color: var(--late); }
 .tick.restore button:hover { border-color: var(--lf); color: var(--lf); }
@@ -630,6 +722,15 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   .calbar button.nav, .calbar .nav { flex: none; }
   #dayname { font-size: 17px; }
   .draghint { display: none; }
+  header.page { position: relative; }
+  .bellwrap { position: absolute; top: 4px; right: 4px; }
+  .notices { position: fixed; left: 10px; right: 10px; top: 70px; width: auto; }
+  .weekgrid { grid-template-columns: minmax(0, 1fr); }
+  .weekgrid .daycol { min-height: 0; }
+  .weekgrid .daycol .rel { display: inline; margin-left: auto; }
+  .weekgrid .daycol .cnt { margin-left: 0; }
+  .calbar .tabs.views { margin-left: 0; }
+  .tsep { display: none; }
 
   .login { margin: 8vh auto; }
   .login h1 { font-size: 36px; }
@@ -741,7 +842,7 @@ function timeAgo(at: Date): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function pageHeader(title: string): string {
+function pageHeader(title: string, extra = ""): string {
   const now = new Date();
   const day = new Intl.DateTimeFormat("en-US", {
     timeZone: ORG_TZ, weekday: "long", day: "numeric", month: "long",
@@ -755,7 +856,126 @@ function pageHeader(title: string): string {
     </button>
     <h1>${esc(title)}</h1>
     <span class="when">${esc(day)} · ${esc(renderIn(now, ORG_TZ, "ET").split("@")[1]?.trim() ?? "")}</span>
+    ${extra}
   </header>`;
+}
+
+/** A record's name as the bell and desktop alerts show it. */
+export function noticeTitle(r: StoredRecord): string {
+  return displayTitle(r);
+}
+
+const BELL_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8.5a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12.5 5 8.5z"/><path d="M8.3 16.5a1.9 1.9 0 0 0 3.4 0"/></svg>`;
+
+/**
+ * The dashboard's bell: revisions that have come in and work past its time,
+ * newest first. The badge counts what arrived since you last opened it.
+ * Opening it marks everything read. "Desktop alerts" asks the browser for
+ * permission, then the open dashboard checks every minute and pops a system
+ * notification for anything new.
+ */
+function bell(notices: Notice[], seen: number): string {
+  const unread = notices.filter((n) => n.at.getTime() > seen).length;
+  const items = notices
+    .map((n) => {
+      const r = n.record;
+      const isNew = n.at.getTime() > seen;
+      const what =
+        n.kind === "revision"
+          ? `Revision ready${r.version ? ` · v${r.version}` : ""}`
+          : `Overdue · was due ${esc(renderIn(n.at, ORG_TZ, "ET"))}`;
+      return `<a class="notice ${n.kind}${isNew ? " new" : ""}" href="/r/${r.id}">
+        <span class="ico">${n.kind === "revision" ? "▶" : "!"}</span>
+        <span class="body">
+          <span class="nt">${esc(displayTitle(r))}</span>
+          <span class="ns">${what}${r.channel ? ` · ${esc(r.channel)}` : ""}</span>
+        </span>
+        <span class="ago">${esc(timeAgo(n.at))}</span>
+      </a>`;
+    })
+    .join("");
+
+  return `<div class="bellwrap">
+    <button class="bell" type="button" id="bell" aria-haspopup="true" aria-expanded="false"
+      aria-label="Notifications${unread ? `, ${unread} new` : ""}" title="Notifications">
+      ${BELL_ICON}<span class="badge" id="bellcount"${unread ? "" : " hidden"}>${unread > 9 ? "9+" : unread}</span>
+    </button>
+    <div class="notices" id="notices" hidden>
+      <div class="nhead">
+        <b>Notifications</b>
+        <button type="button" class="alerts" id="alerts">Desktop alerts</button>
+      </div>
+      ${items || `<div class="nempty">Nothing yet. Revisions and overdue work show up here.</div>`}
+    </div>
+  </div>
+  <script>
+  (function () {
+    var bell = document.getElementById("bell"), panel = document.getElementById("notices");
+    var count = document.getElementById("bellcount"), alerts = document.getElementById("alerts");
+    function markRead() {
+      document.cookie = "notices_seen=" + Date.now() + "; path=/; max-age=31536000; samesite=lax";
+      count.hidden = true;
+    }
+    bell.addEventListener("click", function (e) {
+      e.stopPropagation();
+      panel.hidden = !panel.hidden;
+      bell.setAttribute("aria-expanded", String(!panel.hidden));
+      if (!panel.hidden) markRead();
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !panel.contains(e.target)) { panel.hidden = true; bell.setAttribute("aria-expanded", "false"); }
+    });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") panel.hidden = true; });
+
+    // Desktop alerts: remembered per browser, and only for what arrives after
+    // they were turned on, so switching them on never fires a backlog.
+    var canAlert = "Notification" in window;
+    function on() {
+      try { return canAlert && Notification.permission === "granted" && localStorage.getItem("alerts") === "on"; } catch (e) { return false; }
+    }
+    function label() {
+      alerts.textContent = !canAlert ? "Alerts not supported" : on() ? "Desktop alerts: on" : "Desktop alerts: off";
+      alerts.classList.toggle("on", on());
+    }
+    label();
+    alerts.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (!canAlert) return;
+      if (on()) { try { localStorage.setItem("alerts", "off"); } catch (x) {} label(); return; }
+      Notification.requestPermission().then(function (p) {
+        if (p === "granted") {
+          try { localStorage.setItem("alerts", "on"); localStorage.setItem("alertedTo", String(Date.now())); } catch (x) {}
+        }
+        label();
+      });
+    });
+
+    function poll() {
+      fetch("/notifications.json", { headers: { Accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) return;
+          if (panel.hidden) {
+            count.hidden = data.unread === 0;
+            count.textContent = data.unread > 9 ? "9+" : String(data.unread);
+          }
+          if (!on()) return;
+          var since = 0;
+          try { since = Number(localStorage.getItem("alertedTo")) || Date.now(); } catch (x) {}
+          var now = Date.now(), fresh = data.items.filter(function (n) { return n.at > since && n.at <= now; });
+          fresh.slice(0, 5).forEach(function (n) {
+            var note = new Notification(n.kind === "revision" ? "Revision ready" : "Overdue", {
+              body: n.title + (n.channel ? " — " + n.channel : ""), tag: n.kind + ":" + n.id,
+            });
+            note.onclick = function () { window.focus(); location.href = "/r/" + n.id; };
+          });
+          try { localStorage.setItem("alertedTo", String(now)); } catch (x) {}
+        })
+        .catch(function () {});
+    }
+    setInterval(poll, 60000);
+  })();
+  </script>`;
 }
 
 /**
@@ -808,8 +1028,8 @@ function row(r: StoredRecord): string {
         .join("")}</div>`
     : "";
 
-  return `<div class="row${r.status === "done" ? " cleared" : ""}" style="--c:${c}">
-    <div class="title"><span class="swatch"></span>${code}<a href="/r/${r.id}">${esc(title)}</a></div>
+  return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" style="--c:${c}">
+    <div class="title"><span class="swatch"></span>${code}<a href="/r/${r.id}">${esc(title)}</a>${pinControl(r)}</div>
     <div class="meta">${meta.join("<span>·</span>")}${links}</div>
     <div class="when">${when(r)}${actions(r)}</div>
   </div>`;
@@ -818,14 +1038,33 @@ function row(r: StoredRecord): string {
 /**
  * The buttons at the end of a row, one tap each from wherever you are looking.
  *
- * The pin puts a row at the top of the dashboard, as many as you like, until
- * it is unpinned. It changes nothing else about the row.
- *
  * ✓ clears, and counts toward "cleared this week". × removes, and counts
  * toward nothing — it is for things that were never real work, like a
  * duplicate or a message filed by mistake. A removed row gets a single ↺ to
  * put it back.
  */
+/**
+ * The pin. Pinned, a row carries a yellow "Pinned" tab that is itself the
+ * unpin button, and sits at the top of its category. Unpinned, it is a quiet
+ * icon beside the title that shows itself when you point at the row.
+ */
+function pinControl(r: StoredRecord): string {
+  if (r.status === "removed") return "";
+  const on = Boolean(r.pinnedAt);
+  return `<form class="pinform" method="post" action="/r/${r.id}/${on ? "unpin" : "pin"}">
+    <button class="${on ? "pinned-tag" : "pin-ghost"}" aria-label="${on ? "Unpin" : "Pin to the top of its category"}"
+      title="${on ? "Unpin" : "Pin to the top of its category"}">${PIN_ICON}${on ? "<span>Pinned</span>" : ""}</button>
+  </form>`;
+}
+
+/** Pinned first — newest pin on top — and everything else in its order. */
+export function pinnedFirst(list: StoredRecord[]): StoredRecord[] {
+  const pinned = list
+    .filter((r) => r.pinnedAt)
+    .sort((a, b) => b.pinnedAt!.getTime() - a.pinnedAt!.getTime());
+  return pinned.length ? [...pinned, ...list.filter((r) => !r.pinnedAt)] : list;
+}
+
 const PIN_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l-.75 4.5 2.5 2.5v1.25h-8.5V8.75l2.5-2.5z" fill="currentColor"/><path d="M8 10v4.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
 function actions(r: StoredRecord): string {
@@ -838,14 +1077,7 @@ function actions(r: StoredRecord): string {
 
   if (r.status === "removed") return `<div class="acts">${button("open", "Restore", "↺", "restore")}</div>`;
 
-  const pinned = r.pinnedAt !== null;
-  const pin = `<form class="tick pin" method="post" action="/r/${r.id}/${pinned ? "unpin" : "pin"}">
-      <button aria-label="${pinned ? "Unpin" : "Pin to the top of the dashboard"}"
-        title="${pinned ? "Unpin" : "Pin to the top of the dashboard"}"${pinned ? ' class="on"' : ""}>${PIN_ICON}</button>
-    </form>`;
-
   return `<div class="acts">
-    ${pin}
     ${r.status === "done" ? button("open", "Reopen", "✓", "on") : button("done", "Clear", "✓")}
     ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}
   </div>`;
@@ -1023,10 +1255,10 @@ export function renderDashboard(
     byDay: DayBucket[];
     grouped: Map<string, StoredRecord[]>;
     channels: Record<string, number>;
-    pinned?: StoredRecord[];
+    notices?: Notice[];
+    seen?: number;
   },
 ): string {
-  const pinned = data.pinned ?? [];
   const tiles = [
     { n: data.stats.late, l: "late", alert: data.stats.late > 0 },
     { n: data.stats.dueToday, l: "due today", alert: false },
@@ -1052,10 +1284,10 @@ export function renderDashboard(
     const list = data.grouped.get(c.id) ?? [];
     if (!list.length) return "";
     const channels = CHANNELS.filter((ch) => ch.category === c.id).length;
-    return group(c.id, list.slice(0, 8), channels > 1 ? `${channels} channels` : "");
+    return group(c.id, pinnedFirst(list).slice(0, 8), channels > 1 ? `${channels} channels` : "");
   }).join("");
 
-  const unsorted = data.grouped.get("unknown") ?? [];
+  const unsorted = pinnedFirst(data.grouped.get("unknown") ?? []);
 
   const chanList = CHANNELS.map((ch) => {
     const n = data.channels[ch.name] ?? 0;
@@ -1066,19 +1298,7 @@ export function renderDashboard(
   return layout(
     "Dashboard",
     shell,
-    `${pageHeader("Dashboard")}
-    ${
-      pinned.length
-        ? `<div class="group pinned">
-            <div class="head">
-              <span class="dot"></span><span class="name">Pinned</span>
-              <span class="sub">tap the pin again to take one off</span>
-              <span class="n">${pinned.length}</span>
-            </div>
-            ${rows(pinned, "")}
-          </div>`
-        : ""
-    }
+    `${pageHeader("Dashboard", bell(data.notices ?? [], data.seen ?? 0))}
     <div class="stats">${tiles}</div>
 
     <div class="split">
@@ -1220,7 +1440,7 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
         r.status === "removed"
           ? ""
           : `<form class="inline" method="post" action="/r/${r.id}/${r.pinnedAt ? "unpin" : "pin"}" style="margin-right:8px">
-               <button class="clear secondary">${r.pinnedAt ? "Unpin" : "Pin to dashboard"}</button>
+               <button class="clear secondary">${r.pinnedAt ? "Unpin" : "Pin to top of category"}</button>
              </form>`
       }
       <form class="inline" method="post" action="/r/${r.id}/${r.status === "open" ? "done" : "open"}">
@@ -1327,7 +1547,7 @@ export function sortRecords(list: StoredRecord[], key: SortKey, dir: SortDir): S
     return String(a).localeCompare(String(b), "en", { numeric: true });
   };
 
-  return [...list].sort((x, y) => {
+  return pinnedFirst([...list].sort((x, y) => {
     const a = value(x);
     const b = value(y);
     if (a === null && b === null) return y.createdAt.getTime() - x.createdAt.getTime();
@@ -1338,7 +1558,7 @@ export function sortRecords(list: StoredRecord[], key: SortKey, dir: SortDir): S
     if (c !== 0) return c;
     if (key !== "air" && x.airDate && y.airDate && x.airDate !== y.airDate) return x.airDate < y.airDate ? -1 : 1;
     return y.createdAt.getTime() - x.createdAt.getTime();
-  });
+  }));
 }
 
 export interface SortState {
@@ -1422,13 +1642,147 @@ function categoryToggles(hide: string[], href: (hide: string) => string, attrs =
   return { toggles, showAll };
 }
 
+/**
+ * Which statuses a calendar view hides: "done" hides complete work, "open"
+ * hides incomplete. Empty — both shown — is the default, and it lives in the
+ * address rather than a cookie, so the calendar always opens showing both.
+ */
+export type StatusHide = Array<"open" | "done">;
+
+/** The query every calendar link carries: its mode, and any status filter. */
+function calQuery(mode: CalendarMode, st: StatusHide): string {
+  return `?mode=${mode}${st.length ? `&amp;st=${st.join(",")}` : ""}`;
+}
+
+/** Complete / Incomplete, beside the category toggles and styled like them. */
+function statusToggles(st: StatusHide, href: (st: string) => string, attrs = ""): string {
+  const items: Array<{ id: "done" | "open"; label: string; colour: string }> = [
+    { id: "done", label: "Complete", colour: "var(--gm)" },
+    { id: "open", label: "Incomplete", colour: "#9A9AA3" },
+  ];
+  return `<span class="tsep" aria-hidden="true"></span>${items
+    .map(({ id, label, colour }) => {
+      const off = st.includes(id);
+      const next = off ? st.filter((x) => x !== id) : [...st, id];
+      return `<a class="cattoggle st${off ? " off" : ""}" style="--c:${colour}" aria-pressed="${!off}"
+        title="${off ? "Show" : "Hide"} ${label.toLowerCase()} work" ${attrs}
+        href="${href(next.join(","))}"><i></i>${label}</a>`;
+    })
+    .join("")}`;
+}
+
+/** Month · Week · Day, each opening on the same stretch of time. */
+function viewTabs(active: "month" | "week" | "day", date: string, q: string, attrs = ""): string {
+  const tab = (key: typeof active, href: string, label: string) =>
+    `<a class="tab${active === key ? " on" : ""}" ${attrs} href="${href}${q}">${label}</a>`;
+  return `<div class="tabs views">${tab("month", `/calendar/${date.slice(0, 7)}`, "Month")}${tab(
+    "week",
+    `/week/${date}`,
+    "Week",
+  )}${tab("day", `/day/${date}`, "Day")}</div>`;
+}
+
+/** The Sunday a week starts on — the month grid starts on Sunday too. */
+export function weekStart(date: string): string {
+  const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return shiftDay(date, -dow);
+}
+
+/** One day as a column of cards: the day view's strip and the week's grid. */
+function dayColumn(
+  d: string,
+  list: StoredRecord[],
+  mode: CalendarMode,
+  q: string,
+  cls: string,
+): string {
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(
+    new Date(`${d}T12:00:00Z`),
+  );
+  return `<section class="daycol${cls}" data-date="${d}" data-pretty="${esc(`${weekday} ${usDate(d)}`)}">
+    <header>
+      <a class="dname" href="/day/${d}${q}" title="Open ${esc(weekday)} in the day view">
+        <span class="wk">${esc(weekday)}</span>
+        <span class="dt">${esc(usDate(d))}</span>
+      </a>
+      <span class="rel">${esc(relativeDay(d))}</span>
+      <span class="cnt">${list.length}</span>
+    </header>
+    <div class="daybody">${
+      list.map((r) => dayCard(r, mode)).join("") ||
+      `<div class="dayempty">Nothing ${mode === "posting" ? "airing" : "due"}.</div>`
+    }</div>
+  </section>`;
+}
+
+/**
+ * Drag a card onto another day's column. Saved at once, then the page
+ * reloads — onto the same day, since the address follows the view.
+ */
+function columnDragScript(mode: CalendarMode): string {
+  return `<script>
+    (function () {
+      var mode = ${JSON.stringify(mode)};
+      var dragging = null;
+      document.querySelectorAll(".dcard[draggable]").forEach(function (card) {
+        card.addEventListener("dragstart", function (e) {
+          dragging = card;
+          card.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", card.dataset.id);
+        });
+        card.addEventListener("dragend", function () {
+          card.classList.remove("dragging");
+          dragging = null;
+          document.querySelectorAll(".daycol.over").forEach(function (c) { c.classList.remove("over"); });
+        });
+      });
+      document.querySelectorAll(".daycol[data-date]").forEach(function (col) {
+        col.addEventListener("dragover", function (e) {
+          if (!dragging) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          col.classList.add("over");
+        });
+        col.addEventListener("dragleave", function (e) {
+          if (!col.contains(e.relatedTarget)) col.classList.remove("over");
+        });
+        col.addEventListener("drop", function (e) {
+          e.preventDefault();
+          col.classList.remove("over");
+          var card = dragging;
+          if (!card || card.closest(".daycol") === col) return;
+          var body = col.querySelector(".daybody");
+          var empty = body.querySelector(".dayempty");
+          if (empty) empty.remove();
+          body.appendChild(card);
+          card.classList.add("saving");
+          fetch("/r/" + card.dataset.id + "/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+            body: new URLSearchParams({ date: col.dataset.date, mode: mode }),
+          }).then(function (res) {
+            if (!res.ok) alert("Couldn't move that — nothing was changed.");
+            location.reload();
+          }, function () {
+            alert("Couldn't reach the board — nothing was changed.");
+            location.reload();
+          });
+        });
+      });
+    })();
+    </script>`;
+}
+
 export function renderCalendar(
   shell: Shell,
   ym: string,
   mode: CalendarMode,
   entries: CalendarEntry[],
   hide: string[] = [],
+  st: StatusHide = [],
 ): string {
+  const q = calQuery(mode, st);
   const byDay = new Map<string, CalendarEntry[]>();
   for (const e of entries) {
     if (!byDay.has(e.day)) byDay.set(e.day, []);
@@ -1452,7 +1806,7 @@ export function renderCalendar(
       const chips = list
         .slice(0, CHIPS_PER_CELL)
         .map(
-          (e) => `<a class="chip" draggable="true" data-id="${e.record.id}"
+          (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}" draggable="true" data-id="${e.record.id}"
             style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
             href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
             <span class="dot"></span><span class="t">${esc(displayTitle(e.record))}</span>
@@ -1462,11 +1816,11 @@ export function renderCalendar(
 
       const more =
         list.length > CHIPS_PER_CELL
-          ? `<a class="more" href="/day/${day}?mode=${mode}">+${list.length - CHIPS_PER_CELL} more</a>`
+          ? `<a class="more" href="/day/${day}${q}">+${list.length - CHIPS_PER_CELL} more</a>`
           : "";
 
       return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}" data-date="${day}">
-        <a class="num" href="/day/${day}?mode=${mode}">${num}${
+        <a class="num" href="/day/${day}${q}">${num}${
           isToday ? `<span class="tag">today</span>` : ""
         }</a>
         ${chips}${more}
@@ -1477,22 +1831,26 @@ export function renderCalendar(
   const heads = WEEKDAYS.map((d) => `<div class="wd">${d}</div>`).join("");
 
   const tab = (value: CalendarMode, label: string) =>
-    `<a class="tab${mode === value ? " on" : ""}" href="/calendar/${ym}?mode=${value}">${label}</a>`;
+    `<a class="tab${mode === value ? " on" : ""}" href="/calendar/${ym}${calQuery(value, st)}">${label}</a>`;
 
-  const { toggles, showAll } = categoryToggles(hide, (h) => `/calendar/${ym}?mode=${mode}&amp;hide=${h}`);
+  const { toggles, showAll } = categoryToggles(hide, (h) => `/calendar/${ym}${q}&amp;hide=${h}`);
+  const statuses = statusToggles(st, (x) => `/calendar/${ym}?mode=${mode}&amp;st=${x}`);
+  const today0 = dateIn(ORG_TZ);
+  const anchor = today0.startsWith(ym) ? today0 : `${ym}-01`;
 
   return layout(
     "Calendar",
     shell,
     `${pageHeader("Calendar")}
     <div class="calbar">
-      <a class="nav" href="/calendar/${shiftMonth(ym, -1)}?mode=${mode}" aria-label="Previous month">←</a>
+      <a class="nav" href="/calendar/${shiftMonth(ym, -1)}${q}" aria-label="Previous month">←</a>
       <span class="month">${esc(monthName(ym))}</span>
-      <a class="nav" href="/calendar/${shiftMonth(ym, 1)}?mode=${mode}" aria-label="Next month">→</a>
-      <a class="nav today" href="/calendar?mode=${mode}">Today</a>
+      <a class="nav" href="/calendar/${shiftMonth(ym, 1)}${q}" aria-label="Next month">→</a>
+      <a class="nav today" href="/calendar${q}">Today</a>
+      ${viewTabs("month", anchor, q)}
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
-    <div class="cattoggles">${toggles}${showAll}
+    <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">Drag anything to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
       }.</span>
@@ -1503,7 +1861,7 @@ export function renderCalendar(
         ? ""
         : `<div class="empty" style="margin-top:16px">Nothing ${
             mode === "posting" ? "airing" : "due"
-          } this month${hide.length ? " in the categories shown" : ""}.</div>`
+          } this month${hide.length || st.length ? " in what's shown" : ""}.</div>`
     }
     <script>
     // Drag a chip onto another day: it moves there at once, the change is
@@ -1575,41 +1933,27 @@ export function renderDay(
   mode: CalendarMode,
   days: Array<{ date: string; list: StoredRecord[] }>,
   hide: string[] = [],
+  st: StatusHide = [],
 ): string {
+  const q = calQuery(mode, st);
   const today = dateIn(ORG_TZ);
   const first = days[0]?.date ?? date;
   const last = days[days.length - 1]?.date ?? date;
 
   const columns = days
-    .map(({ date: d, list }) => {
-      const at = new Date(`${d}T12:00:00Z`);
-      const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(at);
-      const cls = `${d === today ? " today" : ""}${d === date ? " focus" : ""}`;
-      const pretty = `${weekday} ${usDate(d)}`;
-      return `<section class="daycol${cls}" data-date="${d}" data-pretty="${esc(pretty)}">
-        <header>
-          <a class="dname" href="/calendar/${d.slice(0, 7)}?mode=${mode}" title="Open ${esc(monthName(d.slice(0, 7)))}">
-            <span class="wk">${esc(weekday)}</span>
-            <span class="dt">${esc(usDate(d))}</span>
-          </a>
-          <span class="rel">${esc(relativeDay(d))}</span>
-          <span class="cnt" data-count>${list.length}</span>
-        </header>
-        <div class="daybody">${
-          list.map((r) => dayCard(r, mode)).join("") ||
-          `<div class="dayempty">Nothing ${mode === "posting" ? "airing" : "due"}.</div>`
-        }</div>
-      </section>`;
-    })
+    .map(({ date: d, list }) =>
+      dayColumn(d, list, mode, q, `${d === today ? " today" : ""}${d === date ? " focus" : ""}`),
+    )
     .join("");
 
   const tab = (value: CalendarMode, label: string) =>
-    `<a class="tab${mode === value ? " on" : ""}" data-dayhref href="/day/${date}?mode=${value}">${label}</a>`;
+    `<a class="tab${mode === value ? " on" : ""}" data-dayhref href="/day/${date}${calQuery(value, st)}">${label}</a>`;
   const { toggles, showAll } = categoryToggles(
     hide,
-    (h) => `/day/${date}?mode=${mode}&amp;hide=${h}`,
+    (h) => `/day/${date}${q}&amp;hide=${h}`,
     "data-dayhref",
   );
+  const statuses = statusToggles(st, (x) => `/day/${date}?mode=${mode}&amp;st=${x}`, "data-dayhref");
 
   return layout(
     usDate(date),
@@ -1621,19 +1965,19 @@ export function renderDay(
         new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`)),
       )} ${esc(usDate(date))}</span>
       <button class="nav" type="button" data-step="1" aria-label="Next day">→</button>
-      <a class="nav" href="/day/${today}?mode=${mode}">Today</a>
-      <a class="nav" id="monthlink" href="/calendar/${date.slice(0, 7)}?mode=${mode}">Month</a>
+      <a class="nav" href="/day/${today}${q}">Today</a>
+      ${viewTabs("day", date, q, "data-dayhref")}
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
-    <div class="cattoggles">${toggles}${showAll}
+    <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">Scroll sideways, or ← → keys. Drag a card to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
       }.</span>
     </div>
     <div class="daystrip" id="daystrip">
-      <a class="dayedge" href="/day/${shiftDay(first, -1)}?mode=${mode}">← Earlier</a>
+      <a class="dayedge" href="/day/${shiftDay(first, -1)}${q}">← Earlier</a>
       ${columns}
-      <a class="dayedge" href="/day/${shiftDay(last, 1)}?mode=${mode}">Later →</a>
+      <a class="dayedge" href="/day/${shiftDay(last, 1)}${q}">Later →</a>
     </div>
     <script>
     (function () {
@@ -1664,9 +2008,10 @@ export function renderDay(
         focus = col;
         var d = col.dataset.date;
         document.getElementById("dayname").textContent = col.dataset.pretty;
-        document.getElementById("monthlink").href = "/calendar/" + d.slice(0, 7) + "?mode=" + mode;
         document.querySelectorAll("[data-dayhref]").forEach(function (a) {
-          a.href = a.getAttribute("href").replace(new RegExp("/day/[0-9]{4}-[0-9]{2}-[0-9]{2}"), "/day/" + d);
+          a.href = a.getAttribute("href")
+            .replace(new RegExp("/(day|week)/[0-9]{4}-[0-9]{2}-[0-9]{2}"), "/$1/" + d)
+            .replace(new RegExp("/calendar/[0-9]{4}-[0-9]{2}"), "/calendar/" + d.slice(0, 7));
         });
         try { history.replaceState(null, "", "/day/" + d + location.search); } catch (e) {}
       }
@@ -1698,59 +2043,53 @@ export function renderDay(
         if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
       });
 
-      // Drag a card to another day's column. Saved at once; the reload lands
-      // on the same day, because the address already followed the scroll.
-      var dragging = null;
-      strip.querySelectorAll(".dcard[draggable]").forEach(function (card) {
-        card.addEventListener("dragstart", function (e) {
-          dragging = card;
-          card.classList.add("dragging");
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", card.dataset.id);
-        });
-        card.addEventListener("dragend", function () {
-          card.classList.remove("dragging");
-          dragging = null;
-          strip.querySelectorAll(".daycol.over").forEach(function (c) { c.classList.remove("over"); });
-        });
-      });
-      cols.forEach(function (col) {
-        col.addEventListener("dragover", function (e) {
-          if (!dragging) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          col.classList.add("over");
-        });
-        col.addEventListener("dragleave", function (e) {
-          if (!col.contains(e.relatedTarget)) col.classList.remove("over");
-        });
-        col.addEventListener("drop", function (e) {
-          e.preventDefault();
-          col.classList.remove("over");
-          var card = dragging;
-          if (!card) return;
-          var from = card.closest(".daycol");
-          if (from === col) return;
-          var body = col.querySelector(".daybody");
-          var empty = body.querySelector(".dayempty");
-          if (empty) empty.remove();
-          body.appendChild(card);
-          card.classList.add("saving");
-          fetch("/r/" + card.dataset.id + "/move", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
-            body: new URLSearchParams({ date: col.dataset.date, mode: mode }),
-          }).then(function (res) {
-            if (!res.ok) alert("Couldn't move that — nothing was changed.");
-            location.reload();
-          }, function () {
-            alert("Couldn't reach the board — nothing was changed.");
-            location.reload();
-          });
-        });
-      });
     })();
-    </script>`,
+    </script>
+    ${columnDragScript(mode)}`,
+  );
+}
+
+/** Seven days, Sunday to Saturday, every item as a card you can drag. */
+export function renderWeek(
+  shell: Shell,
+  start: string,
+  mode: CalendarMode,
+  days: Array<{ date: string; list: StoredRecord[] }>,
+  hide: string[] = [],
+  st: StatusHide = [],
+): string {
+  const q = calQuery(mode, st);
+  const today = dateIn(ORG_TZ);
+  const end = shiftDay(start, 6);
+  const anchor = today >= start && today <= end ? today : start;
+
+  const tab = (value: CalendarMode, label: string) =>
+    `<a class="tab${mode === value ? " on" : ""}" href="/week/${start}${calQuery(value, st)}">${label}</a>`;
+  const { toggles, showAll } = categoryToggles(hide, (h) => `/week/${start}${q}&amp;hide=${h}`);
+  const statuses = statusToggles(st, (x) => `/week/${start}?mode=${mode}&amp;st=${x}`);
+  const total = days.reduce((n, d) => n + d.list.length, 0);
+
+  return layout(
+    `Week of ${usDate(start)}`,
+    shell,
+    `${pageHeader("Week")}
+    <div class="calbar">
+      <a class="nav" href="/week/${shiftDay(start, -7)}${q}" aria-label="Previous week">←</a>
+      <span class="month">${esc(usDate(start))} – ${esc(usDate(end))}</span>
+      <a class="nav" href="/week/${shiftDay(start, 7)}${q}" aria-label="Next week">→</a>
+      <a class="nav" href="/week/${today}${q}">This week</a>
+      ${viewTabs("week", anchor, q)}
+      <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
+    </div>
+    <div class="cattoggles">${toggles}${showAll}${statuses}
+      <span class="draghint">${total} this week · drag a card to another day to move its ${
+        mode === "posting" ? "air date" : "deadline"
+      }.</span>
+    </div>
+    <div class="weekgrid">${days
+      .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : ""))
+      .join("")}</div>
+    ${columnDragScript(mode)}`,
   );
 }
 
@@ -1768,12 +2107,13 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
     bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded`);
   }
 
-  return `<article class="dcard${r.status === "done" ? " cleared" : ""}" draggable="true" data-id="${r.id}"
+  return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" draggable="true" data-id="${r.id}"
       style="--c:${colourOf(r.category)}">
     <div class="top">
       <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>
       ${r.code ? `<span class="code">${esc(r.code)}</span>` : ""}
       ${bits.length ? `<span class="bits">${bits.join(" · ")}</span>` : ""}
+      ${pinControl(r)}
     </div>
     <a class="t" href="/r/${r.id}">${esc(displayTitle(r))}</a>
     ${

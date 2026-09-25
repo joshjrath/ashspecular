@@ -19,7 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, renderCalendar, renderDashboard, renderDay, shiftMonth, sortRecords } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
@@ -423,12 +423,19 @@ const pinnedRec = { ...sample[0]!, id: 7, category: "stories", status: "open", l
   confidence: 1, batchNo: null, batchTarget: null, batchDone: 0, pinnedAt: new Date() } as unknown as
   Parameters<typeof sortRecords>[0][number];
 const days = [-1, 0, 1].map((n) => ({ date: shiftDate("2026-09-28", n), list: n === 0 ? [pinnedRec] : [] }));
+const plainRec = { ...pinnedRec, id: 8, pinnedAt: null, title: "Unpinned one" } as typeof pinnedRec;
 const pages = {
-  calendar: renderCalendar(shellFix, "2026-09", "posting", []),
+  calendar: renderCalendar(shellFix, "2026-09", "posting", [], [], ["done"]),
   day: renderDay(shellFix, "2026-09-28", "posting", days),
+  week: renderWeek(shellFix, "2026-09-27", "posting", days),
   dashboard: renderDashboard({ ...shellFix, active: "dashboard" }, {
     stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
-    byDay: [], grouped: new Map(), channels: {}, pinned: [pinnedRec],
+    byDay: [], grouped: new Map([["stories", [plainRec, pinnedRec]]]), channels: {},
+    notices: [
+      { kind: "revision", at: new Date(Date.now() - 60_000), record: plainRec },
+      { kind: "overdue", at: new Date(Date.now() - 3_600_000), record: pinnedRec },
+    ],
+    seen: Date.now() - 120_000,
   }),
 };
 for (const [name, html] of Object.entries(pages)) {
@@ -440,8 +447,16 @@ for (const [name, html] of Object.entries(pages)) {
 }
 t("day strip: one column per day", (pages.day.match(/class="daycol/g) ?? []).length, 3);
 t("day strip: the clicked day is focused", /daycol[^"]*focus[^"]*" data-date="2026-09-28"/.test(pages.day), true);
-t("dashboard: pinned section at the top", pages.dashboard.indexOf("group pinned") < pages.dashboard.indexOf('class="stats"'), true);
-t("a pinned row offers unpin", pages.dashboard.includes(`/r/7/unpin`), true);
+const groupsHtml = pages.dashboard.slice(pages.dashboard.indexOf('class="group"'));
+t("pinned row sits first in its own category", groupsHtml.indexOf("/r/7\"") < groupsHtml.indexOf("/r/8\""), true);
+t("no separate pinned section", pages.dashboard.includes("group pinned"), false);
+t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
+t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
+t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new"/g) ?? []).length, 1);
+t("bell: badge shows the unread count", /id="bellcount">1</.test(pages.dashboard), true);
+t("status toggle: Complete shown off when hidden", /cattoggle st off[^>]*>[\s\S]*?Complete/.test(pages.calendar), true);
+t("calendar links carry the status filter", pages.calendar.includes("&amp;st=done"), true);
+t("week starts on Sunday", [weekStart("2026-09-23"), weekStart("2026-09-20"), weekStart("2026-09-26")], ["2026-09-20", "2026-09-20", "2026-09-20"]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

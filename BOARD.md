@@ -12,10 +12,17 @@ The board uses the whole width of the window. The button beside each page's
 title — or the `[` key — puts the sidebar away, and it stays away until you
 bring it back.
 
-**Pinned** — press the pin on any row, anywhere on the board, and it sits at
-the top of the dashboard until you press it again. Pin as many as you like;
-the newest pin comes first. Pinning changes nothing else about a row, and a
-removed row drops off.
+**Pins** — point at any row and a pin appears beside its title. Pinned, the
+row turns cream, carries a black *Pinned* tag, and sits at the top of its own
+category — on the dashboard and on the category page, whatever the sort. Pin
+as many as you like; the newest pin comes first. Press the tag to unpin.
+
+**The bell** — top right of the dashboard. It lists revisions that have come
+in and anything past its time, newest first, with a red count of what arrived
+since you last opened it. Recurring batches are left out; they fall due every
+evening. **Desktop alerts** in the panel asks your browser for permission,
+then an open dashboard checks every minute and pops a system notification for
+anything new.
 
 **Work due by day** — a headline count, then a column per day.
 
@@ -51,6 +58,12 @@ plots the day the work is due.
   stated stays put.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
+- **Complete / Incomplete** toggles sit beside the categories. Both are on
+  whenever you open the calendar; switching one off follows you from month to
+  week to day until you leave.
+- **Month · Week · Day** switch views, each on the same stretch of time. The
+  week runs Sunday to Saturday, a column a day with every item as a card you
+  can drag, pin, ✓ or ×.
 - A cell shows five items; the rest are a click away.
 - Click a chip for that record, a date for the **day view**.
 
