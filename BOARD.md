@@ -236,6 +236,61 @@ bottom** Shorts, each channel's **health** (this week's median against last
 week's, share beating its usual, tiers) and **posting slots** — how Shorts
 do by the three-hour Eastern window they went up in, best first.
 
+## Scripts & structure — every Stories transcript, read against how it did
+
+Below Ideas on the Stories tab. **Nothing to set up and no key:** each
+video's transcript is read from YouTube's own captions (the ones it
+uploaded, or YouTube's automatic English), a few dozen an hour, newest
+first, so the whole back catalogue fills in over a few days. The coverage
+bar shows how far it's got. (The YouTube API key can't do this: Google only
+lets the channel owner, signed in, download captions through the API.)
+
+If YouTube turns this server away (it sometimes blocks cloud servers), the
+panel says so and it tries again the next hour. Any video's transcript can
+also be added by hand on its page: in YouTube Studio → Subtitles → ⋮ →
+Download, then drop the .srt/.vtt/.sbv on the video's page, or paste plain
+text.
+
+Every transcript is measured on the parts of a script a writer controls:
+
+| Measure | |
+|---|---|
+| Premise said by | seconds until the title's names are both said: how fast it delivers the title's promise |
+| Hook asks a question | "what if", "have you ever", "imagine" in the first 20 seconds |
+| Turns a minute | "but", "suddenly", "until", "turns out", "little did"…: the story changing direction |
+| Open loops per 10 min | "stick around", "you'll see", "but first"…: promises that keep people watching |
+| Biggest twist lands at | where in the runtime the turns bunch up most |
+| Subscribe ask at | where "subscribe" is first said |
+| "You" a minute, pace, length, names in the story | |
+
+Each measure is split into thirds across the videos, and the panel shows
+which third runs above the channel's usual, strongest first. Open a row for
+the numbers and the best videos. Alongside:
+
+- **Built like your hits**: the typical top third, as a checklist
+- **Where the turns fall**: the top third's turns through the runtime against
+  the bottom third's
+- **Names that come with hits**: characters said three or more times in a
+  script, and how those videos did. *Untapped* means few or no titles name
+  them yet: a story built around them is untried
+- **Openings that work**: phrases in the first 45 seconds that come with hits
+- **Check a script**: paste a draft and its title. It's timed at your usual
+  pace, measured the same way, and you get a verdict ("built like your
+  hits"), each measure against the hits with what to change, and its turns
+  plotted against the hits'
+- **Search the transcripts**: every place a phrase is said, with a timestamp
+  that opens the video there. Handy for "have we done this before?"
+- **Every video and its transcript**: each opens the video's own page, with
+  its measures against the hits, its opening, its turns chart and the full
+  transcript with the turns highlighted
+
+Follow-up ideas in the Ideas panel also show *how the original opened*.
+
+| Variable | Default | |
+|---|---|---|
+| `TRANSCRIPT_CATEGORIES` | `stories` | which categories get transcripts, comma-separated (e.g. `stories,gaming,movies`) |
+| `TRANSCRIPTS_PER_HOUR` | `40` | how many are read each hour |
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their

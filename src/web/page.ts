@@ -20,6 +20,8 @@ import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, formatFor } from "./
 import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
+import { TURNS, clock, type CastStat, type Pattern, type ScriptCheck, type ScriptFeatures, type ScriptVideo, type Segment, type StructureAnalysis } from "./structure.js";
+import type { TranscriptRow } from "../jobs/transcripts.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -1001,6 +1003,65 @@ header.page a.clear { align-self: center; }
 .isg .imore { font-size: 11.5px; color: var(--ink3); font-weight: 600; margin-top: 2px; }
 .isg[open] .imore { display: none; }
 .isg .idetail { padding: 0 13px 13px; border-top: 1px solid #2E2E35; }
+.scover { height: 6px; border-radius: 99px; background: var(--sunk); overflow: hidden; margin: 0 0 12px; }
+.scover i { display: block; height: 100%; background: #8FE3B6; border-radius: 99px; }
+.sblocked { background: #3A1E1D; color: #FFC2BC; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin: 0 0 12px; }
+.sgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 18px; margin-bottom: 8px; }
+.sblue { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sblue span { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.sblue small, .vcard small { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.sblue b { font-family: var(--display); font-size: 17px; letter-spacing: -0.02em; }
+.bchart svg { width: 100%; height: auto; display: block; }
+.bchart .wk { stroke: #2A2A31; } .bchart .one { stroke: #4A4A55; stroke-dasharray: 3 3; }
+.bchart .tick { fill: var(--ink3); font: 600 10.5px var(--ui); }
+.blegend { display: flex; gap: 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
+.blegend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.sbuckets { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0; }
+.sbuckets td { padding: 5px 6px; border-top: 1px solid #26262C; color: var(--ink2); }
+.sbuckets tr.best td { color: var(--ink); font-weight: 600; }
+.sbuckets td.up { color: #8FE3B6; font-weight: 700; } .sbuckets td.down { color: #FF9C94; font-weight: 700; }
+.untapped { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #0B0B0D; background: #F8E27A; border-radius: 99px; padding: 1px 7px; margin-left: 4px; }
+.scheck { background: var(--sunk); border-radius: 14px; margin: 16px 0 6px; }
+.panel > .scheck:first-child { margin: 0; }
+.scheck > summary { list-style: none; cursor: pointer; padding: 12px 14px; font-size: 13.5px; }
+.scheck > summary::-webkit-details-marker { display: none; }
+.scheck .sub { color: var(--ink3); font-weight: 500; }
+.sform { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px; }
+.sform input[type=text], .sform textarea {
+  width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #2E2E35; background: var(--raised);
+  color: var(--ink); font: inherit; font-size: 13.5px; resize: vertical;
+}
+.sform input[type=file] { color: var(--ink2); font-size: 12.5px; }
+.sform button { align-self: flex-start; }
+.scheck .iresult { margin: 0 14px 10px; background: var(--raised); }
+.snotes { list-style: none; margin: 0 14px 10px; padding: 0; }
+.snotes li { display: grid; grid-template-columns: minmax(0, 1fr) auto 70px; gap: 2px 12px; padding: 7px 4px; border-top: 1px solid #2E2E35; font-size: 13px; align-items: baseline; }
+.snotes .il { text-align: right; font-weight: 700; } .snotes .il.up { color: #8FE3B6; } .snotes .il.down { color: #FF9C94; }
+.snotes .sna { grid-column: 1 / -1; color: var(--ink3); font-size: 12px; }
+.scheck .bchart { padding: 0 14px 14px; max-width: 720px; }
+.vhead + .panel .bchart, .sgrid .bchart { max-width: 760px; }
+.tsearch { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tsearch li { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.tst { font-weight: 700; font-size: 13.5px; }
+.thit { font-size: 12.5px; color: var(--ink2); line-height: 1.5; }
+.thit b { color: var(--salmon); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.tlist { margin-top: 14px; font-size: 13px; }
+.tlist summary { cursor: pointer; color: var(--ink2); font-weight: 600; }
+.tlist ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 420px; overflow: auto; }
+.tlist a { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: baseline; }
+.tlist a:hover { background: var(--sunk); }
+.tstate { color: var(--ink3); font-weight: 700; } .tstate.ok { color: #8FE3B6; } .tstate.bad { color: #FF9C94; }
+.shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
+.vhead h2 a:hover { text-decoration: underline; }
+.vhead .up { color: #8FE3B6; } .vhead .down { color: #FF9C94; }
+.vcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.vcard { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.vcard b { font-family: var(--display); font-size: 20px; letter-spacing: -0.02em; }
+.vcard span { font-size: 11.5px; color: var(--ink3); }
+.tscript { max-height: 70vh; overflow: auto; font-size: 14px; line-height: 1.7; color: var(--ink2); }
+.tscript p { margin: 0 0 10px; }
+.tscript p a { color: var(--salmon); font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 10px; font-size: 12.5px; }
+.tscript mark { background: rgba(248, 226, 122, 0.18); color: #F8E27A; border-radius: 4px; padding: 0 2px; }
 .idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
 .idrafts a:hover { text-decoration: underline; }
 .ifacts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink2); margin-top: 12px; }
@@ -1024,7 +1085,8 @@ header.page a.clear { align-self: center; }
 .slots b.up { color: #8FE3B6; } .slots b.down { color: #FF9C94; }
 .slots small { color: var(--ink3); }
 @media (max-width: 1000px) {
-  .pcols, .icols, .isugg { grid-template-columns: minmax(0, 1fr); }
+  .pcols, .icols, .isugg, .sgrid { grid-template-columns: minmax(0, 1fr); }
+  .icols .icol { grid-column: auto !important; }
   .ichecker { flex-wrap: wrap; }
   .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ulatest-list { grid-template-columns: minmax(0, 1fr); }
@@ -3042,6 +3104,7 @@ function ideasPanel(
   idea: { title: string; check: IdeaCheck } | null,
   channels: string[] = [],
   channel: string | null = null,
+  hooks: Map<string, string> = new Map(),
 ): string {
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
   const scope = channel ?? `${catLabel} channels`;
@@ -3128,6 +3191,7 @@ function ideasPanel(
       <div class="idetail">
         ${d.drafts.length ? `<h4>Titles to start from</h4><ol class="idrafts">${d.drafts.map((t) => `<li><a href="/uploads?cat=${category}${channel ? `&amp;ch=${encodeURIComponent(channel)}` : ""}&amp;idea=${encodeURIComponent(t)}" title="Check this title">${esc(t)}</a></li>`).join("")}</ol>` : ""}
         ${d.source ? `<h4>The hit it builds on</h4><ul class="ivids">${vidLine(d.source)}</ul>` : ""}
+        ${d.source && hooks.get(d.source.url) ? `<h4>How it opened</h4><blockquote class="shook">${esc(hooks.get(d.source.url)!)}</blockquote>` : ""}
         <div class="ifacts">
           ${d.bestChannel ? `<span><b>Best channel</b> ${esc(d.bestChannel.channel)} · ${esc(formatMultiple(d.bestChannel.median))} usual</span>` : ""}
           ${d.bestDay ? `<span><b>Best day</b> ${esc(d.bestDay.key)} · ${esc(liftText(d.bestDay.lift))}</span>` : ""}
@@ -3204,6 +3268,7 @@ export function renderUploads(
     idea?: { title: string; check: IdeaCheck } | null;
     ideaChannel?: string | null;
     shorts?: { scores: Map<string, ShortScore>; health: ChannelShortHealth[]; slots: SlotStat[] };
+    scripts?: ScriptsData;
   },
   now = new Date(),
 ): string {
@@ -3517,7 +3582,8 @@ export function renderUploads(
           : `<div class="utiles">${tiles}</div>${timeline}${performers}${table}`
         : ""
     }
-    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null) : ""}
+    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.scripts?.hooks) : ""}
+    ${data.scripts ? scriptsPanel(category, data.scripts, data.ideaChannel ?? null) : ""}
     ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>
@@ -3995,5 +4061,286 @@ export function renderRecurring(
       });
     })();
     </script>`,
+  );
+}
+
+// ── scripts & structure ───────────────────────────────────────────────────
+
+export interface ScriptsData {
+  structure: StructureAnalysis;
+  coverage: { videos: number; done: number; failing: number };
+  status: { lastRun: Date | null; fetched: number; failed: number; blocked: string | null };
+  videos: Array<{ upload: Upload; row: TranscriptRow | null; multiple: number | null }>;
+  search: { query: string; results: Array<{ upload: Upload; hits: Array<{ at: number; text: string }> }> } | null;
+  check: { text: string; title: string; result: ScriptCheck | null } | null;
+  /** Each video's opening, by its link, for the idea details. */
+  hooks: Map<string, string>;
+}
+
+const at = (url: string, seconds: number) => `${url}${url.includes("?") ? "&" : "?"}t=${Math.floor(seconds)}s`;
+
+/** Turns across the runtime as lines: hits, misses, and one video if given. */
+function beatChart(lines: Array<{ values: number[]; colour: string; label: string; dash?: boolean }>): string {
+  const W = 640, H = 170, L = 34, R = 22, T = 12, B = 26;
+  const max = Math.max(1.5, ...lines.flatMap((l) => l.values)) * 1.1;
+  const x = (i: number) => L + ((i + 0.5) / 10) * (W - L - R);
+  const y = (v: number) => T + (1 - v / max) * (H - T - B);
+  const grid = [0, 1, 2, 3].filter((v) => v <= max)
+    .map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${v === 1 ? "one" : "wk"}"/>
+      <text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" class="tick">${v === 1 ? "avg" : `${v}×`}</text>`)
+    .join("");
+  const xs = [0, 25, 50, 75, 100].map((p) => `<text x="${(L + (p / 100) * (W - L - R)).toFixed(1)}" y="${H - 8}" text-anchor="middle" class="tick">${p}%</text>`).join("");
+  const paths = lines
+    .map((l) => `<polyline points="${l.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}" fill="none" stroke="${l.colour}" stroke-width="2.5" stroke-linejoin="round"${l.dash ? ' stroke-dasharray="5 4"' : ""}/>
+      ${l.values.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${l.colour}"/>`).join("")}`)
+    .join("");
+  const legend = lines.map((l) => `<span><i style="background:${l.colour}"></i>${esc(l.label)}</span>`).join("");
+  return `<div class="bchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Turns across the runtime">${grid}${xs}${paths}</svg>
+    <div class="blegend">${legend}</div></div>`;
+}
+
+function scriptVidLine(v: ScriptVideo): string {
+  return `<li><a href="/uploads/video/${esc(v.videoId)}">
+      <span class="vm ${(v.multiple ?? 1) >= 1 ? "up" : "down"}">${v.multiple !== null ? esc(formatMultiple(v.multiple)) : "—"}</span>
+      <span class="vt">${esc(v.title)}</span>
+      <span class="vc"><span class="cdot" style="--ch:${channelColour(v.channel)}"></span>${esc(v.channel.replace(/^Specular /, ""))} · ${esc(usDate(dayOf(v.publishedAt)))}</span>
+    </a></li>`;
+}
+
+function scriptsPanel(category: CategoryId, d: ScriptsData, channel: string | null): string {
+  const a = d.structure;
+  const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
+  const pct = d.coverage.videos ? Math.round((d.coverage.done / d.coverage.videos) * 100) : 0;
+  const statusLine = d.status.blocked
+    ? `<p class="sblocked">YouTube turned the last run away: ${esc(d.status.blocked)} It tries again next hour; any video's transcript can also be pasted in on its page.</p>`
+    : "";
+  const head = `<div class="ihead-row">
+      <h2>Scripts &amp; structure <span class="sub">from ${d.coverage.done} of ${d.coverage.videos} ${esc(catLabel)} transcripts (${pct}%)${
+        d.coverage.failing ? ` · ${d.coverage.failing} without captions yet` : ""
+      }${d.status.lastRun ? ` · last read ${esc(timeAgo(d.status.lastRun))}` : ""}</span></h2>
+      <form method="post" action="/uploads/transcripts/run" class="ichan"><input type="hidden" name="_cat" value="${category}"><button class="clear secondary">Read transcripts now</button></form>
+    </div>
+    <div class="scover"><i style="width:${pct}%"></i></div>
+    ${statusLine}`;
+
+  const search = `<form method="get" action="/uploads#scripts" class="ichecker">
+      <input type="hidden" name="cat" value="${category}">
+      ${channel ? `<input type="hidden" name="ch" value="${esc(channel)}">` : ""}
+      <input type="text" name="tq" value="${esc(d.search?.query ?? "")}" placeholder="Search every transcript — e.g. infinity castle, sharingan, “what if”" autocomplete="off">
+      <button class="clear">Search</button>
+    </form>
+    ${
+      d.search
+        ? d.search.results.length
+          ? `<ul class="tsearch">${d.search.results.map((r) => `<li>
+              <a class="tst" href="/uploads/video/${esc(r.upload.videoId)}">${esc(r.upload.title)}</a>
+              <span class="vc"><span class="cdot" style="--ch:${channelColour(r.upload.channel)}"></span>${esc(r.upload.channel.replace(/^Specular /, ""))} · ${esc(usDate(dayOf(r.upload.publishedAt)))}</span>
+              ${r.hits.map((h) => `<a class="thit" href="${esc(at(r.upload.url, h.at))}" target="_blank" rel="noreferrer"><b>${esc(clock(h.at))}</b> ${esc(h.text)}</a>`).join("")}
+            </li>`).join("")}</ul>`
+          : `<p class="hint">No transcript says “${esc(d.search.query)}”.</p>`
+        : ""
+    }`;
+
+  const check = d.check;
+  const checker = `<details class="scheck"${check ? " open" : ""}>
+      <summary><b>Check a script</b> <span class="sub">— paste a draft and see how it's built against your hits</span></summary>
+      <form method="post" action="/uploads/script#scripts" class="sform">
+        <input type="hidden" name="_cat" value="${category}">
+        ${channel ? `<input type="hidden" name="ch" value="${esc(channel)}">` : ""}
+        <input type="text" name="title" value="${esc(check?.title ?? "")}" placeholder="Its title (so the premise timing can be read)" autocomplete="off">
+        <textarea name="script" rows="8" placeholder="Paste the script…">${esc(check?.text ?? "")}</textarea>
+        <button class="clear">Check script</button>
+      </form>
+      ${
+        check
+          ? check.result
+            ? `<div class="iresult">
+                <div class="ipred ${check.result.predicted >= 1.15 ? "up" : check.result.predicted <= 0.87 ? "down" : ""}">
+                  <b>${esc(formatMultiple(check.result.predicted))}</b>
+                  <span>${esc(check.result.verdict)} · ${check.result.words.toLocaleString("en-US")} words ≈ ${esc(clock(check.result.seconds))} at your usual pace</span>
+                </div>
+              </div>
+              <ul class="snotes">${check.result.notes.map((n) => `<li class="${n.lift >= 1.02 ? "up" : n.lift <= 0.98 ? "down" : ""}">
+                  <span class="snl">${esc(n.label)}</span><b>${esc(n.value)}</b><span class="il ${n.lift >= 1 ? "up" : "down"}">${esc(liftText(n.lift))}</span>
+                  ${n.advice ? `<span class="sna">${esc(n.advice)}</span>` : ""}
+                </li>`).join("")}</ul>
+              ${beatChart([
+                ...(a.curves ? [{ values: a.curves.hits, colour: "#8FE3B6", label: "Your hits" }] : []),
+                { values: check.result.features.beats, colour: "#F8E27A", label: "This script", dash: true },
+              ])}`
+            : `<p class="hint">That's too short to measure — paste at least a paragraph.</p>`
+          : ""
+      }
+    </details>`;
+
+  if (a.judged < 6) {
+    return `<div class="panel ideas" id="scripts">${head}
+      <p class="hint">The patterns need six or more transcripts of videos that have been judged. Transcripts are read ${
+        d.status.blocked ? "every hour" : "a few dozen an hour, newest first"
+      }, so this fills in over the next few days.</p>
+      ${search}${checker}${videoList(d)}</div>`;
+  }
+
+  const pattern = (p: Pattern) => `<li><details>
+      <summary><span class="ik">${esc(p.label)}</span>
+        <span class="il up">${esc(p.best.label)} ${esc(liftText(p.best.lift))}</span>
+        <span class="in">${p.buckets.reduce((n, b) => n + b.count, 0)} videos</span></summary>
+      <div class="idetail">
+        <p class="imeta">Hits ${esc(p.advice)}. ${p.worst.label} runs ${esc(liftText(p.worst.lift))}.</p>
+        <table class="sbuckets">${p.buckets.map((b) => `<tr${b === p.best ? ' class="best"' : ""}><td>${esc(b.label)}</td><td>${b.count} videos</td>
+          <td class="${b.lift >= 1 ? "up" : "down"}">${esc(liftText(b.lift))}</td><td>median ${esc(formatMultiple(b.median))}</td></tr>`).join("")}</table>
+        <h4>Best in “${esc(p.best.label)}”</h4><ul class="ivids">${p.best.videos.slice(0, 3).map(scriptVidLine).join("")}</ul>
+      </div>
+    </details></li>`;
+
+  const castRow = (c: CastStat) => `<li><details>
+      <summary><span class="ik">${esc(c.name)}${c.titled <= 1 && c.lift > 1.1 ? ` <span class="untapped">untapped</span>` : ""}</span>
+        <span class="il ${c.lift >= 1 ? "up" : "down"}">${esc(liftText(c.lift))}</span>
+        <span class="in">in ${c.count} scripts</span></summary>
+      <div class="idetail">
+        <p class="imeta">Said three or more times in ${c.count} videos, which ran a median ${esc(formatMultiple(c.median))} their channel's usual.
+          ${c.titled > 1 ? `${c.titled} titles name ${esc(c.name)}.` : `${c.titled ? "Only one title names" : "No title names"} ${esc(c.name)} yet — a story built around them is untried.`}</p>
+        <ul class="ivids">${c.videos.slice(0, 4).map(scriptVidLine).join("")}</ul>
+        <p class="imeta"><a href="/uploads?cat=${category}&amp;idea=${encodeURIComponent(`What If ${c.name} …`)}#ideas">Check a title with ${esc(c.name)} →</a></p>
+      </div>
+    </details></li>`;
+
+  return `<div class="panel ideas" id="scripts">${head}
+    <div class="sgrid">
+      <div>
+        <h3 class="ihead" style="margin-top:4px">Built like your hits <span class="sub">— the typical top third</span></h3>
+        <div class="sblue">${a.blueprint.map((b) => `<span><small>${esc(b.label)}</small><b>${esc(b.value)}</b></span>`).join("")}</div>
+      </div>
+      <div>
+        <h3 class="ihead" style="margin-top:4px">Where the turns fall <span class="sub">— through the runtime, 1 = a video's own average</span></h3>
+        ${a.curves ? beatChart([{ values: a.curves.hits, colour: "#8FE3B6", label: "Top third" }, { values: a.curves.misses, colour: "#FF9C94", label: "Bottom third", dash: true }]) : ""}
+      </div>
+    </div>
+    <div class="icols">
+      <div class="icol" style="grid-column: span 2"><h3>What the scripts show <span class="sub">— strongest first; open one for the numbers</span></h3>
+        <ul class="ilist">${a.patterns.map(pattern).join("")}</ul></div>
+      <div class="icol"><h3>Names that come with hits</h3>
+        ${a.cast.length ? `<ul class="ilist">${a.cast.slice(0, 10).map(castRow).join("")}</ul>` : `<p class="hint">Not enough yet.</p>`}
+        ${a.hookPhrases.length ? `<h3 style="margin-top:14px">Openings that work</h3><div class="ireasons">${a.hookPhrases.map((h) => `<span class="ichip up" title="${esc(h.videos.slice(0, 3).map((v) => v.title).join(" · "))}">“${esc(h.phrase)}” <b>${esc(liftText(h.lift))}</b> <small>${h.count}</small></span>`).join("")}</div>` : ""}
+      </div>
+    </div>
+    ${checker}
+    <h3 class="ihead">Search the transcripts</h3>
+    ${search}
+    ${videoList(d)}
+  </div>`;
+}
+
+function videoList(d: ScriptsData): string {
+  const row = (v: ScriptsData["videos"][number]) => {
+    const state = v.row?.features ? "✓" : v.row?.error ? "✕" : "…";
+    const title = v.row?.features ? "Transcript read" : v.row?.error ?? "Not read yet";
+    return `<li><a href="/uploads/video/${esc(v.upload.videoId)}">
+      <span class="tstate ${v.row?.features ? "ok" : v.row?.error ? "bad" : ""}" title="${esc(title)}">${state}</span>
+      <span class="vt">${esc(v.upload.title)}</span>
+      <span class="vc">${esc(usDate(dayOf(v.upload.publishedAt)))}${v.multiple !== null ? ` · ${esc(formatMultiple(v.multiple))}` : ""}</span>
+    </a></li>`;
+  };
+  return `<details class="tlist"><summary>Every video and its transcript (${d.videos.length})</summary>
+    <ul>${d.videos.slice(0, 400).map(row).join("")}</ul></details>`;
+}
+
+/** One video: how it did, how its script was built, and the transcript itself. */
+export function renderVideo(
+  shell: Shell,
+  data: {
+    upload: { videoId: string; channel: string; title: string; publishedAt: Date; url: string; views: number | null };
+    category: CategoryId;
+    transcript: { segments: Segment[] | null; source: string | null; auto: boolean | null; error: string | null; features: ScriptFeatures | null } | null;
+    perf: Performance | null;
+    structure: StructureAnalysis;
+  },
+): string {
+  const { upload: u, transcript: t, structure: a } = data;
+  const f = t?.features ?? null;
+  const back = `<a class="clear secondary" href="/uploads?cat=${data.category}#scripts">← Scripts &amp; structure</a>`;
+  const blue = new Map(a.blueprint.map((b) => [b.label, b.value]));
+  const pctText = (n: number | null) => (n === null ? "—" : `${Math.round(n * 100)}%`);
+  const cards = f
+    ? [
+        { l: "Length", v: `${(f.seconds / 60).toFixed(1)} min`, h: blue.get("Length") },
+        { l: "Premise said by", v: f.premiseAt === null ? "never" : clock(f.premiseAt), h: blue.get("Premise said by") },
+        { l: "Hook asks a question", v: f.hookQuestion ? "yes" : "no", h: blue.get("Hook asks a question") },
+        { l: "Turns a minute", v: f.turnsPerMin.toFixed(1), h: blue.get("Turns a minute") },
+        { l: "Open loops per 10 min", v: f.loopsPer10.toFixed(1), h: blue.get("Open loops per 10 min") },
+        { l: "Biggest twist at", v: pctText(f.twistAt), h: blue.get("Biggest twist at") },
+        { l: "Subscribe ask at", v: pctText(f.ctaAt), h: blue.get("Subscribe ask at") },
+        { l: "Pace", v: `${f.wpm} wpm`, h: blue.get("Pace") },
+      ]
+        .map((c) => `<div class="vcard"><small>${esc(c.l)}</small><b>${esc(c.v)}</b>${c.h ? `<span>hits: ${esc(c.h)}</span>` : ""}</div>`)
+        .join("")
+    : "";
+
+  const turnRe = new RegExp(`\\b(${TURNS.filter((x) => !x.includes("'")).map((x) => x.replace(/ /g, "\\s+")).join("|")})\\b`, "gi");
+  const paragraphs: Array<{ at: number; text: string }> = [];
+  for (const seg of t?.segments ?? []) {
+    const lastP = paragraphs[paragraphs.length - 1];
+    if (!lastP || seg.s - lastP.at >= 30) paragraphs.push({ at: seg.s, text: seg.t });
+    else lastP.text += ` ${seg.t}`;
+  }
+  const transcript = t?.segments?.length
+    ? `<div class="tscript">${paragraphs
+        .map((p) => `<p><a href="${esc(at(u.url, p.at))}" target="_blank" rel="noreferrer">${esc(clock(p.at))}</a>${esc(p.text).replace(turnRe, "<mark>$1</mark>")}</p>`)
+        .join("")}</div>`
+    : "";
+
+  const paste = `<details class="scheck"${t?.segments?.length ? "" : " open"}>
+      <summary><b>${t?.segments?.length ? "Replace the transcript" : "Paste the transcript"}</b> <span class="sub">— from YouTube Studio (Subtitles → ⋮ → Download: .srt, .vtt or .sbv), or plain text</span></summary>
+      <form method="post" action="/uploads/video/${esc(u.videoId)}/transcript" class="sform">
+        <input type="file" accept=".srt,.vtt,.sbv,.txt,text/plain" data-into="tpaste">
+        <textarea id="tpaste" name="transcript" rows="8" placeholder="…or paste it here"></textarea>
+        <button class="clear">Save transcript</button>
+      </form>
+    </details>
+    <script>
+    document.querySelectorAll("input[data-into]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var file = inp.files && inp.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () { document.getElementById(inp.getAttribute("data-into")).value = String(reader.result || ""); };
+        reader.readAsText(file);
+      });
+    });
+    </script>`;
+
+  const status = t?.segments?.length
+    ? `${t.source === "pasted" ? "Pasted in" : t.auto ? "YouTube's automatic captions" : "Uploaded captions"} · ${f ? `${f.words.toLocaleString("en-US")} words` : ""}`
+    : t?.error
+      ? `No transcript yet — ${t.error}`
+      : "Not read yet — the hourly read will get to it.";
+
+  return layout(
+    u.title,
+    shell,
+    `${pageHeader("Uploads", back)}
+    <div class="panel vhead">
+      <h2><a href="${esc(u.url)}" target="_blank" rel="noreferrer">${esc(u.title)} ↗</a></h2>
+      <p class="imeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span> ${esc(u.channel)} · ${esc(usDate(dayOf(u.publishedAt)))}
+        ${u.views !== null ? ` · ${esc(compactViews(u.views))} views` : ""}
+        ${data.perf ? ` · <b class="${data.perf.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(data.perf.multiple))}</b> the channel's usual (${esc(data.perf.basis)})` : ""}
+      </p>
+      <p class="hint">${esc(status)}</p>
+    </div>
+    ${
+      f
+        ? `<div class="panel"><h2>How it's built <span class="sub">— against the top third of ${esc(CATEGORIES.find((c) => c.id === data.category)?.label ?? "")}</span></h2>
+            <div class="vcards">${cards}</div>
+            <div class="sgrid" style="margin-top:14px">
+              <div><h3 class="ihead" style="margin-top:0">The opening (first 45 seconds)</h3><blockquote class="shook">${esc(f.hook)}</blockquote></div>
+              <div><h3 class="ihead" style="margin-top:0">Where its turns fall</h3>${beatChart([
+                ...(a.curves ? [{ values: a.curves.hits, colour: "#8FE3B6", label: "Your hits" }] : []),
+                { values: f.beats, colour: "#F8E27A", label: "This video", dash: true },
+              ])}</div>
+            </div></div>`
+        : ""
+    }
+    ${transcript ? `<div class="panel"><h2>Transcript <span class="sub">— turns highlighted; a timestamp opens the video there</span></h2>${transcript}</div>` : ""}
+    <div class="panel">${paste}</div>`,
   );
 }

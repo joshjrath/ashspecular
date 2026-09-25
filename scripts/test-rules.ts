@@ -34,6 +34,9 @@ import { breakoutMessage } from "../src/jobs/breakouts.js";
 import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf, typicalShort } from "../src/web/shorts-perf.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
+import { fetchTranscript, parseCaptionFile, parseTimedText, pickTrack, tracksFromWatchPage, Blocked, NoCaptions } from "../src/jobs/transcripts.js";
+import { analyzeStructure, checkScript, clock, featuresOf, findInSegments, wordsOf, type ScriptVideo, type Segment } from "../src/web/structure.js";
+import { renderVideo } from "../src/web/page.js";
 
 let pass = 0;
 let fail = 0;
@@ -775,6 +778,136 @@ const slotVideos = [...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, v
   ...Array.from({ length: 6 }, (_, i) => ({ ...ordinary[i]!, videoId: `e${i}`, publishedAt: new Date(`2026-09-2${i % 5}T20:30:00-04:00`) }))];
 const slotScores = new Map(slotVideos.map((v) => [v.videoId, { multiple: v.videoId.startsWith("m") ? 2 : 0.6 } as never]));
 t("posting slots, best first", postingSlots(slotVideos, slotScores).map((sl) => sl.label), ["9 AM–12 PM", "6 PM–9 PM"]);
+
+section("Transcripts — reading YouTube's captions");
+const classic = `<?xml version="1.0" encoding="utf-8" ?><transcript><text start="0.4" dur="2.1">what if gojo joined</text><text start="2.5" dur="3">the avengers &amp;amp; it&amp;#39;s real</text></transcript>`;
+t("classic timed text: times and double-encoded text", parseTimedText(classic), [{ s: 0.4, d: 2.1, t: "what if gojo joined" }, { s: 2.5, d: 3, t: "the avengers & it's real" }]);
+const srv3 = `<timedtext format="3"><body><p t="1200" d="3000">hello <s>there</s></p><p t="4200" d="1000"></p></body></timedtext>`;
+t("newer timed text in milliseconds", parseTimedText(srv3), [{ s: 1.2, d: 3, t: "hello there" }]);
+t("JSON events", parseTimedText(JSON.stringify({ events: [{ tStartMs: 500, dDurationMs: 1500, segs: [{ utf8: "gojo " }, { utf8: "wins" }] }, { tStartMs: 9 }] })), [{ s: 0.5, d: 1.5, t: "gojo wins" }]);
+const srt = "1\n00:00:01,000 --> 00:00:03,500\nWhat if Gojo\njoined the Avengers?\n\n2\n00:00:04,000 --> 00:00:06,000\nBut then\n";
+t("a Studio .srt file", parseCaptionFile(srt), [{ s: 1, d: 2.5, t: "What if Gojo joined the Avengers?" }, { s: 4, d: 2, t: "But then" }]);
+t("a Studio .sbv file", parseCaptionFile("0:00:01.000,0:00:02.000\nhello\n\n0:00:02.000,0:00:04.500\nworld\n").map((x) => [x.s, x.d, x.t]), [[1, 1, "hello"], [2, 2.5, "world"]]);
+t("plain pasted text is spread at a usual pace", parseCaptionFile("one two three\nfour five six", 180).map((x) => x.s), [0, 1]);
+const tracks = [
+  { baseUrl: "a", languageCode: "es" },
+  { baseUrl: "b", languageCode: "en", kind: "asr" },
+  { baseUrl: "c", languageCode: "en-US" },
+];
+t("uploaded English beats automatic", pickTrack(tracks)?.baseUrl, "c");
+t("automatic English beats other languages", pickTrack(tracks.slice(0, 2))?.baseUrl, "b");
+t("no tracks, no pick", pickTrack([]), null);
+const watchHtml = `<script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=x&lang=en","name":{"simpleText":"English [auto]"},"languageCode":"en","kind":"asr"}],"audioTracks":[]}},"videoDetails":{}};</script>`;
+t("tracks read out of a watch page", tracksFromWatchPage(watchHtml).map((x) => [x.languageCode, x.kind]), [["en", "asr"]]);
+
+// A fake YouTube: the watch page, the player, the caption file.
+const fakeYT = (opts: { player?: unknown; captions?: string; page?: string; status?: number }) =>
+  (async (u: string | URL) => {
+    const url = String(u);
+    if (url.startsWith("https://www.youtube.com/watch")) return new Response(opts.page ?? `<script>{"INNERTUBE_API_KEY":"KEY123"}</script>`, { status: opts.status ?? 200 });
+    if (url.includes("/youtubei/v1/player")) return new Response(JSON.stringify(opts.player ?? {}));
+    if (url.includes("timedtext")) return new Response(opts.captions ?? "");
+    return new Response("", { status: 404 });
+  }) as unknown as typeof fetch;
+const okPlayer = { playabilityStatus: { status: "OK" }, captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ baseUrl: "https://www.youtube.com/api/timedtext?v=x&lang=en&fmt=srv3", languageCode: "en", kind: "asr" }] } } };
+const got = await fetchTranscript("x", fakeYT({ player: okPlayer, captions: classic }));
+t("a transcript read end to end", [got.segments.length, got.language, got.auto], [2, "en", true]);
+const err = async (f: typeof fetch) => { try { await fetchTranscript("x", f); return "none"; } catch (e) { return e instanceof Blocked ? "blocked" : e instanceof NoCaptions ? "nocaptions" : "other"; } };
+t("no caption tracks: says so", await err(fakeYT({ player: { playabilityStatus: { status: "OK" } } })), "nocaptions");
+t("an empty caption file reads as a refusal", await err(fakeYT({ player: okPlayer, captions: "" })), "blocked");
+t("a bot check reads as a refusal", await err(fakeYT({ player: { playabilityStatus: { status: "LOGIN_REQUIRED", reason: "Sign in to confirm you're not a bot" } } })), "blocked");
+t("429 reads as a refusal", await err(fakeYT({ status: 429 })), "blocked");
+t("the player's tracks, else the page's", (await fetchTranscript("x", fakeYT({ page: watchHtml, captions: classic }))).segments.length, 2);
+
+section("Scripts — how each video is built");
+t("words, lower-cased, [Music] dropped", wordsOf("[Music] What IF Gojo's back?"), ["what", "if", "gojo's", "back"]);
+/** A story: a line every 4 seconds; the premise said at `premise` seconds; turns every `turnEvery` lines. */
+const story = (opts: { minutes: number; premise: number; turnEvery: number; question?: boolean; loops?: number; subscribeAt?: number; name?: string }): Segment[] => {
+  const out: Segment[] = [];
+  const lines = Math.round((opts.minutes * 60) / 4);
+  for (let i = 0; i < lines; i += 1) {
+    const s = i * 4;
+    let text = "the fight goes on across the city with great power";
+    if (i === 0 && opts.question) text = "what if the strongest sorcerer met them";
+    if (s >= opts.premise && s < opts.premise + 4) text = "gojo walks into the avengers tower";
+    else if (i % opts.turnEvery === 0 && i > 0) text = `but suddenly everything changes for ${opts.name ?? "them"}`;
+    if (opts.loops && i % Math.round(lines / opts.loops) === 3) text = "stick around because you'll see why";
+    if (opts.subscribeAt !== undefined && i === Math.round(lines * opts.subscribeAt)) text = "subscribe if you want part two";
+    out.push({ s, d: 4, t: text });
+  }
+  return out;
+};
+const f1 = featuresOf(story({ minutes: 10, premise: 8, turnEvery: 5, question: true, loops: 3, subscribeAt: 0.5 }), "What If Gojo Joined The Avengers?")!;
+t("length and pace", [f1.seconds, f1.wpm], [600, Math.round(f1.words / 10)]);
+t("the premise: once both names are said (8–12s)", f1.premiseAt! >= 8 && f1.premiseAt! <= 12, true);
+t("the hook asks a question", f1.hookQuestion, true);
+t("turns a minute: one line in five, 15 lines a minute", f1.turnsPerMin > 2.5 && f1.turnsPerMin < 3.5, true);
+t("open loops counted per ten minutes", f1.loopsPer10 >= 3, true);
+t("the subscribe ask halfway", f1.ctaAt, 0.5);
+t("ten beats and ten paces", [f1.beats.length, f1.pace.length], [10, 10]);
+t("the opening is the first 45 seconds", f1.hook.startsWith("what if the strongest"), true);
+t("a premise never said is null", featuresOf(story({ minutes: 5, premise: 9999, turnEvery: 5 }), "What If Gojo Joined The Avengers?")!.premiseAt, null);
+t("too little to measure", featuresOf([{ s: 0, d: 2, t: "hi there" }], "x"), null);
+
+// Hits say the premise early and turn often; misses do neither.
+let scriptSeed = 11;
+const rnd = () => { scriptSeed = (scriptSeed * 16807) % 2147483647; return scriptSeed / 2147483647; };
+const sv = (i: number, hit: boolean): ScriptVideo => {
+  const title = hit ? "What If Gojo Joined The Avengers?" : "What If Sukuna Joined The Avengers?";
+  const f = featuresOf(story({ minutes: 8 + rnd() * 4, premise: hit ? 4 + rnd() * 10 : 60 + rnd() * 60, turnEvery: hit ? 4 : 12, question: hit, loops: hit ? 3 : 0, name: hit ? "gojo" : "sukuna" }), title)!;
+  return { videoId: `v${i}`, title, channel: i % 2 ? "Specular FNAF" : "Specular Studios", url: `https://www.youtube.com/watch?v=v${i}`, publishedAt: new Date(Date.UTC(2026, 5, 1 + i)), multiple: hit ? 1.8 + rnd() : 0.5 + rnd() * 0.3, features: f };
+};
+const sVideos = Array.from({ length: 24 }, (_, i) => sv(i, i % 2 === 0));
+const sTitles = sVideos.map((v) => v.title);
+const sa = analyzeStructure(sVideos, sTitles);
+t("every script judged", sa.judged, 24);
+const premise = sa.patterns.find((p) => p.key === "premiseAt")!;
+t("saying the premise early is the winning third", premise.best === premise.buckets[0] && premise.best.lift > 1.2, true);
+t("its advice reads as advice", premise.advice.startsWith("say the title's names"), true);
+t("more turns a minute comes with hits", sa.patterns.find((p) => p.key === "turnsPerMin")!.best.label.startsWith("over"), true);
+t("the strongest patterns come first", sa.patterns[0]!.strength >= sa.patterns[sa.patterns.length - 1]!.strength, true);
+t("the top third's curve and the bottom third's", [sa.curves!.hits.length, sa.curves!.misses.length], [10, 10]);
+t("a blueprint of the hits", sa.blueprint.some((b) => b.label === "Premise said by"), true);
+t("Gojo comes with hits in the scripts", sa.cast[0]?.name, "Gojo");
+t("openings that come with hits", sa.hookPhrases.some((h) => h.phrase.includes("strongest")), true);
+t("under six judged: nothing claimed", analyzeStructure(sVideos.slice(0, 4), sTitles).patterns.length, 0);
+
+const goodScript = story({ minutes: 9, premise: 6, turnEvery: 4, question: true, loops: 3 }).map((x) => x.t).join("\n");
+const badScript = story({ minutes: 9, premise: 100, turnEvery: 12 }).map((x) => x.t).join("\n");
+const gc = checkScript(goodScript, "What If Gojo Joined The Avengers?", sa, sTitles)!;
+const bc = checkScript(badScript, "What If Gojo Joined The Avengers?", sa, sTitles)!;
+t("a script built like the hits checks out above", gc.predicted > 1.15, true);
+t("one built like the misses checks out below", bc.predicted < 0.87, true);
+t("and says what to change", bc.notes.some((n) => n.advice && n.label === "Premise said by"), true);
+t("its length is estimated at the usual pace", Math.abs(gc.seconds - 540) < 60, true);
+t("nothing to check in a line", checkScript("hello", "", sa, sTitles), null);
+
+const found = findInSegments([{ s: 0, d: 2, t: "the infinity" }, { s: 2, d: 2, t: "castle falls" }, { s: 64, d: 2, t: "infinity castle again" }], "Infinity Castle");
+t("a phrase is found across caption lines, with its time", found.map((x) => x.at), [0, 64]);
+t("clock times", [clock(5), clock(83), clock(3725)], ["0:05", "1:23", "1:02:05"]);
+
+const vPage = renderVideo(shellFix, {
+  upload: { videoId: "v0", channel: "Specular FNAF", title: "What If <Gojo>", publishedAt: new Date(), url: "https://www.youtube.com/watch?v=v0", views: 1000 },
+  category: "stories",
+  transcript: { segments: story({ minutes: 3, premise: 4, turnEvery: 4 }), source: "youtube", auto: true, error: null, features: sVideos[0]!.features },
+  perf: null,
+  structure: sa,
+});
+t("the video page's script compiles", [...vPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+t("the video page escapes its title and marks turns", [vPage.includes("What If <Gojo>"), vPage.includes("<mark>but</mark>")], [false, true]);
+const upScripts = renderUploads(shellFix, {
+  channels: ["Specular Studios", "Specular FNAF"], links: [{ channel: "Specular Studios", input: "@x", youtubeId: "UCabcdefghijklmnopqrstuv", title: "S", error: null, checkedAt: new Date() }],
+  uploads: [], cadence: [cadenceFor("Specular Studios", [], nowET), cadenceFor("Specular FNAF", [], nowET)], range: 90, hasKey: false,
+  scripts: {
+    structure: sa, coverage: { videos: 30, done: 24, failing: 2 }, status: { lastRun: new Date(), fetched: 5, failed: 0, blocked: null },
+    videos: sVideos.map((v) => ({ upload: { videoId: v.videoId, channel: v.channel, title: v.title, publishedAt: v.publishedAt, url: v.url, views: 1 }, row: null, multiple: v.multiple })),
+    search: { query: "gojo", results: [{ upload: { videoId: "v0", channel: "Specular FNAF", title: "T", publishedAt: new Date(), url: "https://www.youtube.com/watch?v=v0", views: 1 }, hits: [{ at: 64, text: "gojo walks in" }] }] },
+    check: { text: goodScript, title: "What If Gojo Joined The Avengers?", result: gc },
+    hooks: new Map(),
+  },
+}, nowET);
+t("the Scripts & structure panel shows", [upScripts.includes('id="scripts"'), upScripts.includes("Built like your hits"), upScripts.includes("1:04")], [true, true, true]);
+t("the Uploads page with scripts still compiles", [...upScripts.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
