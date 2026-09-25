@@ -20,8 +20,12 @@ import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, formatFor } from "./
 import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
-import { TURNS, clock, type CastStat, type Pattern, type ScriptCheck, type ScriptFeatures, type ScriptVideo, type Segment, type StructureAnalysis } from "./structure.js";
-import type { TranscriptRow } from "../jobs/transcripts.js";
+import type { Blueprint, PlannedPart } from "./stories/blueprint.js";
+import type { LabIdea, Contrast, ScriptResult } from "./stories/lab.js";
+import type { DraftCheck } from "./stories/check.js";
+import type { Norms } from "./stories/corpus.js";
+import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
+import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
@@ -1003,29 +1007,51 @@ header.page a.clear { align-self: center; }
 .isg .imore { font-size: 11.5px; color: var(--ink3); font-weight: 600; margin-top: 2px; }
 .isg[open] .imore { display: none; }
 .isg .idetail { padding: 0 13px 13px; border-top: 1px solid #2E2E35; }
-.scover { height: 6px; border-radius: 99px; background: var(--sunk); overflow: hidden; margin: 0 0 12px; }
-.scover i { display: block; height: 100%; background: #8FE3B6; border-radius: 99px; }
-.sblocked { background: #3A1E1D; color: #FFC2BC; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin: 0 0 12px; }
-.sgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 18px; margin-bottom: 8px; }
-.sblue { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.sblue span { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
-.sblue small, .vcard small { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
-.sblue b { font-family: var(--display); font-size: 17px; letter-spacing: -0.02em; }
-.bchart svg { width: 100%; height: auto; display: block; }
-.bchart .wk { stroke: #2A2A31; } .bchart .one { stroke: #4A4A55; stroke-dasharray: 3 3; }
-.bchart .tick { fill: var(--ink3); font: 600 10.5px var(--ui); }
-.blegend { display: flex; gap: 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
-.blegend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
-.sbuckets { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0; }
-.sbuckets td { padding: 5px 6px; border-top: 1px solid #26262C; color: var(--ink2); }
-.sbuckets tr.best td { color: var(--ink); font-weight: 600; }
-.sbuckets td.up { color: #8FE3B6; font-weight: 700; } .sbuckets td.down { color: #FF9C94; font-weight: 700; }
-.untapped { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #0B0B0D; background: #F8E27A; border-radius: 99px; padding: 1px 7px; margin-left: 4px; }
-.scheck { background: var(--sunk); border-radius: 14px; margin: 16px 0 6px; }
-.panel > .scheck:first-child { margin: 0; }
-.scheck > summary { list-style: none; cursor: pointer; padding: 12px 14px; font-size: 13.5px; }
-.scheck > summary::-webkit-details-marker { display: none; }
-.scheck .sub { color: var(--ink3); font-weight: 500; }
+.labcta { display: flex; flex-direction: column; gap: 3px; background: linear-gradient(135deg, #2A1F3D, #1D2433); border-radius: var(--r); padding: 16px 20px; margin-bottom: 14px; }
+.labcta b { font-family: var(--display); font-size: 18px; letter-spacing: -0.02em; }
+.labcta span { color: var(--ink2); font-size: 13px; }
+.labcta:hover { filter: brightness(1.12); }
+.labsub { color: var(--ink2); font-size: 13.5px; line-height: 1.6; margin: -4px 0 14px; max-width: 900px; }
+.labform { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.labform label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.labform select { padding: 9px 10px; border-radius: 10px; border: 0; background: var(--sunk); color: var(--ink); font: inherit; font-size: 13.5px; text-transform: none; letter-spacing: 0; color-scheme: dark; min-width: 150px; }
+.labidea .idetail { padding-top: 10px; }
+.labwhy { list-style: none; margin: 0 0 10px; padding: 0; font-size: 12.5px; color: var(--ink2); }
+.labwhy li { padding: 3px 0; } .labwhy b { display: inline-block; min-width: 46px; } .labwhy b.up { color: #8FE3B6; } .labwhy b.down { color: #FF9C94; }
+.bp { display: flex; flex-direction: column; gap: 12px; }
+.bphead h3 { font-family: var(--display); font-size: 22px; letter-spacing: -0.02em; margin: 4px 0 2px; }
+.bppitch { color: var(--ink2); font-size: 13.5px; line-height: 1.6; margin: 6px 0 0; }
+.bpblock h4 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin: 0 0 6px; }
+.bpblock p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
+.bpmoves, .bpbeats { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: var(--ink2); line-height: 1.6; }
+.bpmoves b, .bpbeats b { color: var(--ink); margin-right: 4px; }
+.bpbeats small { color: var(--ink3); margin-left: 6px; } .bpbeats p { margin: 2px 0 8px; }
+.bpparts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bpparts li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; background: var(--raised); border-radius: 12px; padding: 12px 14px; }
+.bpn { font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--salmon); }
+.bpparts b { font-size: 14px; } .bpparts p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
+.bpref { margin-top: 8px; font-size: 12px; color: var(--ink3); line-height: 1.5; border-left: 2px solid #3A3A44; padding-left: 10px; }
+.bpref b { color: var(--ink2); font-weight: 600; }
+.labcheck { padding: 0; }
+.labcheck textarea { min-height: 180px; }
+.labresult { margin-top: 12px; }
+.labfind { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.labfind li { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 2px 10px; background: var(--sunk); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.labfind .lf { grid-row: span 2; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; align-self: start; padding: 3px 0; }
+.labfind .fix .lf { color: #FF9C94; } .labfind .note .lf { color: #F8E27A; } .labfind .good .lf { color: #8FE3B6; }
+.labfind li > span:last-child { color: var(--ink2); line-height: 1.5; }
+.labtable { border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+.labtable th, .labtable td { padding: 6px 14px 6px 0; text-align: left; border-bottom: 1px solid #26262C; }
+.labtable th { color: var(--ink3); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.labformats { grid-template-columns: minmax(0, 1fr); }
+.labcov { overflow-x: auto; }
+.labcov table { border-collapse: collapse; font-size: 12px; }
+.labcov th { text-align: left; font-weight: 600; color: var(--ink2); padding: 4px 8px 4px 0; white-space: nowrap; }
+.labcov thead th { vertical-align: bottom; height: 110px; padding: 0 2px; }
+.labcov thead th span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.labcov td { width: 26px; height: 24px; text-align: center; border: 1px solid #26262C; }
+.labcov td.done { color: #8FE3B6; }
+.labcov td a { display: block; color: #6E6E7A; } .labcov td a:hover { color: var(--salmon); background: var(--sunk); }
 .sform { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px; }
 .sform input[type=text], .sform textarea {
   width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #2E2E35; background: var(--raised);
@@ -1033,35 +1059,7 @@ header.page a.clear { align-self: center; }
 }
 .sform input[type=file] { color: var(--ink2); font-size: 12.5px; }
 .sform button { align-self: flex-start; }
-.scheck .iresult { margin: 0 14px 10px; background: var(--raised); }
-.snotes { list-style: none; margin: 0 14px 10px; padding: 0; }
-.snotes li { display: grid; grid-template-columns: minmax(0, 1fr) auto 70px; gap: 2px 12px; padding: 7px 4px; border-top: 1px solid #2E2E35; font-size: 13px; align-items: baseline; }
-.snotes .il { text-align: right; font-weight: 700; } .snotes .il.up { color: #8FE3B6; } .snotes .il.down { color: #FF9C94; }
-.snotes .sna { grid-column: 1 / -1; color: var(--ink3); font-size: 12px; }
-.scheck .bchart { padding: 0 14px 14px; max-width: 720px; }
-.vhead + .panel .bchart, .sgrid .bchart { max-width: 760px; }
-.tsearch { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.tsearch li { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-.tst { font-weight: 700; font-size: 13.5px; }
-.thit { font-size: 12.5px; color: var(--ink2); line-height: 1.5; }
-.thit b { color: var(--salmon); margin-right: 6px; font-variant-numeric: tabular-nums; }
-.tlist { margin-top: 14px; font-size: 13px; }
-.tlist summary { cursor: pointer; color: var(--ink2); font-weight: 600; }
-.tlist ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 420px; overflow: auto; }
-.tlist a { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: baseline; }
-.tlist a:hover { background: var(--sunk); }
-.tstate { color: var(--ink3); font-weight: 700; } .tstate.ok { color: #8FE3B6; } .tstate.bad { color: #FF9C94; }
 .shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
-.vhead h2 a:hover { text-decoration: underline; }
-.vhead .up { color: #8FE3B6; } .vhead .down { color: #FF9C94; }
-.vcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
-.vcard { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
-.vcard b { font-family: var(--display); font-size: 20px; letter-spacing: -0.02em; }
-.vcard span { font-size: 11.5px; color: var(--ink3); }
-.tscript { max-height: 70vh; overflow: auto; font-size: 14px; line-height: 1.7; color: var(--ink2); }
-.tscript p { margin: 0 0 10px; }
-.tscript p a { color: var(--salmon); font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 10px; font-size: 12.5px; }
-.tscript mark { background: rgba(248, 226, 122, 0.18); color: #F8E27A; border-radius: 4px; padding: 0 2px; }
 .idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
 .idrafts a:hover { text-decoration: underline; }
 .ifacts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink2); margin-top: 12px; }
@@ -1328,6 +1326,7 @@ function sidebar(s: Shell): string {
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
       ${s.scripts ? item("/scripts", "Scripts", null, "scripts") : ""}
       ${item("/uploads", "Uploads", s.nav.behind ?? null, "uploads")}
+      ${item("/story-lab", "Story Lab", null, "storylab")}
     </nav>
     <h3>Categories</h3>
     <div class="cats">${cats}</div>
@@ -3268,7 +3267,8 @@ export function renderUploads(
     idea?: { title: string; check: IdeaCheck } | null;
     ideaChannel?: string | null;
     shorts?: { scores: Map<string, ShortScore>; health: ChannelShortHealth[]; slots: SlotStat[] };
-    scripts?: ScriptsData;
+    /** Each Stories video's opening, from its script, by the video's link. */
+    hooks?: Map<string, string>;
   },
   now = new Date(),
 ): string {
@@ -3582,8 +3582,8 @@ export function renderUploads(
           : `<div class="utiles">${tiles}</div>${timeline}${performers}${table}`
         : ""
     }
-    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.scripts?.hooks) : ""}
-    ${data.scripts ? scriptsPanel(category, data.scripts, data.ideaChannel ?? null) : ""}
+    ${category === "stories" ? `<a class="labcta" href="/story-lab"><b>Story Lab</b><span>What to write next, with a part-by-part blueprint for each — learned from the Stories scripts →</span></a>` : ""}
+    ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.hooks) : ""}
     ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>
@@ -4064,283 +4064,156 @@ export function renderRecurring(
   );
 }
 
-// ── scripts & structure ───────────────────────────────────────────────────
+// ── Story Lab ─────────────────────────────────────────────────────────────
 
-export interface ScriptsData {
-  structure: StructureAnalysis;
-  coverage: { videos: number; done: number; failing: number };
-  status: { lastRun: Date | null; fetched: number; failed: number; blocked: string | null };
-  videos: Array<{ upload: Upload; row: TranscriptRow | null; multiple: number | null }>;
-  search: { query: string; results: Array<{ upload: Upload; hits: Array<{ at: number; text: string }> }> } | null;
-  check: { text: string; title: string; result: ScriptCheck | null } | null;
-  /** Each video's opening, by its link, for the idea details. */
-  hooks: Map<string, string>;
+export interface StoryLabData {
+  scripts: number;
+  words: number;
+  matched: number;
+  ideas: Array<{ idea: LabIdea; blueprint: Blueprint | null }>;
+  blueprint: Blueprint | null;
+  picked: { format: string; hero: string; world: string; power: string; target: string };
+  check: { title: string; text: string; result: DraftCheck | null } | null;
+  contrast: Contrast[] | null;
+  results: ScriptResult[];
+  coverage: { heroes: Hero[]; worlds: World[]; done: Set<string> };
+  formats: Array<{ format: Format; norms: Norms; examples: string[] }>;
 }
 
-const at = (url: string, seconds: number) => `${url}${url.includes("?") ? "&" : "?"}t=${Math.floor(seconds)}s`;
-
-/** Turns across the runtime as lines: hits, misses, and one video if given. */
-function beatChart(lines: Array<{ values: number[]; colour: string; label: string; dash?: boolean }>): string {
-  const W = 640, H = 170, L = 34, R = 22, T = 12, B = 26;
-  const max = Math.max(1.5, ...lines.flatMap((l) => l.values)) * 1.1;
-  const x = (i: number) => L + ((i + 0.5) / 10) * (W - L - R);
-  const y = (v: number) => T + (1 - v / max) * (H - T - B);
-  const grid = [0, 1, 2, 3].filter((v) => v <= max)
-    .map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${v === 1 ? "one" : "wk"}"/>
-      <text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" class="tick">${v === 1 ? "avg" : `${v}×`}</text>`)
-    .join("");
-  const xs = [0, 25, 50, 75, 100].map((p) => `<text x="${(L + (p / 100) * (W - L - R)).toFixed(1)}" y="${H - 8}" text-anchor="middle" class="tick">${p}%</text>`).join("");
-  const paths = lines
-    .map((l) => `<polyline points="${l.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}" fill="none" stroke="${l.colour}" stroke-width="2.5" stroke-linejoin="round"${l.dash ? ' stroke-dasharray="5 4"' : ""}/>
-      ${l.values.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${l.colour}"/>`).join("")}`)
-    .join("");
-  const legend = lines.map((l) => `<span><i style="background:${l.colour}"></i>${esc(l.label)}</span>`).join("");
-  return `<div class="bchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Turns across the runtime">${grid}${xs}${paths}</svg>
-    <div class="blegend">${legend}</div></div>`;
-}
-
-function scriptVidLine(v: ScriptVideo): string {
-  return `<li><a href="/uploads/video/${esc(v.videoId)}">
-      <span class="vm ${(v.multiple ?? 1) >= 1 ? "up" : "down"}">${v.multiple !== null ? esc(formatMultiple(v.multiple)) : "—"}</span>
-      <span class="vt">${esc(v.title)}</span>
-      <span class="vc"><span class="cdot" style="--ch:${channelColour(v.channel)}"></span>${esc(v.channel.replace(/^Specular /, ""))} · ${esc(usDate(dayOf(v.publishedAt)))}</span>
-    </a></li>`;
-}
-
-function scriptsPanel(category: CategoryId, d: ScriptsData, channel: string | null): string {
-  const a = d.structure;
-  const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
-  const pct = d.coverage.videos ? Math.round((d.coverage.done / d.coverage.videos) * 100) : 0;
-  const statusLine = d.status.blocked
-    ? `<p class="sblocked">YouTube turned the last run away: ${esc(d.status.blocked)} It tries again next hour; any video's transcript can also be pasted in on its page.</p>`
-    : "";
-  const head = `<div class="ihead-row">
-      <h2>Scripts &amp; structure <span class="sub">from ${d.coverage.done} of ${d.coverage.videos} ${esc(catLabel)} transcripts (${pct}%)${
-        d.coverage.failing ? ` · ${d.coverage.failing} without captions yet` : ""
-      }${d.status.lastRun ? ` · last read ${esc(timeAgo(d.status.lastRun))}` : ""}</span></h2>
-      <form method="post" action="/uploads/transcripts/run" class="ichan"><input type="hidden" name="_cat" value="${category}"><button class="clear secondary">Read transcripts now</button></form>
+function blueprintHtml(b: Blueprint): string {
+  const refLine = (p: PlannedPart) =>
+    p.ref ? `<div class="bpref">Modelled on <b>${esc(p.ref.title)}</b>, ${esc(p.ref.part)}: <i>“${esc(p.ref.line)}”</i></div>` : "";
+  return `<div class="bp">
+    <div class="bphead">
+      <span class="ikind ${b.format.id}">${esc(b.format.name)}</span>
+      <h3>${esc(b.title)}</h3>
+      ${b.alternates.length ? `<p class="imeta">Or: ${b.alternates.map(esc).join(" · ")}</p>` : ""}
+      <p class="bppitch">${esc(b.premise)}</p>
     </div>
-    <div class="scover"><i style="width:${pct}%"></i></div>
-    ${statusLine}`;
-
-  const search = `<form method="get" action="/uploads#scripts" class="ichecker">
-      <input type="hidden" name="cat" value="${category}">
-      ${channel ? `<input type="hidden" name="ch" value="${esc(channel)}">` : ""}
-      <input type="text" name="tq" value="${esc(d.search?.query ?? "")}" placeholder="Search every transcript — e.g. infinity castle, sharingan, “what if”" autocomplete="off">
-      <button class="clear">Search</button>
-    </form>
-    ${
-      d.search
-        ? d.search.results.length
-          ? `<ul class="tsearch">${d.search.results.map((r) => `<li>
-              <a class="tst" href="/uploads/video/${esc(r.upload.videoId)}">${esc(r.upload.title)}</a>
-              <span class="vc"><span class="cdot" style="--ch:${channelColour(r.upload.channel)}"></span>${esc(r.upload.channel.replace(/^Specular /, ""))} · ${esc(usDate(dayOf(r.upload.publishedAt)))}</span>
-              ${r.hits.map((h) => `<a class="thit" href="${esc(at(r.upload.url, h.at))}" target="_blank" rel="noreferrer"><b>${esc(clock(h.at))}</b> ${esc(h.text)}</a>`).join("")}
-            </li>`).join("")}</ul>`
-          : `<p class="hint">No transcript says “${esc(d.search.query)}”.</p>`
-        : ""
-    }`;
-
-  const check = d.check;
-  const checker = `<details class="scheck"${check ? " open" : ""}>
-      <summary><b>Check a script</b> <span class="sub">— paste a draft and see how it's built against your hits</span></summary>
-      <form method="post" action="/uploads/script#scripts" class="sform">
-        <input type="hidden" name="_cat" value="${category}">
-        ${channel ? `<input type="hidden" name="ch" value="${esc(channel)}">` : ""}
-        <input type="text" name="title" value="${esc(check?.title ?? "")}" placeholder="Its title (so the premise timing can be read)" autocomplete="off">
-        <textarea name="script" rows="8" placeholder="Paste the script…">${esc(check?.text ?? "")}</textarea>
-        <button class="clear">Check script</button>
-      </form>
-      ${
-        check
-          ? check.result
-            ? `<div class="iresult">
-                <div class="ipred ${check.result.predicted >= 1.15 ? "up" : check.result.predicted <= 0.87 ? "down" : ""}">
-                  <b>${esc(formatMultiple(check.result.predicted))}</b>
-                  <span>${esc(check.result.verdict)} · ${check.result.words.toLocaleString("en-US")} words ≈ ${esc(clock(check.result.seconds))} at your usual pace</span>
-                </div>
-              </div>
-              <ul class="snotes">${check.result.notes.map((n) => `<li class="${n.lift >= 1.02 ? "up" : n.lift <= 0.98 ? "down" : ""}">
-                  <span class="snl">${esc(n.label)}</span><b>${esc(n.value)}</b><span class="il ${n.lift >= 1 ? "up" : "down"}">${esc(liftText(n.lift))}</span>
-                  ${n.advice ? `<span class="sna">${esc(n.advice)}</span>` : ""}
-                </li>`).join("")}</ul>
-              ${beatChart([
-                ...(a.curves ? [{ values: a.curves.hits, colour: "#8FE3B6", label: "Your hits" }] : []),
-                { values: check.result.features.beats, colour: "#F8E27A", label: "This script", dash: true },
-              ])}`
-            : `<p class="hint">That's too short to measure — paste at least a paragraph.</p>`
-          : ""
-      }
-    </details>`;
-
-  if (a.judged < 6) {
-    return `<div class="panel ideas" id="scripts">${head}
-      <p class="hint">The patterns need six or more transcripts of videos that have been judged. Transcripts are read ${
-        d.status.blocked ? "every hour" : "a few dozen an hour, newest first"
-      }, so this fills in over the next few days.</p>
-      ${search}${checker}${videoList(d)}</div>`;
-  }
-
-  const pattern = (p: Pattern) => `<li><details>
-      <summary><span class="ik">${esc(p.label)}</span>
-        <span class="il up">${esc(p.best.label)} ${esc(liftText(p.best.lift))}</span>
-        <span class="in">${p.buckets.reduce((n, b) => n + b.count, 0)} videos</span></summary>
-      <div class="idetail">
-        <p class="imeta">Hits ${esc(p.advice)}. ${p.worst.label} runs ${esc(liftText(p.worst.lift))}.</p>
-        <table class="sbuckets">${p.buckets.map((b) => `<tr${b === p.best ? ' class="best"' : ""}><td>${esc(b.label)}</td><td>${b.count} videos</td>
-          <td class="${b.lift >= 1 ? "up" : "down"}">${esc(liftText(b.lift))}</td><td>median ${esc(formatMultiple(b.median))}</td></tr>`).join("")}</table>
-        <h4>Best in “${esc(p.best.label)}”</h4><ul class="ivids">${p.best.videos.slice(0, 3).map(scriptVidLine).join("")}</ul>
-      </div>
-    </details></li>`;
-
-  const castRow = (c: CastStat) => `<li><details>
-      <summary><span class="ik">${esc(c.name)}${c.titled <= 1 && c.lift > 1.1 ? ` <span class="untapped">untapped</span>` : ""}</span>
-        <span class="il ${c.lift >= 1 ? "up" : "down"}">${esc(liftText(c.lift))}</span>
-        <span class="in">in ${c.count} scripts</span></summary>
-      <div class="idetail">
-        <p class="imeta">Said three or more times in ${c.count} videos, which ran a median ${esc(formatMultiple(c.median))} their channel's usual.
-          ${c.titled > 1 ? `${c.titled} titles name ${esc(c.name)}.` : `${c.titled ? "Only one title names" : "No title names"} ${esc(c.name)} yet — a story built around them is untried.`}</p>
-        <ul class="ivids">${c.videos.slice(0, 4).map(scriptVidLine).join("")}</ul>
-        <p class="imeta"><a href="/uploads?cat=${category}&amp;idea=${encodeURIComponent(`What If ${c.name} …`)}#ideas">Check a title with ${esc(c.name)} →</a></p>
-      </div>
-    </details></li>`;
-
-  return `<div class="panel ideas" id="scripts">${head}
-    <div class="sgrid">
-      <div>
-        <h3 class="ihead" style="margin-top:4px">Built like your hits <span class="sub">— the typical top third</span></h3>
-        <div class="sblue">${a.blueprint.map((b) => `<span><small>${esc(b.label)}</small><b>${esc(b.value)}</b></span>`).join("")}</div>
-      </div>
-      <div>
-        <h3 class="ihead" style="margin-top:4px">Where the turns fall <span class="sub">— through the runtime, 1 = a video's own average</span></h3>
-        ${a.curves ? beatChart([{ values: a.curves.hits, colour: "#8FE3B6", label: "Top third" }, { values: a.curves.misses, colour: "#FF9C94", label: "Bottom third", dash: true }]) : ""}
-      </div>
-    </div>
-    <div class="icols">
-      <div class="icol" style="grid-column: span 2"><h3>What the scripts show <span class="sub">— strongest first; open one for the numbers</span></h3>
-        <ul class="ilist">${a.patterns.map(pattern).join("")}</ul></div>
-      <div class="icol"><h3>Names that come with hits</h3>
-        ${a.cast.length ? `<ul class="ilist">${a.cast.slice(0, 10).map(castRow).join("")}</ul>` : `<p class="hint">Not enough yet.</p>`}
-        ${a.hookPhrases.length ? `<h3 style="margin-top:14px">Openings that work</h3><div class="ireasons">${a.hookPhrases.map((h) => `<span class="ichip up" title="${esc(h.videos.slice(0, 3).map((v) => v.title).join(" · "))}">“${esc(h.phrase)}” <b>${esc(liftText(h.lift))}</b> <small>${h.count}</small></span>`).join("")}</div>` : ""}
-      </div>
-    </div>
-    ${checker}
-    <h3 class="ihead">Search the transcripts</h3>
-    ${search}
-    ${videoList(d)}
+    ${b.versionLock ? `<div class="bpblock"><h4>Version lock</h4><p>${esc(b.versionLock)}</p></div>` : ""}
+    ${b.intro.length ? `<div class="bpblock"><h4>Intro — about ${b.norms.introWords[0]}–${b.norms.introWords[1]} words, three moves</h4>
+      <blockquote class="shook">${b.intro.map((l) => esc(l)).join(" ")}</blockquote>
+      <ol class="bpmoves"><li><b>Open</b> ${esc(b.format.intro.open)}</li><li><b>Build</b> ${esc(b.format.intro.build)}</li><li><b>Hook</b> ${esc(b.format.intro.hook)}</li></ol></div>` : ""}
+    <div class="bpblock"><h4>The parts — ${b.parts.length} of about ${b.norms.partWords[1]} words each (${b.norms.partWords[0]}–${b.norms.partWords[2]})</h4>
+      <ol class="bpparts">${b.parts
+        .map((p) => `<li><div class="bpn">${p.n}</div><div><b>${esc(p.name)}</b><p>${esc(p.plan)}</p>${refLine(p)}</div></li>`)
+        .join("")}</ol></div>
+    ${b.outro ? `<div class="bpblock"><h4>Outro</h4><p>${esc(b.outro)}</p></div>` : ""}
+    ${b.caveats.length ? `<div class="bpblock"><h4>Stay honest about</h4><ul class="icav">${b.caveats.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>` : ""}
+    <div class="bpblock"><h4>Rules for this format</h4><ul class="icav">${b.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>
+    <p class="imeta">Target about ${b.norms.words.toLocaleString("en-US")} words · sentences around ${b.norms.sentence} words · paragraphs of about ${b.norms.paragraph} sentences · reasoned in “would / could”, not narrated.
+      Closest scripts: ${b.refs.map((r) => esc(r.title)).join(" · ") || "none yet"}.</p>
   </div>`;
 }
 
-function videoList(d: ScriptsData): string {
-  const row = (v: ScriptsData["videos"][number]) => {
-    const state = v.row?.features ? "✓" : v.row?.error ? "✕" : "…";
-    const title = v.row?.features ? "Transcript read" : v.row?.error ?? "Not read yet";
-    return `<li><a href="/uploads/video/${esc(v.upload.videoId)}">
-      <span class="tstate ${v.row?.features ? "ok" : v.row?.error ? "bad" : ""}" title="${esc(title)}">${state}</span>
-      <span class="vt">${esc(v.upload.title)}</span>
-      <span class="vc">${esc(usDate(dayOf(v.upload.publishedAt)))}${v.multiple !== null ? ` · ${esc(formatMultiple(v.multiple))}` : ""}</span>
-    </a></li>`;
-  };
-  return `<details class="tlist"><summary>Every video and its transcript (${d.videos.length})</summary>
-    <ul>${d.videos.slice(0, 400).map(row).join("")}</ul></details>`;
-}
+export function renderStoryLab(shell: Shell, d: StoryLabData): string {
+  const opt = (value: string, label: string, sel: string) => `<option value="${esc(value)}"${value === sel ? " selected" : ""}>${esc(label)}</option>`;
+  const builder = `<form method="get" action="/story-lab#blueprint" class="labform">
+      <label>Format<select name="format">${d.formats
+        .filter((f) => ["insert", "survive", "power", "hunt", "versus", "reborn", "you"].includes(f.format.id))
+        .map((f) => opt(f.format.id, f.format.name, d.picked.format))
+        .join("")}</select></label>
+      <label>Hero<select name="hero"><option value="">—</option>${HEROES.map((h) => opt(h.id, `${h.name}${h.fresh ? " (new)" : ""}`, d.picked.hero)).join("")}</select></label>
+      <label>World or setting<select name="world"><option value="">—</option>${WORLDS.map((w) => opt(w.id, `${w.name}${w.fresh ? " (new)" : ""}`, d.picked.world)).join("")}</select></label>
+      <label>Power<select name="power"><option value="">—</option>${POWERS.map((p) => opt(p.id, p.name, d.picked.power)).join("")}</select></label>
+      <label>Target / opponent<select name="target"><option value="">—</option>${HEROES.map((h) => opt(h.id, h.name, d.picked.target)).join("")}</select></label>
+      <button class="clear">Build blueprint</button>
+    </form>`;
 
-/** One video: how it did, how its script was built, and the transcript itself. */
-export function renderVideo(
-  shell: Shell,
-  data: {
-    upload: { videoId: string; channel: string; title: string; publishedAt: Date; url: string; views: number | null };
-    category: CategoryId;
-    transcript: { segments: Segment[] | null; source: string | null; auto: boolean | null; error: string | null; features: ScriptFeatures | null } | null;
-    perf: Performance | null;
-    structure: StructureAnalysis;
-  },
-): string {
-  const { upload: u, transcript: t, structure: a } = data;
-  const f = t?.features ?? null;
-  const back = `<a class="clear secondary" href="/uploads?cat=${data.category}#scripts">← Scripts &amp; structure</a>`;
-  const blue = new Map(a.blueprint.map((b) => [b.label, b.value]));
-  const pctText = (n: number | null) => (n === null ? "—" : `${Math.round(n * 100)}%`);
-  const cards = f
-    ? [
-        { l: "Length", v: `${(f.seconds / 60).toFixed(1)} min`, h: blue.get("Length") },
-        { l: "Premise said by", v: f.premiseAt === null ? "never" : clock(f.premiseAt), h: blue.get("Premise said by") },
-        { l: "Hook asks a question", v: f.hookQuestion ? "yes" : "no", h: blue.get("Hook asks a question") },
-        { l: "Turns a minute", v: f.turnsPerMin.toFixed(1), h: blue.get("Turns a minute") },
-        { l: "Open loops per 10 min", v: f.loopsPer10.toFixed(1), h: blue.get("Open loops per 10 min") },
-        { l: "Biggest twist at", v: pctText(f.twistAt), h: blue.get("Biggest twist at") },
-        { l: "Subscribe ask at", v: pctText(f.ctaAt), h: blue.get("Subscribe ask at") },
-        { l: "Pace", v: `${f.wpm} wpm`, h: blue.get("Pace") },
-      ]
-        .map((c) => `<div class="vcard"><small>${esc(c.l)}</small><b>${esc(c.v)}</b>${c.h ? `<span>hits: ${esc(c.h)}</span>` : ""}</div>`)
-        .join("")
+  const ideaCard = ({ idea, blueprint }: StoryLabData["ideas"][number]) => `<li><details class="isg labidea">
+      <summary>
+        <span class="ikind ${idea.format}">${esc(FORMAT_BY_ID.get(idea.format)?.name ?? idea.format)}</span>
+        <span class="iidea">${esc(idea.title)}</span>
+        <span class="iwhy">${idea.reasons.slice(0, 2).map((r) => esc(r.text)).join(" · ")}</span>
+        <span class="imore">Blueprint ▾</span>
+      </summary>
+      <div class="idetail">
+        <h4>Why this one</h4>
+        <ul class="labwhy">${idea.reasons.map((r) => `<li><b class="${r.lift >= 1 ? "up" : "down"}">${esc(liftText(r.lift))}</b> ${esc(r.text)}</li>`).join("")}</ul>
+        ${blueprint ? blueprintHtml(blueprint) : ""}
+      </div>
+    </details></li>`;
+
+  const check = d.check;
+  const checker = `<form method="post" action="/story-lab/check#check" class="sform labcheck">
+      <input type="text" name="title" value="${esc(check?.title ?? "")}" placeholder="Title — e.g. What If Gojo Was In Invincible?" autocomplete="off">
+      <textarea name="script" rows="10" placeholder="Paste the draft with its INTRO / PART 1 / … / OUTRO headers">${esc(check?.text ?? "")}</textarea>
+      <button class="clear">Check the structure</button>
+    </form>
+    ${
+      check
+        ? check.result
+          ? `<div class="labresult">
+              <p class="imeta">Read as a <b>${esc(check.result.format.name)}</b>${check.result.hero ? ` with ${esc(check.result.hero.name)}` : ""}${check.result.world ? ` in ${esc(check.result.world.name)}` : ""} · ${check.result.words.toLocaleString("en-US")} words · ${check.result.sections.map((s) => `${esc(s.name.replace("PART ", "P"))} ${s.words}`).join(" · ")}</p>
+              <ul class="labfind">${check.result.findings
+                .sort((a, b) => ["fix", "note", "good"].indexOf(a.level) - ["fix", "note", "good"].indexOf(b.level))
+                .map((f) => `<li class="${f.level}"><span class="lf">${f.level === "fix" ? "Fix" : f.level === "note" ? "Note" : "Good"}</span><b>${esc(f.label)}</b><span>${esc(f.detail)}</span></li>`)
+                .join("")}</ul>
+            </div>`
+          : `<p class="hint">That's too short to check — paste the whole draft.</p>`
+        : ""
+    }`;
+
+  const contrast = d.contrast
+    ? `<table class="labtable"><thead><tr><th></th><th>Top third</th><th>Bottom third</th></tr></thead><tbody>${d.contrast
+        .map((c) => `<tr><td>${esc(c.label)}</td><td>${esc(c.hits)}</td><td>${esc(c.misses)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : `<p class="hint">${d.matched} of the scripts are matched to their uploads so far — this needs six. It fills in as the scripts' videos go up and get judged against their channel's usual.</p>`;
+  const results = d.results.length
+    ? `<ul class="ivids">${[...d.results]
+        .sort((a, b) => b.multiple - a.multiple)
+        .slice(0, 8)
+        .map((r) => `<li><a><span class="vm ${r.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(r.multiple))}</span><span class="vt">${esc(r.script.title)}</span><span class="vc">${esc(FORMAT_BY_ID.get(r.script.format)?.name ?? "")} · ${r.script.metrics.parts} parts · ${r.script.words.toLocaleString("en-US")} words</span></a></li>`)
+        .join("")}</ul>`
     : "";
 
-  const turnRe = new RegExp(`\\b(${TURNS.filter((x) => !x.includes("'")).map((x) => x.replace(/ /g, "\\s+")).join("|")})\\b`, "gi");
-  const paragraphs: Array<{ at: number; text: string }> = [];
-  for (const seg of t?.segments ?? []) {
-    const lastP = paragraphs[paragraphs.length - 1];
-    if (!lastP || seg.s - lastP.at >= 30) paragraphs.push({ at: seg.s, text: seg.t });
-    else lastP.text += ` ${seg.t}`;
-  }
-  const transcript = t?.segments?.length
-    ? `<div class="tscript">${paragraphs
-        .map((p) => `<p><a href="${esc(at(u.url, p.at))}" target="_blank" rel="noreferrer">${esc(clock(p.at))}</a>${esc(p.text).replace(turnRe, "<mark>$1</mark>")}</p>`)
-        .join("")}</div>`
-    : "";
+  const coverage = `<div class="labcov"><table><thead><tr><th></th>${d.coverage.worlds
+    .map((w) => `<th title="${esc(w.name)}"><span>${esc(w.name.replace(/^The /, ""))}</span></th>`)
+    .join("")}</tr></thead><tbody>${d.coverage.heroes
+    .map(
+      (h) => `<tr><th>${esc(h.name)}</th>${d.coverage.worlds
+        .map((w) => {
+          const done = d.coverage.done.has(`${h.id}|${w.id}`) || h.home === w.id;
+          const href = `/story-lab?format=${w.kind === "setting" ? "survive" : "insert"}&amp;hero=${h.id}&amp;world=${w.id}#blueprint`;
+          return done ? `<td class="done" title="${esc(`${h.name} × ${w.name}: done`)}">●</td>` : `<td><a href="${href}" title="${esc(`Blueprint: ${h.name} × ${w.name}`)}">+</a></td>`;
+        })
+        .join("")}</tr>`,
+    )
+    .join("")}</tbody></table></div>`;
 
-  const paste = `<details class="scheck"${t?.segments?.length ? "" : " open"}>
-      <summary><b>${t?.segments?.length ? "Replace the transcript" : "Paste the transcript"}</b> <span class="sub">— from YouTube Studio (Subtitles → ⋮ → Download: .srt, .vtt or .sbv), or plain text</span></summary>
-      <form method="post" action="/uploads/video/${esc(u.videoId)}/transcript" class="sform">
-        <input type="file" accept=".srt,.vtt,.sbv,.txt,text/plain" data-into="tpaste">
-        <textarea id="tpaste" name="transcript" rows="8" placeholder="…or paste it here"></textarea>
-        <button class="clear">Save transcript</button>
-      </form>
-    </details>
-    <script>
-    document.querySelectorAll("input[data-into]").forEach(function (inp) {
-      inp.addEventListener("change", function () {
-        var file = inp.files && inp.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function () { document.getElementById(inp.getAttribute("data-into")).value = String(reader.result || ""); };
-        reader.readAsText(file);
-      });
-    });
-    </script>`;
-
-  const status = t?.segments?.length
-    ? `${t.source === "pasted" ? "Pasted in" : t.auto ? "YouTube's automatic captions" : "Uploaded captions"} · ${f ? `${f.words.toLocaleString("en-US")} words` : ""}`
-    : t?.error
-      ? `No transcript yet — ${t.error}`
-      : "Not read yet — the hourly read will get to it.";
+  const formats = d.formats
+    .map(
+      (f) => `<li><details class="isg">
+        <summary><span class="ikind ${f.format.id}">${esc(f.format.name)}</span><span class="iwhy">${f.norms.scripts} scripts · ${f.norms.parts} parts · ~${f.norms.words.toLocaleString("en-US")} words — ${esc(f.format.pitch)}</span><span class="imore">How it's built ▾</span></summary>
+        <div class="idetail">
+          <h4>Intro</h4><ol class="bpmoves"><li><b>Open</b> ${esc(f.format.intro.open)}</li><li><b>Build</b> ${esc(f.format.intro.build)}</li><li><b>Hook</b> ${esc(f.format.intro.hook)}</li></ol>
+          <h4>Beats, in order</h4><ol class="bpbeats">${f.format.beats.map((b) => `<li><b>${esc(b.name)}</b> <small>part ${b.at.join("–")}</small><p>${esc(b.does)}</p></li>`).join("")}</ol>
+          <h4>Outro</h4><p>${esc(f.format.outro)}</p>
+          <h4>Rules</h4><ul class="icav">${f.format.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+          ${f.examples.length ? `<h4>In the corpus</h4><p class="imeta">${f.examples.map(esc).join(" · ")}</p>` : ""}
+        </div>
+      </details></li>`,
+    )
+    .join("");
 
   return layout(
-    u.title,
+    "Story Lab",
     shell,
-    `${pageHeader("Uploads", back)}
-    <div class="panel vhead">
-      <h2><a href="${esc(u.url)}" target="_blank" rel="noreferrer">${esc(u.title)} ↗</a></h2>
-      <p class="imeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span> ${esc(u.channel)} · ${esc(usDate(dayOf(u.publishedAt)))}
-        ${u.views !== null ? ` · ${esc(compactViews(u.views))} views` : ""}
-        ${data.perf ? ` · <b class="${data.perf.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(data.perf.multiple))}</b> the channel's usual (${esc(data.perf.basis)})` : ""}
-      </p>
-      <p class="hint">${esc(status)}</p>
-    </div>
+    `${pageHeader("Story Lab", `<a class="clear secondary" href="/uploads?cat=stories">Stories uploads</a>`)}
+    <p class="labsub">Learned from ${d.scripts} Stories scripts (${Math.round(d.words / 1000)}K words): how each format is built part by part, how every world's institution, roster and apex are used, and each hero's ability ladder. Ideas are ranked on the channel's own results${d.matched ? ` (${d.matched} scripts matched to their uploads)` : ""}, fit and freshness.</p>
     ${
-      f
-        ? `<div class="panel"><h2>How it's built <span class="sub">— against the top third of ${esc(CATEGORIES.find((c) => c.id === data.category)?.label ?? "")}</span></h2>
-            <div class="vcards">${cards}</div>
-            <div class="sgrid" style="margin-top:14px">
-              <div><h3 class="ihead" style="margin-top:0">The opening (first 45 seconds)</h3><blockquote class="shook">${esc(f.hook)}</blockquote></div>
-              <div><h3 class="ihead" style="margin-top:0">Where its turns fall</h3>${beatChart([
-                ...(a.curves ? [{ values: a.curves.hits, colour: "#8FE3B6", label: "Your hits" }] : []),
-                { values: f.beats, colour: "#F8E27A", label: "This video", dash: true },
-              ])}</div>
-            </div></div>`
-        : ""
+      d.blueprint
+        ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${blueprintHtml(d.blueprint)}</div>`
+        : d.picked.format && d.picked.hero
+          ? `<div class="panel" id="blueprint"><p class="hint">That combination needs a ${d.picked.format === "power" ? "power" : d.picked.format === "hunt" || d.picked.format === "versus" ? "target" : "world"} too.</p></div>`
+          : ""
     }
-    ${transcript ? `<div class="panel"><h2>Transcript <span class="sub">— turns highlighted; a timestamp opens the video there</span></h2>${transcript}</div>` : ""}
-    <div class="panel">${paste}</div>`,
+    <div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint</span></h2>
+      <ul class="isugg">${d.ideas.map(ideaCard).join("")}</ul></div>
+    <div class="panel ideas"><h2>Build any blueprint</h2>${builder}</div>
+    <div class="panel ideas" id="check"><h2>Check a draft <span class="sub">— against the ${d.scripts} scripts, format by format</span></h2>${checker}</div>
+    <div class="panel ideas"><h2>What the best-performing scripts did differently</h2>${contrast}${results}</div>
+    <div class="panel ideas"><h2>The formats <span class="sub">— how each one is actually built</span></h2><ul class="isugg labformats">${formats}</ul></div>
+    <div class="panel ideas"><h2>What's been done <span class="sub">— ● written · + opens a blueprint</span></h2>${coverage}</div>`,
   );
 }

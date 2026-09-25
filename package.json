@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/src/db/migrations',{recursive:true})\"",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/src/db/migrations',{recursive:true});require('node:fs').cpSync('src/web/stories/corpus.json','dist/src/web/stories/corpus.json')\"",
     "start": "node dist/src/start.js",
     "start:bot": "node dist/src/bot/index.js",
     "start:web": "node dist/src/web/index.js",

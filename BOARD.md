@@ -236,64 +236,72 @@ bottom** Shorts, each channel's **health** (this week's median against last
 week's, share beating its usual, tiers) and **posting slots** — how Shorts
 do by the three-hour Eastern window they went up in, best first.
 
-## Scripts & structure — every Stories transcript, read against how it did
+## Story Lab — what to write next for Stories, and how to build it
 
-Below Ideas on the Stories tab. **Nothing to set up and no key:** each
-video's transcript is read from YouTube's own captions (the ones it
-uploaded, or YouTube's automatic English), a few dozen an hour, newest
-first, so the whole back catalogue fills in over a few days. The coverage
-bar shows how far it's got. (The YouTube API key can't do this: Google only
-lets the channel owner, signed in, download captions through the API.)
+**Story Lab** in the sidebar (also linked from the Stories uploads page).
+It has learned from the 94 Stories scripts the writers delivered (446K words),
+and it doesn't copy them. It knows how they're built:
 
-YouTube sometimes asks cloud servers to prove they aren't bots. So each
-video is tried several ways: as the Android app, the iPhone app, the TV
-and embedded players, the watch page's own caption list, and finally the
-"Show transcript" panel under a video. Whichever way last worked goes
-first. If every way is refused, the panel says so, and those videos are
-tried again the next hour: a refusal never counts against the video. Any video's transcript can
-also be added by hand on its page: in YouTube Studio → Subtitles → ⋮ →
-Download, then drop the .srt/.vtt/.sbv on the video's page, or paste plain
-text.
+- **The formats**, each with its own beat order: crossover insertion
+  ("What If X Was In Y"), power swap, survival test, detective duel, versus,
+  reborn with memories, alternate history, second person, explainer. For
+  example, a crossover insertion runs: arrival → the institution can't classify
+  him → friendly approach then the test → the roster one by one → the
+  resistance faction → an *inconclusive* first clash with the apex → the apex
+  goes after the people near him → taking the system apart → the final fight
+  climbing his ability ladder → aftermath.
+- **What holds across all of them**: about 4,750 words, 8–10 parts of ~460
+  words, a ~160-word intro that ends on an escalation hook (only 4 of 94 end
+  on a question), ~17-word sentences, ~3-sentence paragraphs, and reasoning
+  in "would / could" rather than narrating.
+- **Every world** as the scripts use it: the institution and what it can't
+  classify, the roster in the order they're met, the resistance side, the
+  apex (his first clash, his leverage, his real weakness) and the canon
+  moments to hook into. That covers The Boys, the MCU, Jujutsu Kaisen,
+  Invincible, FNAF, Chainsaw Man, Death Note, Star Wars and the survival
+  settings (The Last of Us, Resident Evil, A Quiet Place, Silent Hill, the
+  Purge, the US Military, Final Destination, World War Z, Saw). It also
+  covers a few the channel hasn't done (Attack on Titan, Demon Slayer, Squid
+  Game).
+- **Every hero** as the scripts use him: the version they lock to, his
+  ability ladder from the first thing he'd show to the ultimate he'd end on,
+  the limits the writers are careful to respect, and his moral line.
 
-Every transcript is measured on the parts of a script a writer controls:
+What's on the page:
 
-| Measure | |
-|---|---|
-| Premise said by | seconds until the title's names are both said: how fast it delivers the title's promise |
-| Hook asks a question | "what if", "have you ever", "imagine" in the first 20 seconds |
-| Turns a minute | "but", "suddenly", "until", "turns out", "little did"…: the story changing direction |
-| Open loops per 10 min | "stick around", "you'll see", "but first"…: promises that keep people watching |
-| Biggest twist lands at | where in the runtime the turns bunch up most |
-| Subscribe ask at | where "subscribe" is first said |
-| "You" a minute, pace, length, names in the story | |
+- **Write next**: ranked ideas. Each shows why: how the channel's uploads
+  with that hero, world and format did against their channel's usual, whether
+  the world rewards that kind of hero, how often the writers have come back to
+  it, and whether it's been done in another format. Nothing already written
+  or uploaded is suggested. Open one for its **blueprint**:
+  - title options and the version lock
+  - an intro drafted in the house voice, with the three moves it makes
+  - every part: what it has to do, with this hero's abilities and this
+    world's people in it, how long it should run, and the part of a real
+    script it's modelled on
+  - the outro, the caveats to stay honest about, and the format's rules
+- **Build any blueprint**: pick a format, hero, world, power or target.
+  Every "+" in the coverage map opens one too.
+- **Check a draft**: paste it with its INTRO / PART / OUTRO headers and it's
+  measured against the scripts of the same format. It checks:
+  - part count and length, intro length and how it ends, and the version lock
+  - sentence and paragraph length, the "would / could" voice, and whether
+    parts end on a forward hook
+  - honesty caveats and the outro
+  - for a crossover, when the apex's big part lands and how many of the
+    roster are met
+  - when the hero's ultimate is spent
 
-Each measure is split into thirds across the videos, and the panel shows
-which third runs above the channel's usual, strongest first. Open a row for
-the numbers and the best videos. Alongside:
+  Every finding says what the corpus does instead.
+- **What the best-performing scripts did differently**: once six scripts
+  are matched to their uploads by title, the top third against the bottom
+  third on every measure.
+- **The formats** and **What's been done** (heroes × worlds).
 
-- **Built like your hits**: the typical top third, as a checklist
-- **Where the turns fall**: the top third's turns through the runtime against
-  the bottom third's
-- **Names that come with hits**: characters said three or more times in a
-  script, and how those videos did. *Untapped* means few or no titles name
-  them yet: a story built around them is untried
-- **Openings that work**: phrases in the first 45 seconds that come with hits
-- **Check a script**: paste a draft and its title. It's timed at your usual
-  pace, measured the same way, and you get a verdict ("built like your
-  hits"), each measure against the hits with what to change, and its turns
-  plotted against the hits'
-- **Search the transcripts**: every place a phrase is said, with a timestamp
-  that opens the video there. Handy for "have we done this before?"
-- **Every video and its transcript**: each opens the video's own page, with
-  its measures against the hits, its opening, its turns chart and the full
-  transcript with the turns highlighted
-
-Follow-up ideas in the Ideas panel also show *how the original opened*.
-
-| Variable | Default | |
-|---|---|---|
-| `TRANSCRIPT_CATEGORIES` | `stories` | which categories get transcripts, comma-separated (e.g. `stories,gaming,movies`) |
-| `TRANSCRIPTS_PER_HOUR` | `40` | how many are read each hour |
+**Adding scripts:** put the new .docx files in a folder and run
+`python3 scripts/build-story-corpus.py "<folder>"`, then commit
+`src/web/stories/corpus.json`. Everything above updates from it. New heroes
+and worlds go in `src/web/stories/lore.ts`.
 
 ## Uploads — is Stories keeping to every four days?
 

@@ -1,0 +1,304 @@
+/**
+ * What to write next for Stories — ranked, with the evidence.
+ *
+ * Every combination the lore allows (a hero dropped into a world, put
+ * through a survival setting, handed another franchise's power, set against
+ * a target) is scored on three things, each shown on the page:
+ *
+ *   performance  how the channel's own uploads with this hero, this world
+ *                and this format did against their channel's usual — pulled
+ *                toward "no effect" when there are only a few of them
+ *   fit          whether the world rewards this kind of hero (The Boys
+ *                rewards outsiders whose power Vought can't classify; a
+ *                survival setting rewards heroes whose strengths it can get
+ *                around) — from lore.ts
+ *   freshness    anything already written or uploaded is out; the same
+ *                pairing in another format, or a hero used a lot lately,
+ *                counts against it
+ *
+ * The corpus supplies the proof that a structure works: a world with several
+ * scripts already has a tested shape to follow.
+ */
+import { formatOfTitle, type FormatId } from "./formats.js";
+import { HEROES, POWERS, WORLDS, readTitle, type Hero, type Power, type World } from "./lore.js";
+import { corpus, measure, type Script } from "./corpus.js";
+
+export interface LabVideo {
+  title: string;
+  multiple: number | null;
+  publishedAt: Date;
+}
+
+export interface LabIdea {
+  key: string;
+  format: FormatId;
+  hero: Hero | null;
+  world: World | null;
+  power: Power | null;
+  target: Hero | null;
+  title: string;
+  score: number;
+  reasons: Array<{ text: string; lift: number }>;
+}
+
+const TARGET_ONLY = new Set(["light", "joker", "walter", "avengers"]);
+const DETECTIVES = ["l", "dexter", "batman", "otto"];
+const TARGETS = ["light", "joker", "walter", "dexter", "batman", "afton", "homelander", "doom"];
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length ? (s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2) : 0;
+}
+
+export function keyOf(format: FormatId, hero?: string | null, world?: string | null, power?: string | null, target?: string | null): string {
+  return [format, hero ?? "", world ?? "", power ?? "", target ?? ""].join("|");
+}
+
+/** Read a title into the same key the ideas use. */
+export function keyOfTitle(title: string): { key: string; pair: string; pairs: string[] } {
+  const f = formatOfTitle(title);
+  const r = readTitle(title);
+  const hero = r.heroes[0]?.id ?? null;
+  const other = r.heroes[1]?.id ?? null;
+  const world = r.worlds[0]?.id ?? (f === "reborn" || f === "divergence" ? r.heroes[0]?.home ?? null : null);
+  const power = r.powers[0]?.id ?? null;
+  const target = f === "hunt" || f === "versus" ? other : null;
+  // Two characters from different worlds pair each with the other's world:
+  // "Springtrap Ate Homelander" is Afton in The Boys.
+  const pairs = [[hero, world ?? power ?? target].join("|")];
+  for (const a of r.heroes) for (const b of r.heroes) if (a !== b && b.home) pairs.push(`${a.id}|${b.home}`);
+  for (const a of r.heroes) for (const w of r.worlds) pairs.push(`${a.id}|${w.id}`);
+  for (const a of r.heroes) for (const p of r.powers) {
+    const home = WORLDS.find((w) => w.name === p.from);
+    if (home) pairs.push(`${a.id}|${home.id}`);
+  }
+  return { key: keyOf(f, hero, world, power, target), pair: pairs[0]!, pairs: [...new Set(pairs)] };
+}
+
+/** Normalised title, for matching a script to its upload. */
+export const norm = (t: string) => t.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+interface Stat { n: number; lift: number; median: number }
+
+export function perfStats(videos: LabVideo[]): { overall: number; hero: Map<string, Stat>; world: Map<string, Stat>; format: Map<string, Stat>; power: Map<string, Stat> } {
+  const judged = videos.filter((v) => v.multiple !== null && v.multiple > 0);
+  const overall = median(judged.map((v) => v.multiple!)) || 1;
+  const buckets = { hero: new Map<string, number[]>(), world: new Map<string, number[]>(), format: new Map<string, number[]>(), power: new Map<string, number[]>() };
+  const push = (m: Map<string, number[]>, k: string | undefined | null, x: number) => {
+    if (!k) return;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(x);
+  };
+  for (const v of judged) {
+    const r = readTitle(v.title);
+    const f = formatOfTitle(v.title);
+    push(buckets.format, f, v.multiple!);
+    for (const h of r.heroes.slice(0, 2)) push(buckets.hero, h.id, v.multiple!);
+    for (const w of r.worlds.slice(0, 1)) push(buckets.world, w.id, v.multiple!);
+    for (const p of r.powers.slice(0, 1)) push(buckets.power, p.id, v.multiple!);
+  }
+  const toStats = (m: Map<string, number[]>) =>
+    new Map(
+      [...m].map(([k, xs]) => {
+        const med = median(xs);
+        // Pulled toward "no effect": three videos can't carry a rule.
+        const k0 = 3;
+        return [k, { n: xs.length, median: med, lift: (xs.length * (med / overall) + k0) / (xs.length + k0) }];
+      }),
+    );
+  return { overall, hero: toStats(buckets.hero), world: toStats(buckets.world), format: toStats(buckets.format), power: toStats(buckets.power) };
+}
+
+const FORMAT_NAME: Record<FormatId, string> = {
+  insert: "crossover insertions",
+  power: "power swaps",
+  survive: "survival tests",
+  hunt: "detective duels",
+  versus: "versus breakdowns",
+  reborn: "reborn-with-memories",
+  divergence: "alternate histories",
+  you: "second-person stories",
+  explainer: "explainers",
+  game: "game videos",
+};
+
+export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24): LabIdea[] {
+  const perf = perfStats(videos);
+  const scripts = corpus();
+
+  // Done: every script written and every title uploaded.
+  const doneKeys = new Set<string>();
+  const donePairs = new Map<string, number>();
+  for (const t of [...scripts.map((s) => s.title), ...videos.map((v) => v.title)]) {
+    const k = keyOfTitle(t);
+    doneKeys.add(k.key);
+    for (const p of k.pairs) donePairs.set(p, (donePairs.get(p) ?? 0) + 1);
+  }
+  // How much each hero was used lately.
+  const recentHero = new Map<string, number>();
+  for (const v of videos) {
+    if (now.getTime() - v.publishedAt.getTime() > 60 * 86_400_000) continue;
+    for (const h of readTitle(v.title).heroes.slice(0, 1)) recentHero.set(h.id, (recentHero.get(h.id) ?? 0) + 1);
+  }
+  const scriptsInWorld = (id: string) => scripts.filter((s) => s.worlds.some((w) => w.id === id));
+
+  const out: LabIdea[] = [];
+  const consider = (format: FormatId, hero: Hero | null, world: World | null, power: Power | null, target: Hero | null, title: string) => {
+    const key = keyOf(format, hero?.id, world?.id, power?.id, target?.id);
+    if (doneKeys.has(key)) return;
+    const reasons: LabIdea["reasons"] = [];
+    let score = 1;
+
+    const use = (stat: Stat | undefined, what: string) => {
+      if (!stat || stat.n < 2) return;
+      score *= stat.lift;
+      reasons.push({ text: `${what}: ${stat.n} uploads at a median ${stat.median.toFixed(1)}× their channel's usual`, lift: stat.lift });
+    };
+    if (hero) use(perf.hero.get(hero.id), hero.name);
+    if (target) use(perf.hero.get(target.id), target.name);
+    if (world) use(perf.world.get(world.id), world.name);
+    if (power) use(perf.power.get(power.id), power.name);
+    use(perf.format.get(format), cap(FORMAT_NAME[format]));
+
+    // Fit: does this world reward this kind of hero?
+    if (world && hero) {
+      const shared = hero.tags.filter((t) => world.wants.includes(t));
+      const f = shared.length >= 3 ? 1.12 : shared.length === 2 ? 1.08 : shared.length === 1 ? 1.0 : 0.9;
+      score *= f;
+      reasons.push({
+        text: shared.length ? `${world.name} rewards ${shared.join(", ")} heroes — ${hero.name} is ${shared.length > 1 ? "all of that" : "that"}` : `${hero.name} isn't the kind of hero ${world.name} usually rewards`,
+        lift: f,
+      });
+    }
+    if (power && hero) {
+      // A power that pushes on the hero's own flaw makes the richer script.
+      const f = hero.tags.includes("moral") ? 1.06 : 1.0;
+      score *= f;
+      if (f > 1) reasons.push({ text: `The catch — ${power.cost} — tests exactly what ${hero.name} stands for: ${hero.code}`, lift: f });
+    }
+
+    // The writers' own repeated choices: a world or hero they keep coming
+    // back to has earned it, and has a tested structure to follow.
+    if (world) {
+      const n = scriptsInWorld(world.id).length;
+      if (n >= 2) {
+        const f = 1 + 0.02 * Math.min(n, 12);
+        score *= f;
+        reasons.push({ text: `${n} scripts already set in ${world.name} — the writers keep coming back to it, and the structure is tested`, lift: f });
+      } else if (world.fresh) {
+        reasons.push({ text: `${world.name} is new for the channel — fresh audience, untested structure`, lift: 1 });
+      }
+    }
+    if (hero) {
+      const n = scripts.filter((s) => s.heroes[0]?.id === hero.id).length;
+      if (n >= 2) {
+        const f = 1 + 0.015 * Math.min(n, 10);
+        score *= f;
+        reasons.push({ text: `${hero.name} leads ${n} scripts — a proven lead`, lift: f });
+      }
+    }
+
+    // Freshness.
+    const pair = [hero?.id ?? null, world?.id ?? power?.id ?? target?.id ?? null].join("|");
+    const seen = donePairs.get(pair) ?? 0;
+    if (seen) {
+      const f = 0.85 ** seen;
+      score *= f;
+      reasons.push({ text: `${hero?.name ?? "This"} with ${world?.name ?? power?.name ?? target?.name} has been done in another format`, lift: f });
+    }
+    const recent = hero ? recentHero.get(hero.id) ?? 0 : 0;
+    if (recent >= 2) {
+      const f = 0.97 ** recent;
+      score *= f;
+      reasons.push({ text: `${hero!.name} led ${recent} uploads in the last 60 days`, lift: f });
+    }
+    out.push({ key, format, hero, world, power, target, title, score, reasons: reasons.sort((a, b) => Math.abs(b.lift - 1) - Math.abs(a.lift - 1)) });
+  };
+
+  const heroes = HEROES.filter((h) => !TARGET_ONLY.has(h.id));
+  for (const hero of heroes) {
+    for (const world of WORLDS) {
+      if (hero.home === world.id) continue;
+      if (world.kind === "universe") consider("insert", hero, world, null, null, `What If ${hero.name} Was In ${world.name}?`);
+      else if (!hero.tags.every((t) => t === "villain")) consider("survive", hero, world, null, null, `Could ${hero.name} Survive ${world.name}?`);
+    }
+    for (const power of POWERS) {
+      if (power.from === hero.from) continue;
+      consider("power", hero, null, power, null, `What If ${hero.name} Had ${power.name.replace(/\b([a-z])/g, (m) => m.toUpperCase())}?`);
+    }
+    if (hero.home && !hero.tags.includes("villain")) consider("reborn", hero, hero.home ? WORLDS.find((w) => w.id === hero.home) ?? null : null, null, null, `What If ${hero.name} Was Reborn With His Memories?`);
+  }
+  for (const d of DETECTIVES) {
+    for (const t of TARGETS) {
+      if (d === t) continue;
+      const hero = HEROES.find((h) => h.id === d)!;
+      const target = HEROES.find((h) => h.id === t)!;
+      if (hero.from === target.from) continue;
+      consider("hunt", hero, null, null, target, `Could ${hero.name} Catch ${target.name}?`);
+    }
+  }
+  for (const w of WORLDS.filter((x) => x.kind === "universe")) consider("you", null, w, null, null, `What If YOU Were In ${w.name}?`);
+  for (const p of POWERS) consider("you", null, null, p, null, `What If YOU Had ${p.name.replace(/\b([a-z])/g, (m) => m.toUpperCase())}?`);
+
+  // Best first, but a spread: no hero, world or power more than twice.
+  out.sort((a, b) => b.score - a.score);
+  const picked: LabIdea[] = [];
+  const count = new Map<string, number>();
+  for (const i of out) {
+    const ks = [i.hero && `h:${i.hero.id}`, i.world && `w:${i.world.id}`, i.power && `p:${i.power.id}`, `f:${i.format}`].filter(Boolean) as string[];
+    const caps: Record<string, number> = { h: 2, w: 3, p: 2, f: 8 };
+    if (ks.some((k) => (count.get(k) ?? 0) >= caps[k[0]!]!)) continue;
+    for (const k of ks) count.set(k, (count.get(k) ?? 0) + 1);
+    picked.push(i);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ── what the channel's best scripts did differently ────────────────────────
+
+export interface ScriptResult {
+  script: Script;
+  multiple: number;
+}
+
+/** Scripts matched to their uploads by title. */
+export function matchScripts(videos: LabVideo[]): ScriptResult[] {
+  const byTitle = new Map(videos.filter((v) => v.multiple !== null).map((v) => [norm(v.title), v.multiple!]));
+  return corpus()
+    .map((s) => ({ script: s, multiple: byTitle.get(norm(s.title)) ?? null }))
+    .filter((x): x is ScriptResult => x.multiple !== null);
+}
+
+export interface Contrast {
+  label: string;
+  hits: string;
+  misses: string;
+}
+
+/** Top third against bottom third, on the measures a writer controls. */
+export function contrast(results: ScriptResult[]): Contrast[] | null {
+  if (results.length < 6) return null;
+  const sorted = [...results].sort((a, b) => b.multiple - a.multiple);
+  const third = Math.max(2, Math.floor(sorted.length / 3));
+  const hits = sorted.slice(0, third).map((r) => r.script.metrics);
+  const misses = sorted.slice(-third).map((r) => r.script.metrics);
+  const med = (xs: number[]) => median(xs);
+  const row = (label: string, pick: (m: ReturnType<typeof measure>) => number, fmt: (n: number) => string) => ({
+    label,
+    hits: fmt(med(hits.map(pick))),
+    misses: fmt(med(misses.map(pick))),
+  });
+  return [
+    row("Length", (m) => m.words, (n) => `${Math.round(n).toLocaleString("en-US")} words`),
+    row("Parts", (m) => m.parts, (n) => String(Math.round(n))),
+    row("Words a part", (m) => med(m.partWords), (n) => String(Math.round(n))),
+    row("Intro", (m) => m.introWords, (n) => `${Math.round(n)} words`),
+    row("Sentence length", (m) => m.sentence, (n) => `${Math.round(n)} words`),
+    row("“Would / could” a thousand words", (m) => m.conditional, (n) => n.toFixed(0)),
+    row("Parts ending on a forward hook", (m) => m.forwardClosers, (n) => `${Math.round(n * 100)}%`),
+  ];
+}

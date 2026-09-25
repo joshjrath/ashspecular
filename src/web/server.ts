@@ -48,18 +48,19 @@ import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesCh
 import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
-import { analyzeStructure, checkScript, findInSegments, type ScriptVideo } from "./structure.js";
-import {
-  getTranscript, getUpload, listTranscriptFeatures, parseCaptionFile, saveTranscript, searchTranscripts,
-  syncTranscripts, transcriptCategories, transcriptCoverage, transcriptStatus,
-} from "../jobs/transcripts.js";
+import { corpus, normsFor } from "./stories/corpus.js";
+import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, type LabVideo } from "./stories/lab.js";
+import { blueprint } from "./stories/blueprint.js";
+import { checkDraft } from "./stories/check.js";
+import { FORMATS, type FormatId } from "./stories/formats.js";
+import { HEROES, WORLDS } from "./stories/lore.js";
 import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState, type ScriptsData } from "./page.js";
+import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -73,7 +74,7 @@ import {
   renderScripts,
   renderScriptBoard,
   renderUploads,
-  renderVideo,
+  renderStoryLab,
   renderWeek,
   renderRecord,
 } from "./page.js";
@@ -485,14 +486,13 @@ export async function startWeb(): Promise<void> {
   });
 
   // Uploads: whether each Stories channel is keeping to its four-day pace.
-  type UploadsQuery = { range?: string; cat?: string; idea?: string; ch?: string; tq?: string };
-  const uploadsPage = async (query: UploadsQuery, script?: { text: string; title: string }) => {
+  type UploadsQuery = { range?: string; cat?: string; idea?: string; ch?: string };
+  const uploadsPage = async (query: UploadsQuery) => {
     const category = (UPLOAD_CATEGORIES.find((c) => c.id === query.cat)?.id ?? "stories") as CategoryId;
     const target = UPLOAD_TARGETS[category];
     const ranges = target.kind === "daily" ? [14, 30, 60] : [30, 90, 180];
     const range = ranges.includes(Number(query.range)) ? Number(query.range) : ranges[1]!;
     const channels = channelsIn(category);
-    const scripted = hasDatabase && transcriptCategories().includes(category);
     const now = new Date();
     const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
     const [s, links, allUploads, allViews] = await Promise.all([
@@ -502,11 +502,7 @@ export async function startWeb(): Promise<void> {
       // A year and more of views, so every channel has twenty to compare with.
       // Twenty earlier videos to compare with: a year and more for long form,
       // a couple of months for Shorts at five a day.
-      loadVideoViews(
-        // With transcripts, every video ever, so every script can be read against how it did.
-        scripted ? new Date(0) : new Date(now.getTime() - (target.kind === "daily" ? 75 : 400) * 86_400_000),
-        channels,
-      ),
+      loadVideoViews(new Date(now.getTime() - (target.kind === "daily" ? 75 : 400) * 86_400_000), channels),
     ]);
     const inCat = new Set(channels);
     const uploads = allUploads.filter((u) => inCat.has(u.channel));
@@ -544,46 +540,15 @@ export async function startWeb(): Promise<void> {
     );
     const ideaTitle = (query.idea ?? "").trim().slice(0, 200);
 
-    // Scripts: every transcript's measures against how its video did.
-    let scripts: ScriptsData | undefined;
-    if (scripted) {
-      const [features, coverage, every] = await Promise.all([
-        listTranscriptFeatures(channels),
-        transcriptCoverage(channels),
-        listUploads(new Date(0)),
-      ]);
-      const mine = every.filter((u) => inCat.has(u.channel));
-      const scriptVideos: ScriptVideo[] = mine
-        .filter((u) => features.get(u.videoId)?.features)
-        .map((u) => ({
-          videoId: u.videoId, title: u.title, channel: u.channel, url: u.url, publishedAt: u.publishedAt,
-          multiple: multipleOf(u.videoId), features: features.get(u.videoId)!.features!,
-        }));
-      const titles = mine.map((u) => u.title);
-      const structure = analyzeStructure(scriptVideos, titles);
-      const tq = (query.tq ?? "").trim().slice(0, 100);
-      const found = tq ? await searchTranscripts(channels, tq) : [];
-      const byVid = new Map(mine.map((u) => [u.videoId, u]));
-      scripts = {
-        structure,
-        coverage,
-        status: { ...transcriptStatus },
-        videos: mine
-          .slice()
-          .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
-          .map((u) => ({ upload: u, row: features.get(u.videoId) ?? null, multiple: multipleOf(u.videoId) })),
-        search: tq
-          ? {
-              query: tq,
-              results: found
-                .map((r) => ({ upload: byVid.get(r.videoId)!, hits: findInSegments(r.segments, tq, 3) }))
-                .filter((r) => r.upload && r.hits.length),
-            }
-          : null,
-        check: script ? { ...script, result: checkScript(script.text, script.title, structure, titles) } : null,
-        hooks: new Map(scriptVideos.map((v) => [v.url, v.features.hook])),
-      };
-    }
+    // Each video's opening, from its script, for the idea details.
+    const openings = new Map(
+      corpus()
+        .filter((sc) => sc.sections[0]?.name === "INTRO")
+        .map((sc) => [normTitle(sc.title), sc.sections[0]!.paras.join(" ")] as const),
+    );
+    const hooks = new Map(
+      uploads.filter((u) => openings.has(normTitle(u.title))).map((u) => [u.url, openings.get(normTitle(u.title))!] as const),
+    );
 
     return renderUploads(
         s,
@@ -598,7 +563,7 @@ export async function startWeb(): Promise<void> {
                 slots: postingSlots(viewData.filter((v) => now.getTime() - v.publishedAt.getTime() < 30 * 86_400_000), shortScores),
               }
             : undefined,
-          scripts,
+          hooks,
         },
         now,
       );
@@ -609,53 +574,65 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(shellHtml);
   });
 
-  // A script checked before it's made: posted, as scripts are too long for a link.
-  app.post<{ Body: Record<string, string | undefined> }>("/uploads/script", async (request, reply) => {
-    const b = request.body ?? {};
-    const text = (b.script ?? "").slice(0, 60_000);
-    const html = await uploadsPage({ cat: b._cat, ch: b.ch }, text.trim() ? { text, title: (b.title ?? "").trim().slice(0, 200) } : undefined);
-    return reply.type("text/html").send(html);
-  });
-
-  // Read transcripts now rather than waiting for the hour.
-  app.post<{ Body: Record<string, string | undefined> }>("/uploads/transcripts/run", async (request, reply) => {
-    await syncTranscripts(fetch, 12).catch((err) => console.error("[transcripts] run failed:", err));
-    return reply.redirect(`${backToCategory(request.body?._cat)}#scripts`);
-  });
-
-  // One video: its transcript, its measures, and how it compares.
-  app.get<{ Params: { id: string } }>("/uploads/video/:id", async (request, reply) => {
-    const upload = await getUpload(request.params.id);
-    if (!upload) return reply.code(404).type("text/html").send(renderEmptyState());
-    const category = categoryOfChannel(upload.channel) ?? "stories";
-    const channels = channelsIn(category);
+  // Story Lab: what to write next for Stories, and how to build it.
+  type LabQuery = { format?: string; hero?: string; world?: string; power?: string; target?: string };
+  const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
+    const channels = channelsIn("stories");
     const now = new Date();
-    const [s, t, views, features, every] = await Promise.all([
-      shell("uploads"),
-      getTranscript(upload.videoId),
-      loadVideoViews(new Date(0), channels),
-      listTranscriptFeatures(channels),
-      listUploads(new Date(0)),
+    const [s, all, views] = await Promise.all([
+      shell("storylab"),
+      hasDatabase ? listUploads(new Date(0)) : Promise.resolve([]),
+      hasDatabase ? loadVideoViews(new Date(0), channels) : Promise.resolve([]),
     ]);
     const perf = scoreAll(views, now);
-    const mine = every.filter((u) => channels.includes(u.channel));
-    const structure = analyzeStructure(
-      mine
-        .filter((u) => features.get(u.videoId)?.features)
-        .map((u) => ({ videoId: u.videoId, title: u.title, channel: u.channel, url: u.url, publishedAt: u.publishedAt, multiple: perf.get(u.videoId)?.multiple ?? null, features: features.get(u.videoId)!.features! })),
-      mine.map((u) => u.title),
+    const stories = all.filter((u) => channels.includes(u.channel));
+    const videos: LabVideo[] = stories.map((u) => ({ title: u.title, multiple: perf.get(u.videoId)?.multiple ?? null, publishedAt: u.publishedAt }));
+    const scripts = corpus();
+    const ideas = labIdeas(videos, now).map((idea) => ({
+      idea,
+      blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id }),
+    }));
+    const picked = {
+      format: FORMATS.some((f) => f.id === query.format) ? query.format! : "insert",
+      hero: query.hero ?? "",
+      world: query.world ?? "",
+      power: query.power ?? "",
+      target: query.target ?? "",
+    };
+    const built = query.hero || query.world || query.power
+      ? blueprint({ format: picked.format as FormatId, hero: picked.hero || null, world: picked.world || null, power: picked.power || null, target: picked.target || null })
+      : null;
+    const results = matchScripts(videos);
+    // Coverage: heroes who lead a script or a top idea, against every world.
+    const done = new Set<string>();
+    for (const t of [...scripts.map((x) => x.title), ...stories.map((u) => u.title)]) for (const p of keyOfTitle(t).pairs) done.add(p);
+    const leadIds = new Set([...scripts.map((x) => x.heroes[0]?.id), ...ideas.map((i) => i.idea.hero?.id)].filter(Boolean) as string[]);
+    return renderStoryLab(s, {
+      scripts: scripts.length,
+      words: scripts.reduce((n, x) => n + x.words, 0),
+      matched: results.length,
+      ideas,
+      blueprint: built,
+      picked,
+      check: check ? { ...check, result: checkDraft(check.text, check.title) } : null,
+      contrast: contrast(results),
+      results,
+      coverage: { heroes: HEROES.filter((h) => leadIds.has(h.id)), worlds: WORLDS, done },
+      formats: FORMATS.map((f) => {
+        const mine = scripts.filter((x) => x.format === f.id);
+        return { format: f, norms: normsFor(mine.length ? mine : scripts), examples: mine.map((x) => x.title) };
+      }).filter((f) => f.examples.length),
+    });
+  };
+  app.get<{ Querystring: LabQuery }>("/story-lab", async (request, reply) =>
+    reply.type("text/html").send(await storyLab(request.query)),
+  );
+  // Drafts are posted: they're far too long for a link.
+  app.post<{ Body: Record<string, string | undefined> }>("/story-lab/check", async (request, reply) => {
+    const b = request.body ?? {};
+    return reply.type("text/html").send(
+      await storyLab({}, { title: (b.title ?? "").trim().slice(0, 200), text: (b.script ?? "").slice(0, 120_000) }),
     );
-    return reply.type("text/html").send(renderVideo(s, { upload, category, transcript: t, perf: perf.get(upload.videoId) ?? null, structure }));
-  });
-
-  app.post<{ Params: { id: string }; Body: { transcript?: string } }>("/uploads/video/:id/transcript", async (request, reply) => {
-    const upload = await getUpload(request.params.id);
-    const body = (request.body?.transcript ?? "").slice(0, 400_000);
-    if (upload && body.trim()) {
-      const segments = parseCaptionFile(body);
-      if (segments.length) await saveTranscript(upload.videoId, upload.title, segments, "pasted", null, null);
-    }
-    return reply.redirect(`/uploads/video/${encodeURIComponent(request.params.id)}`);
   });
 
   const backToCategory = (cat: unknown) =>
@@ -875,10 +852,7 @@ export async function startWeb(): Promise<void> {
         .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
         .then(() => announceBreakouts())
         .then((n) => n && console.log(`[uploads] announced ${n} breakout${n === 1 ? "" : "s"}`))
-        .catch((err) => console.error("[uploads] read failed:", err))
-        .then(() => syncTranscripts())
-        .then((r) => (r.fetched || r.failed) && console.log(`[transcripts] ${r.fetched} read, ${r.failed} failed${r.blocked ? ` — stopped: ${r.blocked}` : ""}`))
-        .catch((err) => console.error("[transcripts] run failed:", err));
+        .catch((err) => console.error("[uploads] read failed:", err));
     cron.schedule("7 * * * *", () => void read("hourly"));
     setTimeout(() => void read("boot"), 20_000).unref();
   }
