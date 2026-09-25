@@ -65,7 +65,7 @@ than a fact. Full reasoning in [PARSER.md](PARSER.md).
 ```bash
 npm run doctor        # preflight: Node, .env, both API keys, one real parse
 npm run bot           # run the Discord bot
-npm run test:rules    # 63 deterministic tests — no API key needed
+npm run test:rules    # 162 deterministic tests — no API key needed
 npm run eval          # score the parser against evals/cases/
 npm run parse -- "…"  # parse one message from the command line
 npm run batches       # open today's bits batches by hand

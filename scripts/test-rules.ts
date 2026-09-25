@@ -19,7 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, shiftMonth, sortRecords } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, shiftMonth, sortRecords } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
@@ -410,6 +410,38 @@ t("reversed, blanks still at the bottom", codes("code", "desc"), ["VIDEO-25", "V
 t("deadline", codes("due", "asc"), ["VIDEO-10", "VIDEO-9", "VIDEO-25", "none"]);
 t("title A–Z", sortRecords(sample, "title", "asc").map((r) => r.title), ["A loose note", "Avengers", "Iron Man", "Spider-Man"]);
 t("newest filed first", codes("filed", "desc"), ["none", "VIDEO-9", "VIDEO-10", "VIDEO-25"]);
+
+// ── the pages' own scripts ────────────────────────────────────────────────
+// Inline scripts live in template strings, where a backslash is eaten before
+// the browser ever sees it. Compile each one, so a broken regex fails here
+// rather than silently killing drag-and-drop on the live board.
+section("Page scripts compile; day strip; pins");
+const shellFix = {
+  active: "calendar", counts: {}, nav: { reviews: 0, queue: 0, recurring: 0, calendar: 0 }, lastIntake: null,
+};
+const pinnedRec = { ...sample[0]!, id: 7, category: "stories", status: "open", links: [], warnings: [],
+  confidence: 1, batchNo: null, batchTarget: null, batchDone: 0, pinnedAt: new Date() } as unknown as
+  Parameters<typeof sortRecords>[0][number];
+const days = [-1, 0, 1].map((n) => ({ date: shiftDate("2026-09-28", n), list: n === 0 ? [pinnedRec] : [] }));
+const pages = {
+  calendar: renderCalendar(shellFix, "2026-09", "posting", []),
+  day: renderDay(shellFix, "2026-09-28", "posting", days),
+  dashboard: renderDashboard({ ...shellFix, active: "dashboard" }, {
+    stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+    byDay: [], grouped: new Map(), channels: {}, pinned: [pinnedRec],
+  }),
+};
+for (const [name, html] of Object.entries(pages)) {
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+  const broken = scripts.filter((src) => {
+    try { new Function(src); return false; } catch { return true; }
+  }).length;
+  t(`${name}: ${scripts.length} inline scripts, none broken`, broken, 0);
+}
+t("day strip: one column per day", (pages.day.match(/class="daycol/g) ?? []).length, 3);
+t("day strip: the clicked day is focused", /daycol[^"]*focus[^"]*" data-date="2026-09-28"/.test(pages.day), true);
+t("dashboard: pinned section at the top", pages.dashboard.indexOf("group pinned") < pages.dashboard.indexOf('class="stats"'), true);
+t("a pinned row offers unpin", pages.dashboard.includes(`/r/7/unpin`), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

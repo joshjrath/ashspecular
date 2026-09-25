@@ -120,8 +120,22 @@ aside .live .pulse {
 }
 
 main { padding: 28px 28px 80px 8px; }
-main > * { max-width: 1320px; }
-header.page { display: flex; align-items: flex-end; gap: 18px; margin-bottom: 22px; padding: 6px 4px 0; }
+
+/* The rail can be put away for the whole width — the calendar especially.
+   The class is set on <html> before the page paints, so it never flashes. */
+@media (min-width: 761px) {
+  html.rail-closed .shell { grid-template-columns: minmax(0, 1fr); }
+  html.rail-closed .shell > aside { display: none; }
+  html.rail-closed main { padding-left: 28px; }
+}
+.railtoggle {
+  width: 40px; height: 40px; border-radius: 12px; border: 0; cursor: pointer; flex: none;
+  background: var(--rail); color: #9A9AA3; display: grid; place-items: center;
+  align-self: center; margin-right: 4px;
+}
+.railtoggle:hover { background: #26262A; color: #fff; }
+.railtoggle svg { width: 20px; height: 20px; }
+header.page { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 22px; padding: 6px 4px 0; }
 header.page h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.042em; margin: 0; line-height: 1; }
 header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-bottom: 4px; }
 
@@ -312,14 +326,17 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   text-transform: uppercase; color: var(--ink3); text-align: left;
 }
 .cal .cell {
-  background: var(--sunk); border-radius: 18px; min-height: 118px; padding: 10px 10px 11px;
+  /* Five weeks fill the screen below the toolbar; never smaller than a cell
+     that fits five chips, so a short window scrolls instead of crushing. */
+  background: var(--sunk); border-radius: 18px; padding: 11px 11px 12px;
+  min-height: max(172px, calc((100vh - 290px) / 5));
   display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--ink);
 }
 .cal .cell.outside { background: #FAFAFB; }
 .cal .cell.outside .num { color: #C6C6CD; }
 .cal .cell.today { background: var(--salmon); }
 .cal .num {
-  font-family: var(--display); font-size: 15px; font-weight: 700; color: var(--ink2);
+  font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink2);
   font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 5px; border-radius: 8px; align-self: flex-start; letter-spacing: -0.03em;
 }
@@ -327,8 +344,8 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cal .cell.today .num { color: #101012; }
 .cal .num .tag { font-family: var(--ui); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
 .cal .chip {
-  display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 10px;
-  background: #fff; font-size: 11px; color: var(--ink2); min-width: 0; font-weight: 600;
+  display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 10px;
+  background: #fff; font-size: 12.5px; color: var(--ink2); min-width: 0; font-weight: 600;
 }
 .cal .chip:hover { background: var(--line); color: var(--ink); }
 .cal .chip[draggable] { cursor: grab; }
@@ -349,8 +366,72 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cal .chip { box-shadow: inset 3px 0 0 var(--c); }
 .cal .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
-.cal .more { font-size: 11px; color: var(--ink3); padding: 2px 8px; font-weight: 700; }
+.cal .more { font-size: 12px; color: var(--ink3); padding: 2px 9px; font-weight: 700; margin-top: auto; }
 .cal .more:hover { color: var(--ink); }
+
+/* ── day strip ─────────────────────────────────────────────────────────── */
+button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
+.daystrip {
+  display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; position: relative;
+  scroll-snap-type: x proximity; padding: 2px 2px 14px; scrollbar-width: thin;
+  scrollbar-color: #3A3A40 transparent;
+}
+.daycol {
+  flex: 0 0 clamp(290px, 23vw, 380px); scroll-snap-align: center;
+  background: var(--card); color: var(--ink); border-radius: var(--r); padding: 12px;
+  display: flex; flex-direction: column; height: max(460px, calc(100vh - 250px));
+  transition: box-shadow .15s ease;
+}
+.daycol > header {
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 12px; flex-wrap: wrap;
+}
+.daycol .dname { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.daycol .wk { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: -0.04em; line-height: 1.05; }
+.daycol .dt { color: var(--ink3); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.daycol .rel { margin-left: auto; color: var(--ink3); font-size: 12px; }
+.daycol .cnt {
+  font-family: var(--display); font-weight: 700; font-size: 13px; min-width: 28px; height: 28px;
+  border-radius: 999px; background: var(--sunk); display: grid; place-items: center; padding: 0 8px;
+}
+.daycol.today > header { background: var(--salmon); border-radius: 16px; padding: 10px 12px 12px; margin-bottom: 8px; }
+.daycol.today .dt, .daycol.today .rel { color: #3A2A28; }
+.daycol.today .cnt { background: rgba(0,0,0,.1); }
+.daycol.focus { box-shadow: 0 0 0 3px var(--yellow); }
+.daycol.over { box-shadow: 0 0 0 3px var(--ink), inset 0 0 0 2px var(--ink); }
+.daybody { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; flex: 1; padding: 2px; }
+.dayempty { color: var(--ink3); font-size: 13px; text-align: center; padding: 40px 10px; }
+.dayedge {
+  flex: 0 0 120px; border-radius: var(--r); background: var(--rail); color: #9A9AA3;
+  display: grid; place-items: center; font-weight: 700; font-size: 13px; scroll-snap-align: center;
+}
+.dayedge:hover { background: #26262A; color: #fff; }
+.dcard {
+  background: var(--sunk); border-radius: 16px; padding: 12px 12px 10px 14px;
+  box-shadow: inset 4px 0 0 var(--c); display: flex; flex-direction: column; gap: 6px; cursor: grab;
+}
+.dcard.dragging { opacity: .35; }
+.dcard.saving { opacity: .6; }
+.dcard .top { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; color: var(--ink3); }
+.dcard .swatch { width: 10px; height: 10px; border-radius: 4px; background: var(--c); flex: none; }
+.dcard .code { font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dcard .bits { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard .t {
+  font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: -0.025em;
+  line-height: 1.2; overflow-wrap: anywhere;
+}
+.dcard .t:hover { text-decoration: underline; }
+.dcard .chan {
+  color: var(--ink, var(--ch)); font-weight: 700; font-size: 12.5px;
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+}
+.dcard .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
+.dcard .pill { align-self: flex-start; background: #fff; }
+.dcard .foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.dcard .at { font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; flex: 1; min-width: 0; }
+.dcard .at.over { color: var(--late); font-weight: 700; }
+.dcard .tick button { width: 28px; height: 28px; background: #fff; }
+.dcard.cleared .t { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
+.dcard.cleared .chan, .dcard.cleared .top { opacity: .55; }
 
 /* ── sign in ───────────────────────────────────────────────────────────── */
 .login { max-width: 380px; margin: 15vh auto; padding: 0 20px; }
@@ -383,6 +464,13 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .tick button.on { background: var(--gm); border-color: var(--gm); color: #fff; }
 .row.cleared .title { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
 .row.cleared .meta { opacity: .55; }
+.tick.pin button { display: grid; place-items: center; }
+.tick.pin button svg { width: 13px; height: 13px; }
+.tick.pin button:hover { border-color: var(--ink2); color: var(--ink); }
+.tick.pin button.on { background: var(--yellow); border-color: var(--yellow); color: #101012; }
+.group.pinned > .head { margin-top: 0; }
+.group.pinned > .head .dot { background: var(--yellow); }
+.group.pinned { margin-bottom: 18px; }
 .tick.remove button { font-size: 16px; }
 .tick.remove button:hover { border-color: var(--late); color: var(--late); }
 .tick.restore button:hover { border-color: var(--lf); color: var(--lf); }
@@ -535,6 +623,14 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   .cal .chip .dot, .cal .chip .t { display: none; }
   .cal .more { font-size: 9.5px; padding: 0 2px; white-space: nowrap; }
 
+  .railtoggle { display: none; }
+  .daystrip { gap: 8px; scroll-snap-type: x mandatory; margin: 0 -10px; padding: 2px 10px 12px; scroll-padding: 0 10px; }
+  .daycol { flex-basis: calc(100vw - 44px); height: max(420px, calc(100vh - 230px)); border-radius: 20px; padding: 10px; }
+  .dayedge { flex-basis: 90px; border-radius: 20px; }
+  .calbar button.nav, .calbar .nav { flex: none; }
+  #dayname { font-size: 17px; }
+  .draghint { display: none; }
+
   .login { margin: 8vh auto; }
   .login h1 { font-size: 36px; }
 }
@@ -548,7 +644,7 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .stat .n { font-size: 35px; }
   .cal { gap: 4px; padding: 8px; }
-  .cal .cell { min-height: 90px; border-radius: 14px; }
+  .cal .cell { min-height: 110px; border-radius: 14px; }
   .cal .chip .t { display: none; }
 }
 `;
@@ -575,11 +671,26 @@ function layout(title: string, shell: Shell | null, body: string): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${CSS}</style>
+<script>try{if(localStorage.getItem("rail")==="closed")document.documentElement.classList.add("rail-closed")}catch(e){}</script>
 </head><body>${
     shell
       ? `<div class="shell">${sidebar(shell)}<main>${body}</main></div>`
       : `<main style="max-width:none">${body}</main>`
-  }</body></html>`;
+  }<script>
+  // The sidebar button: remembered per browser. "[" does the same.
+  function toggleRail() {
+    var closed = document.documentElement.classList.toggle("rail-closed");
+    try { localStorage.setItem("rail", closed ? "closed" : "open"); } catch (e) {}
+    document.querySelectorAll(".railtoggle").forEach(function (b) {
+      b.setAttribute("aria-label", closed ? "Show the sidebar" : "Hide the sidebar");
+      b.setAttribute("title", (closed ? "Show the sidebar" : "Hide the sidebar") + " ( [ )");
+    });
+  }
+  document.addEventListener("keydown", function (e) {
+    var t = e.target && e.target.tagName;
+    if (e.key === "[" && t !== "INPUT" && t !== "TEXTAREA" && !e.metaKey && !e.ctrlKey) toggleRail();
+  });
+  </script></body></html>`;
 }
 
 function sidebar(s: Shell): string {
@@ -636,6 +747,12 @@ function pageHeader(title: string): string {
     timeZone: ORG_TZ, weekday: "long", day: "numeric", month: "long",
   }).format(now);
   return `<header class="page">
+    <button class="railtoggle" type="button" onclick="toggleRail()"
+      aria-label="Hide or show the sidebar" title="Hide or show the sidebar ( [ )">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <rect x="2.5" y="3.5" width="15" height="13" rx="3"/><path d="M7.5 3.5v13"/>
+      </svg>
+    </button>
     <h1>${esc(title)}</h1>
     <span class="when">${esc(day)} · ${esc(renderIn(now, ORG_TZ, "ET").split("@")[1]?.trim() ?? "")}</span>
   </header>`;
@@ -701,11 +818,16 @@ function row(r: StoredRecord): string {
 /**
  * The buttons at the end of a row, one tap each from wherever you are looking.
  *
+ * The pin puts a row at the top of the dashboard, as many as you like, until
+ * it is unpinned. It changes nothing else about the row.
+ *
  * ✓ clears, and counts toward "cleared this week". × removes, and counts
  * toward nothing — it is for things that were never real work, like a
  * duplicate or a message filed by mistake. A removed row gets a single ↺ to
  * put it back.
  */
+const PIN_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l-.75 4.5 2.5 2.5v1.25h-8.5V8.75l2.5-2.5z" fill="currentColor"/><path d="M8 10v4.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+
 function actions(r: StoredRecord): string {
   const button = (action: string, label: string, glyph: string, cls = "") =>
     `<form class="tick${cls ? ` ${cls}` : ""}" method="post" action="/r/${r.id}/${action}">
@@ -716,7 +838,14 @@ function actions(r: StoredRecord): string {
 
   if (r.status === "removed") return `<div class="acts">${button("open", "Restore", "↺", "restore")}</div>`;
 
+  const pinned = r.pinnedAt !== null;
+  const pin = `<form class="tick pin" method="post" action="/r/${r.id}/${pinned ? "unpin" : "pin"}">
+      <button aria-label="${pinned ? "Unpin" : "Pin to the top of the dashboard"}"
+        title="${pinned ? "Unpin" : "Pin to the top of the dashboard"}"${pinned ? ' class="on"' : ""}>${PIN_ICON}</button>
+    </form>`;
+
   return `<div class="acts">
+    ${pin}
     ${r.status === "done" ? button("open", "Reopen", "✓", "on") : button("done", "Clear", "✓")}
     ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}
   </div>`;
@@ -894,8 +1023,10 @@ export function renderDashboard(
     byDay: DayBucket[];
     grouped: Map<string, StoredRecord[]>;
     channels: Record<string, number>;
+    pinned?: StoredRecord[];
   },
 ): string {
+  const pinned = data.pinned ?? [];
   const tiles = [
     { n: data.stats.late, l: "late", alert: data.stats.late > 0 },
     { n: data.stats.dueToday, l: "due today", alert: false },
@@ -936,6 +1067,18 @@ export function renderDashboard(
     "Dashboard",
     shell,
     `${pageHeader("Dashboard")}
+    ${
+      pinned.length
+        ? `<div class="group pinned">
+            <div class="head">
+              <span class="dot"></span><span class="name">Pinned</span>
+              <span class="sub">tap the pin again to take one off</span>
+              <span class="n">${pinned.length}</span>
+            </div>
+            ${rows(pinned, "")}
+          </div>`
+        : ""
+    }
     <div class="stats">${tiles}</div>
 
     <div class="split">
@@ -1073,6 +1216,13 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
     ${r.brief ? `<section><h2>Story brief</h2><div class="brief">${esc(r.brief)}</div></section>` : ""}
     ${r.warnings.length ? `<section><h2>Warnings</h2><div class="empty warn">${esc(r.warnings.join(" · "))}</div></section>` : ""}
     <section>
+      ${
+        r.status === "removed"
+          ? ""
+          : `<form class="inline" method="post" action="/r/${r.id}/${r.pinnedAt ? "unpin" : "pin"}" style="margin-right:8px">
+               <button class="clear secondary">${r.pinnedAt ? "Unpin" : "Pin to dashboard"}</button>
+             </form>`
+      }
       <form class="inline" method="post" action="/r/${r.id}/${r.status === "open" ? "done" : "open"}">
         <button class="clear" style="--c:${c}">${
           r.status === "open" ? "Clear this" : r.status === "removed" ? "Restore" : "Reopen"
@@ -1254,6 +1404,24 @@ function monthName(ym: string): string {
     .format(new Date(Date.UTC(y!, m! - 1, 1, 12)));
 }
 
+const CHIPS_PER_CELL = 5;
+
+/**
+ * Each category is a toggle, and doubles as the legend. The choice is
+ * remembered, so the calendar and the day view open the way they were left.
+ */
+function categoryToggles(hide: string[], href: (hide: string) => string, attrs = "") {
+  const toggles = CATEGORIES.map((c) => {
+    const off = hide.includes(c.id);
+    const next = off ? hide.filter((id) => id !== c.id) : [...hide, c.id];
+    return `<a class="cattoggle${off ? " off" : ""}" style="--c:${c.color}" aria-pressed="${!off}"
+      title="${off ? "Show" : "Hide"} ${esc(c.label)}" ${attrs}
+      href="${href(next.join(","))}"><i></i>${esc(c.label)}</a>`;
+  }).join("");
+  const showAll = hide.length ? `<a class="cattoggle all" ${attrs} href="${href("")}">Show all</a>` : "";
+  return { toggles, showAll };
+}
+
 export function renderCalendar(
   shell: Shell,
   ym: string,
@@ -1278,11 +1446,11 @@ export function renderCalendar(
       const isToday = day === today;
       const num = Number(day.slice(8));
 
-      // Three fit before the cell starts scrolling the eye; the rest are one
-      // click away rather than crushed into unreadable slivers. Each chip can
-      // be dragged to another day.
+      // Five fit a cell; the rest are one click away, in the day view, rather
+      // than crushed into unreadable slivers. Each chip can be dragged to
+      // another day.
       const chips = list
-        .slice(0, 3)
+        .slice(0, CHIPS_PER_CELL)
         .map(
           (e) => `<a class="chip" draggable="true" data-id="${e.record.id}"
             style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
@@ -1293,8 +1461,8 @@ export function renderCalendar(
         .join("");
 
       const more =
-        list.length > 3
-          ? `<a class="more" href="/day/${day}?mode=${mode}">+${list.length - 3} more</a>`
+        list.length > CHIPS_PER_CELL
+          ? `<a class="more" href="/day/${day}?mode=${mode}">+${list.length - CHIPS_PER_CELL} more</a>`
           : "";
 
       return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}" data-date="${day}">
@@ -1311,18 +1479,7 @@ export function renderCalendar(
   const tab = (value: CalendarMode, label: string) =>
     `<a class="tab${mode === value ? " on" : ""}" href="/calendar/${ym}?mode=${value}">${label}</a>`;
 
-  // Each category is a toggle, and doubles as the legend. The choice is
-  // remembered, so the calendar opens the way it was last left.
-  const toggles = CATEGORIES.map((c) => {
-    const off = hide.includes(c.id);
-    const next = off ? hide.filter((id) => id !== c.id) : [...hide, c.id];
-    return `<a class="cattoggle${off ? " off" : ""}" style="--c:${c.color}" aria-pressed="${!off}"
-      title="${off ? "Show" : "Hide"} ${esc(c.label)}"
-      href="/calendar/${ym}?mode=${mode}&amp;hide=${next.join(",")}"><i></i>${esc(c.label)}</a>`;
-  }).join("");
-  const showAll = hide.length
-    ? `<a class="cattoggle all" href="/calendar/${ym}?mode=${mode}&amp;hide=">Show all</a>`
-    : "";
+  const { toggles, showAll } = categoryToggles(hide, (h) => `/calendar/${ym}?mode=${mode}&amp;hide=${h}`);
 
   return layout(
     "Calendar",
@@ -1404,32 +1561,233 @@ export function renderCalendar(
   );
 }
 
+/** How far either side of the clicked day the day view reaches. */
+export const DAY_SPAN = 21;
+
+/**
+ * One day, and the days either side of it, as columns you scroll through
+ * sideways. The clicked day is centred on arrival; scrolling moves the
+ * address with you, so a reload, a ✓ or a shared link lands where you were.
+ */
 export function renderDay(
   shell: Shell,
   date: string,
   mode: CalendarMode,
-  list: StoredRecord[],
+  days: Array<{ date: string; list: StoredRecord[] }>,
+  hide: string[] = [],
 ): string {
-  const pretty = new Intl.DateTimeFormat("en-US", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
+  const today = dateIn(ORG_TZ);
+  const first = days[0]?.date ?? date;
+  const last = days[days.length - 1]?.date ?? date;
 
-  const ym = date.slice(0, 7);
+  const columns = days
+    .map(({ date: d, list }) => {
+      const at = new Date(`${d}T12:00:00Z`);
+      const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(at);
+      const cls = `${d === today ? " today" : ""}${d === date ? " focus" : ""}`;
+      const pretty = `${weekday} ${usDate(d)}`;
+      return `<section class="daycol${cls}" data-date="${d}" data-pretty="${esc(pretty)}">
+        <header>
+          <a class="dname" href="/calendar/${d.slice(0, 7)}?mode=${mode}" title="Open ${esc(monthName(d.slice(0, 7)))}">
+            <span class="wk">${esc(weekday)}</span>
+            <span class="dt">${esc(usDate(d))}</span>
+          </a>
+          <span class="rel">${esc(relativeDay(d))}</span>
+          <span class="cnt" data-count>${list.length}</span>
+        </header>
+        <div class="daybody">${
+          list.map((r) => dayCard(r, mode)).join("") ||
+          `<div class="dayempty">Nothing ${mode === "posting" ? "airing" : "due"}.</div>`
+        }</div>
+      </section>`;
+    })
+    .join("");
+
+  const tab = (value: CalendarMode, label: string) =>
+    `<a class="tab${mode === value ? " on" : ""}" data-dayhref href="/day/${date}?mode=${value}">${label}</a>`;
+  const { toggles, showAll } = categoryToggles(
+    hide,
+    (h) => `/day/${date}?mode=${mode}&amp;hide=${h}`,
+    "data-dayhref",
+  );
 
   return layout(
-    pretty,
+    usDate(date),
     shell,
-    `${pageHeader(pretty)}
+    `${pageHeader("Days")}
     <div class="calbar">
-      <a class="nav" href="/day/${shiftDay(date, -1)}?mode=${mode}" aria-label="Previous day">←</a>
-      <a class="nav" href="/day/${shiftDay(date, 1)}?mode=${mode}" aria-label="Next day">→</a>
-      <a class="nav" href="/calendar/${ym}?mode=${mode}">Back to ${esc(monthName(ym))}</a>
-      <span class="month" style="font-size:13px;color:var(--dim)">${
-        mode === "posting" ? "airing" : "due"
-      } this day</span>
+      <button class="nav" type="button" data-step="-1" aria-label="Previous day">←</button>
+      <span class="month" id="dayname">${esc(
+        new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`)),
+      )} ${esc(usDate(date))}</span>
+      <button class="nav" type="button" data-step="1" aria-label="Next day">→</button>
+      <a class="nav" href="/day/${today}?mode=${mode}">Today</a>
+      <a class="nav" id="monthlink" href="/calendar/${date.slice(0, 7)}?mode=${mode}">Month</a>
+      <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
-    ${rows(list, mode === "posting" ? "Nothing airing this day." : "Nothing due this day.")}`,
+    <div class="cattoggles">${toggles}${showAll}
+      <span class="draghint">Scroll sideways, or ← → keys. Drag a card to another day to move its ${
+        mode === "posting" ? "air date" : "deadline"
+      }.</span>
+    </div>
+    <div class="daystrip" id="daystrip">
+      <a class="dayedge" href="/day/${shiftDay(first, -1)}?mode=${mode}">← Earlier</a>
+      ${columns}
+      <a class="dayedge" href="/day/${shiftDay(last, 1)}?mode=${mode}">Later →</a>
+    </div>
+    <script>
+    (function () {
+      var mode = ${JSON.stringify(mode)};
+      var strip = document.getElementById("daystrip");
+      var cols = Array.prototype.slice.call(strip.querySelectorAll(".daycol"));
+      var focus = strip.querySelector(".daycol.focus") || cols[0];
+
+      function centre(col, smooth) {
+        var left = col.offsetLeft - (strip.clientWidth - col.offsetWidth) / 2;
+        strip.scrollTo({ left: left, behavior: smooth ? "smooth" : "auto" });
+      }
+
+      // Whichever column sits in the middle is "the day": it names the page,
+      // and the address follows it.
+      function settle() {
+        var mid = strip.scrollLeft + strip.clientWidth / 2, best = focus, gap = Infinity;
+        cols.forEach(function (c) {
+          var d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid);
+          if (d < gap) { gap = d; best = c; }
+        });
+        if (best !== focus) setFocus(best);
+      }
+
+      function setFocus(col) {
+        focus.classList.remove("focus");
+        col.classList.add("focus");
+        focus = col;
+        var d = col.dataset.date;
+        document.getElementById("dayname").textContent = col.dataset.pretty;
+        document.getElementById("monthlink").href = "/calendar/" + d.slice(0, 7) + "?mode=" + mode;
+        document.querySelectorAll("[data-dayhref]").forEach(function (a) {
+          a.href = a.getAttribute("href").replace(new RegExp("/day/[0-9]{4}-[0-9]{2}-[0-9]{2}"), "/day/" + d);
+        });
+        try { history.replaceState(null, "", "/day/" + d + location.search); } catch (e) {}
+      }
+
+      centre(focus, false);
+      var timer;
+      strip.addEventListener("scroll", function () {
+        clearTimeout(timer);
+        timer = setTimeout(settle, 90);
+      }, { passive: true });
+
+      function step(by) {
+        var i = cols.indexOf(focus) + by;
+        if (i < 0 || i >= cols.length) {
+          var edge = strip.querySelectorAll(".dayedge")[by < 0 ? 0 : 1];
+          if (edge) location.href = edge.href;
+          return;
+        }
+        setFocus(cols[i]);
+        centre(focus, true);
+      }
+      document.querySelectorAll("[data-step]").forEach(function (b) {
+        b.addEventListener("click", function () { step(Number(b.dataset.step)); });
+      });
+      document.addEventListener("keydown", function (e) {
+        var t = e.target && e.target.tagName;
+        if (t === "INPUT" || t === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+        if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+      });
+
+      // Drag a card to another day's column. Saved at once; the reload lands
+      // on the same day, because the address already followed the scroll.
+      var dragging = null;
+      strip.querySelectorAll(".dcard[draggable]").forEach(function (card) {
+        card.addEventListener("dragstart", function (e) {
+          dragging = card;
+          card.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", card.dataset.id);
+        });
+        card.addEventListener("dragend", function () {
+          card.classList.remove("dragging");
+          dragging = null;
+          strip.querySelectorAll(".daycol.over").forEach(function (c) { c.classList.remove("over"); });
+        });
+      });
+      cols.forEach(function (col) {
+        col.addEventListener("dragover", function (e) {
+          if (!dragging) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          col.classList.add("over");
+        });
+        col.addEventListener("dragleave", function (e) {
+          if (!col.contains(e.relatedTarget)) col.classList.remove("over");
+        });
+        col.addEventListener("drop", function (e) {
+          e.preventDefault();
+          col.classList.remove("over");
+          var card = dragging;
+          if (!card) return;
+          var from = card.closest(".daycol");
+          if (from === col) return;
+          var body = col.querySelector(".daybody");
+          var empty = body.querySelector(".dayempty");
+          if (empty) empty.remove();
+          body.appendChild(card);
+          card.classList.add("saving");
+          fetch("/r/" + card.dataset.id + "/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+            body: new URLSearchParams({ date: col.dataset.date, mode: mode }),
+          }).then(function (res) {
+            if (!res.ok) alert("Couldn't move that — nothing was changed.");
+            location.reload();
+          }, function () {
+            alert("Couldn't reach the board — nothing was changed.");
+            location.reload();
+          });
+        });
+      });
+    })();
+    </script>`,
   );
+}
+
+/** A record as a card in a day column: what it is, whose it is, when, and ✓ ×. */
+function dayCard(r: StoredRecord, mode: CalendarMode): string {
+  const ch = r.channel ? channelColour(r.channel) : null;
+  const at = mode === "deadlines" ? r.voDue ?? r.deadline ?? r.scriptDue : r.voDue;
+  const label = r.voDue ? "VO" : r.deadline ? "due" : "script";
+  const over = at && r.status === "open" && at.getTime() < Date.now();
+
+  const bits: string[] = [];
+  if (r.stage) bits.push(esc(r.stage));
+  if (r.version) bits.push(`v${r.version}`);
+  if (r.batchTarget && r.batchTarget > 1) {
+    bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded`);
+  }
+
+  return `<article class="dcard${r.status === "done" ? " cleared" : ""}" draggable="true" data-id="${r.id}"
+      style="--c:${colourOf(r.category)}">
+    <div class="top">
+      <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>
+      ${r.code ? `<span class="code">${esc(r.code)}</span>` : ""}
+      ${bits.length ? `<span class="bits">${bits.join(" · ")}</span>` : ""}
+    </div>
+    <a class="t" href="/r/${r.id}">${esc(displayTitle(r))}</a>
+    ${
+      r.channel && ch
+        ? `<a class="chan" style="--ch:${ch};--ink:${channelInk(ch)}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`
+        : `<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`
+    }
+    <div class="foot">
+      <span class="at${over ? " over" : ""}">${
+        at ? `${esc(label)} ${esc(renderIn(at, ORG_TZ, "ET"))}` : mode === "posting" ? "airs this day" : ""
+      }</span>
+      ${actions(r)}
+    </div>
+  </article>`;
 }
 
 /** Shift a YYYY-MM-DD by whole days, DST-proof via UTC noon. */

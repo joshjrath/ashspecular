@@ -34,6 +34,8 @@ export interface StoredRecord extends DerivedRecord {
   /** How many uploads the batch holds, and how many are done. */
   batchTarget: number | null;
   batchDone: number;
+  /** When it was pinned to the top of the dashboard; null when it isn't. */
+  pinnedAt: Date | null;
   createdAt: Date;
 }
 
@@ -175,6 +177,15 @@ export async function setStatus(id: number, status: Status): Promise<void> {
   );
 }
 
+/** Pin to, or unpin from, the top of the dashboard. Status is untouched. */
+export async function setPinned(id: number, pinned: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE records SET pinned_at = CASE WHEN $2 THEN COALESCE(pinned_at, now()) END,
+       updated_at = now() WHERE id = $1`,
+    [id, pinned],
+  );
+}
+
 interface Row {
   id: number;
   kind: string;
@@ -205,6 +216,7 @@ interface Row {
   batch_no: number | null;
   batch_target: number | null;
   batch_done: number | null;
+  pinned_at: Date | null;
   created_at: Date;
 }
 
@@ -239,6 +251,7 @@ function hydrate(r: Row): StoredRecord {
     batchNo: r.batch_no ?? null,
     batchTarget: r.batch_target ?? null,
     batchDone: r.batch_done ?? 0,
+    pinnedAt: r.pinned_at ?? null,
     createdAt: r.created_at,
   };
 }
@@ -246,7 +259,7 @@ function hydrate(r: Row): StoredRecord {
 const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
   air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, batch_no, batch_target, batch_done, created_at FROM records`;
+  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, created_at FROM records`;
 
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
@@ -468,6 +481,15 @@ export async function openBatchCount(date: string): Promise<number> {
 }
 
 /** What has been removed, newest first — where Restore lives. */
+/** Everything pinned, newest pin first. A removed record drops off. */
+export async function listPinned(limit = 50): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE pinned_at IS NOT NULL AND status <> 'removed' ORDER BY pinned_at DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map(hydrate);
+}
+
 export async function listRemoved(limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
     `${SELECT} WHERE status = 'removed' ORDER BY updated_at DESC LIMIT $1`,
@@ -532,7 +554,7 @@ export async function calendarRange(
     `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
        air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
        version, links, brief, note, status, parsed_by, confidence, warnings,
-       source_url, source_author, raw_content, batch_no, batch_target, batch_done, created_at
+       source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, created_at
      FROM records
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed'
      -- Recurring batches sort last within a day: a dozen of them would

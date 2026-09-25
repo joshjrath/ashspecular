@@ -8,6 +8,15 @@ short records does not need a bundler.
 
 ## What's on it
 
+The board uses the whole width of the window. The button beside each page's
+title — or the `[` key — puts the sidebar away, and it stays away until you
+bring it back.
+
+**Pinned** — press the pin on any row, anywhere on the board, and it sits at
+the top of the dashboard until you press it again. Pin as many as you like;
+the newest pin comes first. Pinning changes nothing else about a row, and a
+removed row drops off.
+
 **Work due by day** — a headline count, then a column per day.
 
 ![The chart](docs/chart.png)
@@ -42,7 +51,16 @@ plots the day the work is due.
   stated stays put.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
-- Click a chip for that record, a date for that whole day.
+- A cell shows five items; the rest are a click away.
+- Click a chip for that record, a date for the **day view**.
+
+**The day view** — the clicked day in the middle, with three weeks either side
+as columns you scroll through sideways (swipe on a phone, ← → keys or the
+arrow buttons on a computer). The title and the address follow whichever day
+is in the middle, so a reload, a ✓ or a shared link comes back to the same
+day. Cards drag between days exactly as chips do on the month, and each has
+its pin, ✓ and ×. The same category toggles and Posting / Deadlines switch sit
+above it.
 
 Every record's page also has an **air date box** — for a phone, where dragging
 is awkward, or for a date weeks out.

@@ -14,7 +14,6 @@ import {
   listByCategory,
   listByChannel,
   listBatchesOn,
-  listByDay,
   search,
   listReviews,
   openByCategory,
@@ -27,7 +26,10 @@ import {
   refile,
   moveAir,
   moveDue,
+  listPinned,
+  setPinned,
   type CalendarMode,
+  type StoredRecord,
 } from "../db/records.js";
 import { migrate } from "../db/migrate.js";
 import { classify } from "../parse/classify.js";
@@ -40,7 +42,7 @@ import {
 } from "../parse/derive.js";
 import { batchStatus, openBatchesFor, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { SORTS, type Shell, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, SORTS, type Shell, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -145,17 +147,18 @@ export async function startWeb(): Promise<void> {
   app.get("/", async (_req, reply) => {
     if (!hasDatabase) return reply.type("text/html").send(renderEmptyState());
 
-    const [s, counters, byDay, grouped, channels] = await Promise.all([
+    const [s, counters, byDay, grouped, channels, pinned] = await Promise.all([
       shell("dashboard"),
       stats(ORG_TZ),
       dueByDay(ORG_TZ, 14),
       openByCategory(),
       channelCounts(),
+      listPinned(),
     ]);
 
     return reply
       .type("text/html")
-      .send(renderDashboard(s, { stats: counters, byDay, grouped, channels }));
+      .send(renderDashboard(s, { stats: counters, byDay, grouped, channels, pinned }));
   });
 
   app.get<{ Params: { ym?: string }; Querystring: { mode?: string } }>(
@@ -205,8 +208,17 @@ export async function startWeb(): Promise<void> {
       if (!date) {
         return reply.code(404).type("text/html").send(renderList(s, "Not found", "That is not a date.", []));
       }
-      const list = await listByDay(date, mode, ORG_TZ);
-      return reply.type("text/html").send(renderDay(s, date, mode, list));
+      const hide = hiddenCategories(request, reply);
+      const from = shiftDate(date, -DAY_SPAN);
+      const to = shiftDate(date, DAY_SPAN);
+      const entries = (await calendarRange(from, to, mode, ORG_TZ)).filter(
+        (e) => !hide.includes(e.record.category),
+      );
+      const days: Array<{ date: string; list: StoredRecord[] }> = [];
+      for (let d = from; d <= to; d = shiftDate(d, 1)) days.push({ date: d, list: [] });
+      const index = new Map(days.map((d) => [d.date, d]));
+      for (const e of entries) index.get(e.day)?.list.push(e.record);
+      return reply.type("text/html").send(renderDay(s, date, mode, days, hide));
     },
   );
 
@@ -346,6 +358,10 @@ export async function startWeb(): Promise<void> {
 
   app.post<{ Params: { id: string; action: string } }>("/r/:id/:action", async (request, reply) => {
     const { id, action } = request.params;
+    if (action === "pin" || action === "unpin") {
+      await setPinned(Number(id), action === "pin");
+      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+    }
     const status = action === "remove" ? "removed" : action;
     if (status !== "done" && status !== "open" && status !== "removed") {
       return reply.code(400).send("no");
