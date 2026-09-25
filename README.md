@@ -22,14 +22,21 @@ npm run web         # the board, at http://localhost:8080
 npm start           # both at once, the way it runs deployed
 ```
 
-## The four categories
+## The five categories
+
+From the studio's master channel list, in its order.
 
 | Category | Channels |
 |---|---|
-| **Long Form** | Specular Studios, Specular FNAF |
+| **Gaming** | Specular Minecraft, Specular Roblox |
+| **Stories** | Specular Studios, Anime, Comics, Animation, Law, Manga, FNAF, Force, Verse, Horror, YOU, Battles, Survives, Documentaries |
 | **Reading** | Specular DC, Torch, Action, Balls, Nove — ~25 uploads a day between them |
-| **Gaming** | Specular Gaming — Minecraft, Roblox, episodic series |
-| **Bits** | Studios, FNAF, Animation, Anime, Specular & Kay, Undertale, Gaming Bits — five numbered batches each, opened automatically every morning |
+| **Bits** | Specular Studios, Anime, FNAF, Animation, Gaming, Undertale Bits and Specular & Kay Bits — one numbered batch each, opened automatically every morning |
+| **Movies** | Specular (the main channel), Specular Sleep |
+
+An assignment post's `@ Tag` line names its channel: `@ Comics` files under
+Specular Comics. The main channel, called just "Specular", is only ever matched
+when a message names it on its own — the word is in nearly every message.
 
 All of it lives in [`src/catalog.ts`](src/catalog.ts). Adding a channel is one
 line; the parser's prompt builds its own channel list from that file.
@@ -69,7 +76,7 @@ npm run digest        # print today's digest without sending it
 
 ```
 src/
-  catalog.ts        the four categories and every channel
+  catalog.ts        the five categories and every channel
   parse/
     schema.ts       what the model must return
     classify.ts     the Claude call and its prompt

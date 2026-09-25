@@ -72,6 +72,18 @@ it. What you actually lose is prose — reading intent out of "push the deadpool
 cut to friday", or a fuzzy time out of "need the vo by 3 latest". Those come
 back as `other`, unsorted.
 
+### Deadlines written in a message
+
+A labelled line — `Deadline: 6 am friday 25th 2026`, `Due: tomorrow 5pm`,
+`VO: Oct 5 2pm ET` — is read as a real time and taken out of the title. The
+reader in [`src/parse/when.ts`](src/parse/when.ts) handles month names, numeric
+dates, weekdays, ordinals with no month ("friday 25th" finds the month where
+the 25th is a Friday), today/tomorrow, noon and midnight, and ET/IST/PT.
+
+It refuses what it can't be sure of. "by 3" could be morning or afternoon, so
+it returns nothing rather than picking one. An unreadable deadline is left
+blank and the record says so; an unreadable VO time goes to the model.
+
 ## The split that matters
 
 **The model extracts. The code derives.** Anything that can be computed is

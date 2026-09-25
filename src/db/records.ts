@@ -71,6 +71,29 @@ export async function saveRecord(record: DerivedRecord, source: Source): Promise
   return rows[0]!.id;
 }
 
+/**
+ * Replace what a record says with a fresh reading of the same message — the
+ * Re-read button. Everything the parser decides is rewritten; its status, its
+ * history and where it came from are not.
+ */
+export async function refile(id: number, r: DerivedRecord, parsedBy: string): Promise<void> {
+  await pool.query(
+    `UPDATE records SET
+       kind = $2, category = $3, channel = $4, code = $5, title = $6, tag = $7,
+       stage = $8, air_date = $9, script_due = $10, vo_due = $11, vo_source = $12,
+       deadline = $13, word_count = $14, assignee = $15, version = $16,
+       links = $17, brief = $18, note = $19, parsed_by = $20, confidence = $21,
+       warnings = $22, updated_at = now()
+     WHERE id = $1`,
+    [
+      id, r.kind, r.category, r.channel, r.code, r.title, r.tag, r.stage,
+      r.airDate, r.scriptDue, r.voDue, r.voSource, r.deadline, r.wordCount,
+      r.assignee, r.version, JSON.stringify(r.links), r.brief, r.note, parsedBy,
+      r.confidence, r.warnings,
+    ],
+  );
+}
+
 /** Correct where a record is filed, from the Discord card. */
 export async function updateFiling(
   id: number,

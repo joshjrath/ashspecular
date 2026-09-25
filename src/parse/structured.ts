@@ -12,60 +12,12 @@
  */
 import type { Extraction } from "./schema.js";
 import { classifyUrl, extractUrls } from "./rules.js";
-import { matchChannel } from "../catalog.js";
-import { offsetFor, ORG_TZ } from "./derive.js";
+import { CHANNELS, matchChannel } from "../catalog.js";
+import { parseWhen, readLabelledTimes, to24, toIso, withOffset } from "./when.js";
 
 /** Strip Discord markdown so patterns don't have to care about ** and __. */
 function plain(s: string): string {
   return s.replace(/\*\*|__|\*|`/g, "").trim();
-}
-
-/** Zone abbreviations the studio actually writes, to real zones. */
-const ZONES: Record<string, string> = {
-  ET: "America/New_York",
-  EST: "America/New_York",
-  EDT: "America/New_York",
-  CT: "America/Chicago",
-  CST: "America/Chicago",
-  CDT: "America/Chicago",
-  PT: "America/Los_Angeles",
-  PST: "America/Los_Angeles",
-  PDT: "America/Los_Angeles",
-  IST: "Asia/Kolkata",
-  UTC: "UTC",
-  GMT: "UTC",
-};
-
-const MONTHS = [
-  "jan", "feb", "mar", "apr", "may", "jun",
-  "jul", "aug", "sep", "oct", "nov", "dec",
-];
-
-/**
- * Attach the offset a zone was actually on at that wall-clock moment, rather
- * than assuming one — ET is -04:00 in September and -05:00 in January, and a
- * deadline on the wrong side of that is an hour of someone's evening.
- */
-function withOffset(iso: string, zone: string): string {
-  const resolved = ZONES[zone.toUpperCase()] ?? ORG_TZ;
-  const probe = new Date(`${iso}Z`);
-  if (Number.isNaN(probe.getTime())) return "";
-  // Resolved twice: the first pass can land on the wrong side of a DST change.
-  let offset = offsetFor(resolved, probe);
-  offset = offsetFor(resolved, new Date(`${iso}${offset}`));
-  return `${iso}${offset}`;
-}
-
-function toIso(year: number, month: number, day: number, hour: number, minute: number): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
-}
-
-function to24(hour: number, meridiem: string | undefined): number {
-  if (!meridiem) return hour;
-  if (/p/i.test(meridiem) && hour < 12) return hour + 12;
-  if (/a/i.test(meridiem) && hour === 12) return 0;
-  return hour;
 }
 
 /** "9/19/2026 @ 11:59 PM ET" → ISO with the right offset. */
@@ -79,47 +31,6 @@ function parseStamp(date: string, time: string, meridiem: string, zone: string):
   const hour = to24(Number(hhRaw), meridiem);
 
   return withOffset(toIso(year, Number(mm), Number(dd), hour, Number(minute ?? 0)), zone) || null;
-}
-
-/**
- * A date and time written in prose: "Oct 5 at 2pm ET", "10/5 at 2:30 PM".
- *
- * The year is usually left out, so it comes from the post's own air date —
- * a deadline belongs to the same cycle as the video it is for.
- */
-function parseWhen(text: string, nearYear: number): string | null {
-  const zone = text.match(/\b(ET|EST|EDT|CT|CST|CDT|PT|PST|PDT|IST|UTC|GMT)\b/i)?.[1] ?? "ET";
-
-  const named = text.match(
-    new RegExp(`\\b(${MONTHS.join("|")})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`, "i"),
-  );
-  const numeric = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
-
-  let year: number;
-  let month: number;
-  let day: number;
-
-  if (named) {
-    month = MONTHS.indexOf(named[1]!.slice(0, 3).toLowerCase()) + 1;
-    day = Number(named[2]);
-    year = named[3] ? Number(named[3]) : nearYear;
-  } else if (numeric) {
-    month = Number(numeric[1]);
-    day = Number(numeric[2]);
-    const yy = numeric[3];
-    year = yy ? (yy.length === 2 ? 2000 + Number(yy) : Number(yy)) : nearYear;
-  } else {
-    return null;
-  }
-
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-
-  // A bare hour with no meridiem is ambiguous, so it is not guessed at.
-  const clock = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*([AaPp])\.?[Mm]\.?\b/);
-  if (!clock) return null;
-
-  const hour = to24(Number(clock[1]), clock[3]);
-  return withOffset(toIso(year, month, day, hour, Number(clock[2] ?? 0)), zone) || null;
 }
 
 const STAGES: Record<string, Extraction["stage"]> = {
@@ -211,9 +122,21 @@ export function parseAssignment(raw: string): Extraction | null {
     // goes on to say something is prose about the voiceover.
     .find((l) => /\b(vo|voice.?over)\b/i.test(plain(l)) && !/^[^\w]*(VO|VOICEOVER)\s*(<@!?\d+>)?\s*$/.test(plain(l)));
   if (voLine) {
-    voDue = parseWhen(plain(voLine), year);
+    // Anchored to the air date, so "Oct 5" is read in the video's own cycle
+    // rather than whichever year it happens to be parsed in.
+    voDue = parseWhen(plain(voLine), new Date(`${airDate}T12:00:00Z`));
     if (!voDue) return null;
   }
+
+  // The "@ Comics" line is the channel tag: "@ Comics" is Specular Comics,
+  // "@ YOU" is Specular YOU. Matched by exact name only — a tag that names no
+  // channel files the post with none, rather than a guess.
+  const channelFromTag = tag
+    ? CHANNELS.find((c) => {
+        const t = tag.toLowerCase();
+        return c.name.toLowerCase() === t || c.name.toLowerCase() === `specular ${t}`;
+      })
+    : undefined;
 
   const wordCount = Number(
     plain(text).match(/Word\s*Count:?\s*([\d,]+)/i)?.[1]?.replace(/,/g, "") ?? "",
@@ -234,9 +157,8 @@ export function parseAssignment(raw: string): Extraction | null {
     kind: "assignment",
     code,
     title,
-    // The template never names a channel, so we never invent one here.
-    category: "long_form",
-    channel: null,
+    category: channelFromTag?.category ?? "stories",
+    channel: channelFromTag?.name ?? null,
     tag,
     air_date: airDate,
     stage,
@@ -263,7 +185,7 @@ export function parseAssignment(raw: string): Extraction | null {
  * it is a review, `v3` says which version, and the channel is whatever channel
  * name the sentence mentions. None of that needs a model.
  */
-export function parseReview(raw: string): Extraction | null {
+export function parseReview(raw: string, now: Date = new Date()): Extraction | null {
   const links = extractUrls(raw).map((url) => ({
     url,
     kind: classifyUrl(url),
@@ -271,11 +193,20 @@ export function parseReview(raw: string): Extraction | null {
   }));
   if (!links.some((l) => l.kind === "frameio")) return null;
 
-  const words = raw.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+  // Line by line, not flattened: a message is usually a title, a link and a
+  // labelled deadline on separate lines, and flattening them is what turned
+  // "Deadline: 6 am friday" into part of the title.
+  const lines = raw
+    .split("\n")
+    .map((l) => plain(l.replace(/https?:\/\/\S+/g, " ")).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 
-  // A voiceover time is the one thing worth stopping for: it drives the whole
-  // day's schedule, and "by 3 latest" is prose, not a pattern. Hand those to
-  // the model rather than filing a revision with the wrong time on it.
+  const times = readLabelledTimes(lines, now);
+
+  // A voiceover time is the one thing never guessed: labelled but unreadable,
+  // or mentioned in prose without a label, it goes to the model instead.
+  if (times.unreadVo) return null;
+  const words = times.rest.join(" ");
   if (/\b(vo|voice.?over)\b/i.test(words)) return null;
 
   // A paragraph with a link buried in it is a conversation, not a forward.
@@ -285,18 +216,26 @@ export function parseReview(raw: string): Extraction | null {
   const code = words.match(/\b([A-Z]{3,6}-\d{2,4})\b/)?.[1]?.toUpperCase() ?? null;
   const channel = matchChannel(words);
 
-  // The message's own words, minus the version phrase that is already a field.
+  // The title is the first line of the message's own words, minus the version
+  // phrase that is already a field and the "is up" that is only chatter.
   const title =
-    words
+    (times.rest[0] ?? "")
       .replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b\s*(of\s+)?/i, "")
-      .replace(/\b(is up|is ready|here|up)\b.*$/i, "")
-      .replace(/[—–-]\s*$/, "")
+      .replace(/\s+(is up|is ready|is here|up now)\b.*$/i, "")
+      .replace(/[\s,;|·—–-]+$/, "")
       .trim() || null;
+
+  const notes: string[] = [];
+  if (words) notes.push(words);
+  else notes.push("Frame.io review — which project is this? Set the channel below.");
+  if (times.unreadDeadline) {
+    notes.push(`Deadline written as “${times.unreadDeadline}” — couldn't read it as a date.`);
+  }
 
   return {
     kind: "review",
     code,
-    title: title && title.length >= 3 && title.length <= 80 ? title : null,
+    title: title && title.length >= 3 && title.length <= 120 ? title : null,
     category: channel?.category ?? "unknown",
     channel: channel?.name ?? null,
     tag: null,
@@ -305,14 +244,12 @@ export function parseReview(raw: string): Extraction | null {
     word_count: null,
     assignee: null,
     script_due: null,
-    vo_due: null,
-    deadline: null,
+    vo_due: times.voDue,
+    deadline: times.deadline,
     version,
     links,
     brief: null,
-    // A bare link carries no words, so say plainly what is missing rather
-    // than showing "(no title)" — the dropdown under the card is the fix.
-    note: words || "Frame.io review — which project is this? Set the channel below.",
+    note: notes.join(" "),
     // Honest: the link and version are certain, the project only when the
     // message names it. A bare link nobody labelled is a coin flip, and the
     // model would be guessing at it too.
@@ -321,6 +258,6 @@ export function parseReview(raw: string): Extraction | null {
 }
 
 /** Every pattern pass, cheapest first. Null means "this one needs the model". */
-export function parsePattern(raw: string): Extraction | null {
-  return parseAssignment(raw) ?? parseReview(raw);
+export function parsePattern(raw: string, now: Date = new Date()): Extraction | null {
+  return parseAssignment(raw) ?? parseReview(raw, now);
 }

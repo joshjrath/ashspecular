@@ -8,7 +8,7 @@
   },
   "expect": {
     "kind": "review",
-    "category": "long_form",
+    "category": "stories",
     "airDate": null,
     "voSource": "stated",
     "hasFrameioLink": true

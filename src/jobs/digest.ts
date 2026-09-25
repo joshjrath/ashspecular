@@ -1,7 +1,7 @@
 /**
  * The morning digest.
  *
- * One message a day naming what actually has to happen: the long-form videos
+ * One message a day naming what actually has to happen: the story videos
  * whose voiceover is closest, then everything else that is late or due today,
  * then how the bits batches stand. It is the answer to the original problem —
  * not having to look through every server to find out what today is.
@@ -17,7 +17,7 @@ import { listBatchesOn, type StoredRecord } from "../db/records.js";
 import { ORG_TZ, TEAM_TZ, dateIn, renderIn } from "../parse/derive.js";
 
 const COLOUR = Number.parseInt(
-  (CATEGORIES.find((c) => c.id === "long_form")?.color ?? "#4A5CD4").slice(1),
+  (CATEGORIES.find((c) => c.id === "stories")?.color ?? "#4A5CD4").slice(1),
   16,
 );
 
@@ -45,7 +45,7 @@ export async function buildDigest(date = dateIn(ORG_TZ)): Promise<Digest> {
   const due = (r: StoredRecord) => r.voDue ?? r.deadline ?? r.scriptDue;
 
   const priorities = open
-    .filter((r) => r.category === "long_form" && r.voDue)
+    .filter((r) => r.category === "stories" && r.voDue)
     .sort((a, b) => (a.voDue!.getTime() - b.voDue!.getTime()))
     .slice(0, config.digestCount);
 

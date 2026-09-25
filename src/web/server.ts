@@ -21,9 +21,12 @@ import {
   setStatus,
   stats,
   clearBatches,
+  refile,
   type CalendarMode,
 } from "../db/records.js";
 import { migrate } from "../db/migrate.js";
+import { classify } from "../parse/classify.js";
+import { derive } from "../parse/derive.js";
 import { batchStatus, openBatchesFor, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import type { Shell } from "./page.js";
@@ -281,6 +284,25 @@ export async function startWeb(): Promise<void> {
     await setStatus(Number(id), action);
     // Back where you pressed it, so clearing a list does not bounce you away.
     return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+  });
+
+  // Re-read a record with the parser as it is now. A channel someone set by
+  // hand is kept when the fresh reading finds none — a correction is a fact
+  // about the message that the parser may still not be able to see.
+  app.post<{ Params: { id: string } }>("/r/:id/reread", async (request, reply) => {
+    const id = Number(request.params.id);
+    const current = await getRecord(id);
+    if (!current || !current.raw.trim() || current.parsedBy === "recurring") {
+      return reply.redirect(`/r/${id}`);
+    }
+    const result = await classify({ content: current.raw });
+    const fresh = derive(result.extraction, result.raw);
+    if (!fresh.channel && current.channel) {
+      fresh.channel = current.channel;
+      fresh.category = current.category;
+    }
+    await refile(id, fresh, result.parsedBy);
+    return reply.redirect(`/r/${id}`);
   });
 
   app.post<{ Body: { channel?: string; date?: string } }>("/recurring/clear", async (request, reply) => {

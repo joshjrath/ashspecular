@@ -1,6 +1,6 @@
 {
   "name": "assignment · full post, no channel named",
-  "why": "The studio's real assignment format. The heading date is the AIR date, not a deadline. No channel is named anywhere, so channel must stay null rather than being guessed.",
+  "why": "The studio's real assignment format. The heading date is the AIR date, not a deadline. The @ Comics line is the channel tag, so it files under Specular Comics.",
   "input": {
     "author": "josh",
     "channelName": "script-assignments",
@@ -9,8 +9,8 @@
   "expect": {
     "kind": "assignment",
     "code": "VIDEO-008",
-    "category": "long_form",
-    "channel": null,
+    "category": "stories",
+    "channel": "Specular Comics",
     "tag": "Comics",
     "airDate": "2026-10-03",
     "stage": "script",

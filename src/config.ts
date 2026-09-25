@@ -20,7 +20,7 @@ export const config = {
   digestChannelId: opt("DIGEST_CHANNEL_ID"),
   /** Cron for the digest, in the studio's zone. Default 08:00 every day. */
   digestCron: opt("DIGEST_CRON", "0 8 * * *"),
-  /** How many long-form priorities the digest names. */
+  /** How many Stories priorities the digest names. */
   digestCount: Number(opt("DIGEST_COUNT", "4")),
 
   /** Hourly check for anything newly past its deadline. Off when empty. */

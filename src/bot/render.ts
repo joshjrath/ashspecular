@@ -61,7 +61,10 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
     fields.push({ name: "VO due", value: "— *no air date to work from*" });
   }
 
-  if (record.deadline) fields.push({ name: "Deadline", value: stamp(record.deadline) });
+  if (record.deadline) {
+    const { org, team } = renderBothZones(record.deadline);
+    fields.push({ name: "Deadline", value: `${org}\n${team}` });
+  }
 
   if (record.links.length) {
     fields.push({
@@ -101,6 +104,28 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
 }
 
 /**
+ * Channels packed into menus of at most 25 options, whole categories at a
+ * time. The first menu also carries "No channel", so it holds one fewer.
+ */
+export function channelGroups(): Array<{ label: string; channels: typeof CHANNELS }> {
+  const groups: Array<{ label: string; channels: typeof CHANNELS }> = [];
+  let current: { cats: string[]; channels: typeof CHANNELS } = { cats: [], channels: [] };
+
+  for (const cat of CATEGORIES) {
+    const inCat = CHANNELS.filter((c) => c.category === cat.id);
+    const room = (groups.length === 0 ? 24 : 25) - current.channels.length;
+    if (inCat.length > room && current.channels.length) {
+      groups.push({ label: current.cats.join(", "), channels: current.channels });
+      current = { cats: [], channels: [] };
+    }
+    current.cats.push(cat.label);
+    current.channels = [...current.channels, ...inCat];
+  }
+  if (current.channels.length) groups.push({ label: current.cats.join(", "), channels: current.channels });
+  return groups;
+}
+
+/**
  * The controls under a card.
  *
  * A wrong channel used to mean sending a file to Claude and waiting for a
@@ -119,23 +144,36 @@ export function cardRows(
 ): Array<ActionRowBuilder<MessageActionRowComponentBuilder>> {
   const rows: Array<ActionRowBuilder<MessageActionRowComponentBuilder>> = [];
 
-  const channelMenu = new StringSelectMenuBuilder()
-    .setCustomId(`set-channel:${messageId}`)
-    .setPlaceholder(record.channel ? `Channel — ${record.channel}` : "Set the channel…")
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel("No channel")
-        .setValue("__none__")
-        .setDescription("Leave it unassigned"),
-      ...CHANNELS.map((c) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(c.name)
-          .setValue(c.id)
-          .setDescription(categoryLabel(c.category))
-          .setDefault(c.name === record.channel),
-      ),
-    );
-  rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(channelMenu));
+  // Discord caps a menu at 25 options, and there are more channels than that,
+  // so they are split into menus by category — never splitting a category
+  // across two menus, so each one reads as a sensible group.
+  for (const [i, group] of channelGroups().entries()) {
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`set-channel:${messageId}:${i}`)
+      .setPlaceholder(
+        group.channels.some((c) => c.name === record.channel)
+          ? `Channel — ${record.channel}`
+          : `Set the channel — ${group.label}…`,
+      )
+      .addOptions(
+        ...(i === 0
+          ? [
+              new StringSelectMenuOptionBuilder()
+                .setLabel("No channel")
+                .setValue("__none__")
+                .setDescription("Leave it unassigned"),
+            ]
+          : []),
+        ...group.channels.map((c) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(c.name)
+            .setValue(c.id)
+            .setDescription(categoryLabel(c.category))
+            .setDefault(c.name === record.channel),
+        ),
+      );
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu));
+  }
 
   // Only offered when no channel is set: a named channel already decides the
   // category, and two controls that can disagree is worse than one.

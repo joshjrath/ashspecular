@@ -23,7 +23,8 @@ number off. Where a day holds more than one category the bar is one pill with
 worked out rather than read is marked *air date − 6 days* in orange, so a
 derived time never reads as a stated one.
 
-**Reviews** — everything carrying a Frame.io link. This is the thing that used
+**Revisions** — everything carrying a Frame.io link, including f.io short
+links. This is the thing that used
 to mean scrolling back through DMs.
 
 **Everything else** — open records that aren't in either list above.
@@ -42,6 +43,11 @@ briefs, and the original message text.
 
 **The tick on every row** clears it where you are looking, without opening it
 first, and puts you back on the same page.
+
+**Re-read**, on any record's page, reads the original message again with the
+parser as it is now. When the parser gets better, older records don't have to
+be posted again. A channel set by hand is kept when the fresh reading can't
+find one.
 
 **Channels** — every channel with its open count. Click one and you get
 everything filed under it, cleared items included.

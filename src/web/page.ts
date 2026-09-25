@@ -268,6 +268,8 @@ button.clear {
   border-radius: 999px; padding: 11px 22px; font-size: 13px; cursor: pointer; font-weight: 700;
 }
 button.clear:hover { filter: brightness(1.05); }
+button.clear.secondary { background: var(--sunk); color: var(--ink2); }
+button.clear.secondary:hover { background: var(--line); filter: none; }
 
 /* ── calendar ──────────────────────────────────────────────────────────── */
 .calbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; padding: 0 4px; }
@@ -941,6 +943,13 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
       <form class="inline" method="post" action="/r/${r.id}/${r.status === "open" ? "done" : "open"}">
         <button class="clear" style="--c:${c}">${r.status === "open" ? "Clear this" : "Reopen"}</button>
       </form>
+      ${
+        r.parsedBy !== "recurring" && r.raw.trim()
+          ? `<form class="inline" method="post" action="/r/${r.id}/reread" style="margin-left:8px">
+               <button class="clear secondary" title="Read the original message again with the current parser">Re-read</button>
+             </form>`
+          : ""
+      }
       ${r.sourceUrl ? `<a class="back" style="margin-left:10px" href="${esc(r.sourceUrl)}">open in Discord →</a>` : ""}
     </section>
     <a class="back" href="/">← everything</a>`,

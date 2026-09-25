@@ -6,6 +6,7 @@ import { ExtractionSchema, type Extraction } from "./schema.js";
 import { extractUrls, looksLikeBareRevision, classifyUrl } from "./rules.js";
 import { matchChannel } from "../catalog.js";
 import { parsePattern } from "./structured.js";
+import { readLabelledTimes } from "./when.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
@@ -38,6 +39,7 @@ const SYSTEM = [
   "  <air date MM-DD-YY> | <code> | <title>",
   "So `10-03-26 | VIDEO-008 | What If Deadpool Was In Jujutsu Kaisen?` means the video AIRS on 2026-10-03, its code is VIDEO-008, and that is the title.",
   "Below the heading it may carry: a Project line, an `@ Tag` line, a stage header such as `SCRIPT` with a Discord mention for the assignee, a Deadline list, a Word Count, and a long Story Brief.",
+  "The `@ Tag` line names the channel: `@ Comics` is Specular Comics, `@ FNAF` is Specular FNAF. The channel called just \"Specular\" is only meant when the message names it on its own.",
   "Deadlines are often given twice, once US/ET and once India/IST — these are the SAME instant, so return the ET one and ignore the duplicate.",
   "",
   "RULES",
@@ -147,6 +149,8 @@ function ruleFallback(raw: string): Extraction {
   const urls = extractUrls(raw);
   const hasFrameio = urls.some((u) => classifyUrl(u) === "frameio");
   const channel = matchChannel(raw);
+  // A labelled "Deadline:" is readable without a model, so it is read.
+  const times = readLabelledTimes(raw.split("\n").map((l) => l.trim()).filter(Boolean));
 
   const kind: Extraction["kind"] = hasFrameio || looksLikeBareRevision(raw)
     ? "review"
@@ -168,8 +172,8 @@ function ruleFallback(raw: string): Extraction {
     word_count: null,
     assignee: null,
     script_due: null,
-    vo_due: null,
-    deadline: null,
+    vo_due: times.voDue,
+    deadline: times.deadline,
     version: Number(raw.match(/\bv(\d+)\b/i)?.[1]) || null,
     links: urls.map((url) => ({ url, kind: classifyUrl(url), label: "link" })),
     brief: null,
