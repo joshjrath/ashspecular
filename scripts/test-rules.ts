@@ -7,7 +7,7 @@
  * Runs with no API key and no database, so it stays fast enough to run on
  * every change to derive.ts or the catalog.
  */
-import { CATEGORIES, CHANNELS, channelInk, matchChannel } from "../src/catalog.js";
+import { CATEGORIES, CHANNELS, DARK_SURFACES, channelInk, matchChannel } from "../src/catalog.js";
 import {
   ORG_TZ,
   dateIn,
@@ -378,10 +378,10 @@ const ratio = (a: string, b: string) => {
 t("every channel has a colour", CHANNELS.every((c) => /^#[0-9A-F]{6}$/i.test(c.color)), true);
 t("all 30 are different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, 30);
 t("none reuses a category colour", CHANNELS.some((c) => CATEGORIES.some((k) => k.color.toUpperCase() === c.color.toUpperCase())), false);
-t("each name reads as text on the white cards (4.5:1)", CHANNELS.filter((c) => ratio(channelInk(c.color), "#FFFFFF") < 4.5).map((c) => c.name), []);
-t("and on the hover row (4.5:1)", CHANNELS.filter((c) => ratio(channelInk(c.color), "#F4F4F5") < 4.5).map((c) => c.name), []);
-t("a readable colour is written as itself", channelInk("#D21B20"), "#D21B20");
-t("FNAF yellow is written darker", ratio(channelInk("#D2BD1B"), "#FFFFFF") >= 4.5 && channelInk("#D2BD1B") !== "#D2BD1B", true);
+t("each name reads as text on every dark surface (4.5:1)",
+  CHANNELS.filter((c) => DARK_SURFACES.some((bg) => ratio(channelInk(c.color), bg) < 4.5)).map((c) => c.name), []);
+t("a readable colour is written as itself", channelInk("#1BD058"), "#1BD058");
+t("Verse navy is written lighter", ratio(channelInk("#05157D"), "#18181C") >= 4.5 && channelInk("#05157D") !== "#05157D", true);
 
 const avatar: Record<string, string> = {
   "Specular Studios": "#D21B20", "Specular Anime": "#360D7B", "Specular FNAF": "#D2BD1B",
@@ -459,7 +459,11 @@ t("pinned row sits first in its own category", groupsHtml.indexOf("/r/7\"") < gr
 t("no separate pinned section", pages.dashboard.includes("group pinned"), false);
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
-t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new"/g) ?? []).length, 1);
+t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 6);
+t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
+t("bell: each kind has its own icon colour",
+  [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
 t("bell: badge shows the unread count", /id="bellcount">1</.test(pages.dashboard), true);
 t("status toggle: Complete shown off when hidden", /cattoggle st off[^>]*>[\s\S]*?Complete/.test(pages.calendar), true);
 t("calendar links carry the status filter", pages.calendar.includes("&amp;st=done"), true);

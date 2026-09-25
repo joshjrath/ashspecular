@@ -12,7 +12,7 @@
  */
 import { CATEGORIES, CHANNELS, channelInk, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
-import type { CalendarEntry, CalendarMode, DayBucket, Notice, Stats, StoredRecord } from "../db/records.js";
+import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
 
 export function esc(s: unknown): string {
   return String(s ?? "")
@@ -45,17 +45,20 @@ const CSS = `
 
    Each card is a solid field with a big radius, and the loud ones — salmon,
    yellow — carry black text, which is what keeps a bright block from turning
-   into decoration. The chart and the lists sit on white, because four
-   categories need a neutral ground to stay separable.
+   into decoration. Everything else is dark: charcoal cards on a near-black
+   shell, light text, and every colour checked for contrast against them.
 
    Bricolage Grotesque states the facts: the title, the counts, the names of
    things. Archivo does the working text under it.
    ────────────────────────────────────────────────────────────────────────── */
 :root {
-  --shell: #0F0F11; --rail: #161618; --card: #FFFFFF; --dark: #1B1B1E;
-  --sunk: #F4F4F5; --line: #E8E8EA;
-  --ink: #101012; --ink2: #5F5F68; --ink3: #9A9AA3;
-  --salmon: #F2A79C; --yellow: #F3E96C; --late: #D4453A; --warn: #C2611F;
+  color-scheme: dark;
+  --shell: #0B0B0D; --rail: #151518; --card: #18181C; --dark: #222228;
+  --sunk: #222227; --raised: #2C2C33; --line: #34343B;
+  --ink: #F3F3F5; --ink2: #BDBDC6; --ink3: #94949E; --dim: #82828C;
+  /* A pale ring keeps a dark channel dot (Verse's navy) visible on dark. */
+  --ring: rgba(255,255,255,.3);
+  --salmon: #F2A79C; --yellow: #F3E96C; --late: #F2685E; --warn: #EE9A55; --ok: #56C990;
   --lf: #4A5CD4; --rd: #CE7118; --gm: #35986A; --bt: #AC63C8;
   --r: 26px;
   --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
@@ -89,11 +92,11 @@ aside nav a:hover { background: #222225; color: #fff; }
 aside nav a.on { background: var(--salmon); color: #101012; font-weight: 700; }
 aside nav a .n {
   margin-left: auto; font-family: var(--display); font-size: 13px; font-weight: 700;
-  font-variant-numeric: tabular-nums; opacity: .7;
+  font-variant-numeric: tabular-nums;
 }
 aside h3 {
   font-family: var(--ui); font-size: 10px; font-weight: 700; letter-spacing: 0.18em;
-  text-transform: uppercase; color: #5F5F68; margin: 30px 0 10px; padding: 0 14px;
+  text-transform: uppercase; color: #7E7E88; margin: 30px 0 10px; padding: 0 14px;
 }
 aside .cat {
   display: flex; align-items: center; gap: 11px; padding: 10px 14px; border-radius: 16px;
@@ -103,7 +106,7 @@ aside .cat:hover { background: #222225; color: #fff; }
 aside .cat .dot { width: 10px; height: 10px; border-radius: 4px; background: var(--c); flex: none; }
 aside .cat .n {
   margin-left: auto; font-family: var(--display); font-weight: 700; font-size: 13px;
-  font-variant-numeric: tabular-nums; opacity: .7;
+  font-variant-numeric: tabular-nums;
 }
 aside .live {
   margin-top: 28px; padding: 13px 14px; border-radius: 18px; background: #222225;
@@ -111,7 +114,7 @@ aside .live {
 }
 aside .removed-link {
   display: block; margin-top: 10px; padding: 8px 14px; border-radius: 14px;
-  font-size: 12px; color: #6A6A73;
+  font-size: 12px; color: var(--dim);
 }
 aside .removed-link:hover, aside .removed-link.on { color: #fff; background: #222225; }
 aside .live .pulse {
@@ -137,21 +140,21 @@ main { padding: 28px 28px 80px 8px; }
 .railtoggle svg { width: 20px; height: 20px; }
 header.page { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 22px; padding: 6px 4px 0; }
 header.page h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.042em; margin: 0; line-height: 1; }
-header.page .when { color: #6A6A73; font-size: 13px; margin-left: auto; padding-bottom: 4px; }
+header.page .when { color: var(--dim); font-size: 13px; margin-left: auto; padding-bottom: 4px; }
 
 aside .search { margin-bottom: 14px; }
 aside .search input {
   width: 100%; padding: 11px 13px; border-radius: 14px; background: #222225;
   border: 1px solid transparent; color: #fff; font: inherit; font-size: 13.5px;
 }
-aside .search input::placeholder { color: #6A6A73; }
+aside .search input::placeholder { color: var(--dim); }
 aside .search input:focus { outline: 0; border-color: var(--salmon); background: #26262A; }
 
 /* ── the blocks ────────────────────────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 .stat { border-radius: var(--r); padding: 22px 24px 24px; background: var(--card); color: var(--ink); }
-.stat:nth-child(1) { background: var(--salmon); }
-.stat:nth-child(2) { background: var(--yellow); }
+.stat:nth-child(1) { background: var(--salmon); color: #101012; }
+.stat:nth-child(2) { background: var(--yellow); color: #101012; }
 .stat:nth-child(4) { background: var(--dark); color: #fff; }
 .stat .n {
   font-family: var(--display); font-size: 46px; font-weight: 800; letter-spacing: -0.05em;
@@ -159,7 +162,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 }
 .stat .l {
   font-size: 11px; margin-top: 12px; letter-spacing: 0.12em; text-transform: uppercase;
-  font-weight: 700; opacity: .62;
+  font-weight: 700; opacity: .8;
 }
 .stat.zero .n { opacity: .4; }
 
@@ -192,7 +195,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 
 .chart .col { cursor: pointer; }
 .chart .col .track { transition: fill .12s ease; }
-.chart .col:hover .track { fill: #E6E6E9; }
+.chart .col:hover .track { fill: #34343B; }
 .chart .col:hover text.lab.dn, .chart .col:hover text.lab.wd { fill: var(--ink); }
 .chart .col:focus-visible { outline: none; }
 .chart .col:focus-visible .track { stroke: var(--ink); stroke-width: 2; }
@@ -217,7 +220,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 }
 .chart text.lab { font-family: var(--ui); font-size: 11px; fill: var(--ink3); }
 .chart text.lab.wd { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.chart text.lab.wd.weekend { fill: #C6C6CD; }
+.chart text.lab.wd.weekend { fill: #8A8A94; }
 .chart text.lab.dn {
   font-family: var(--display); font-size: 14px; font-weight: 700; fill: var(--ink2);
   font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
@@ -234,7 +237,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 .today .due { color: #9A9AA3; font-size: 12.5px; margin-bottom: 16px; }
 .today .line {
   display: flex; align-items: center; gap: 11px; padding: 13px 14px; font-size: 14px;
-  color: #C9C9D0; letter-spacing: -0.012em; background: #232327; border-radius: 16px; margin-bottom: 8px;
+  color: #C9C9D0; letter-spacing: -0.012em; background: var(--raised); border-radius: 16px; margin-bottom: 8px;
 }
 .today .line .dot { width: 10px; height: 10px; border-radius: 4px; background: var(--c); flex: none; }
 .today .line .n {
@@ -246,10 +249,10 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 .group { margin-bottom: 14px; }
 .group > .head { display: flex; align-items: baseline; gap: 12px; margin: 22px 0 12px; padding: 0 8px; color: #fff; }
 .group > .head .dot { width: 11px; height: 11px; border-radius: 4px; background: var(--c); }
-.group > .head .sub { color: #6A6A73; font-size: 12.5px; }
+.group > .head .sub { color: var(--dim); font-size: 12.5px; }
 .group > .head .n {
   margin-left: auto; font-family: var(--display); font-weight: 700; font-size: 15px;
-  color: #6A6A73; font-variant-numeric: tabular-nums;
+  color: var(--dim); font-variant-numeric: tabular-nums;
 }
 .rows { background: var(--card); border-radius: var(--r); padding: 10px; }
 .row {
@@ -275,9 +278,9 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 }
 .row .meta .chan { color: var(--ink, var(--ch)); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 /* Every dot is the channel's exact colour. The hairline ring keeps a pale one
-   (FNAF's yellow) visible on white and a dark one (Verse's navy) on the rail. */
+   (FNAF's yellow) visible and a dark one (Verse's navy) against the dark. */
 .row .meta .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); display: block;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
+  box-shadow: 0 0 0 1px var(--ring); }
 .row .when { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row .when .d { font-family: var(--display); font-size: 14.5px; font-weight: 600; letter-spacing: -0.022em; }
 .row .when .z { color: var(--ink3); font-size: 11.5px; }
@@ -293,7 +296,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 .links { display: flex; gap: 7px; flex-wrap: wrap; }
 .links a { font-size: 11.5px; padding: 3px 11px; border-radius: 999px; background: var(--sunk);
   color: var(--ink2); font-weight: 600; }
-.links a.frameio { background: #E9ECFA; color: #3D4CB4; }
+.links a.frameio { background: rgba(74,92,212,.22); color: #AEB8F5; }
 .links a:hover { background: var(--line); color: var(--ink); }
 .warn { color: var(--warn); font-size: 12px; font-weight: 600; }
 
@@ -305,8 +308,8 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
 }
 .chanlist a:hover { background: #26262A; color: #fff; }
 .chanlist a .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(255,255,255,.28); }
-.chanlist .n { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 12.5px; opacity: .7; }
-.back { color: #6A6A73; font-size: 13px; }
+.chanlist .n { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.back { color: var(--dim); font-size: 13px; }
 .brief {
   background: var(--card); color: var(--ink2); border-radius: var(--r); padding: 26px 28px;
   white-space: pre-wrap; line-height: 1.68; font-size: 14.5px; max-width: 800px;
@@ -351,22 +354,25 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
   min-height: max(172px, calc((100vh - 290px) / 5));
   display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--ink);
 }
-.cal .cell.outside { background: #FAFAFB; }
-.cal .cell.outside .num { color: #C6C6CD; }
+.cal .cell.outside { background: #1C1C21; }
+.cal .cell.outside .num { color: #8E8E98; }
 .cal .cell.today { background: var(--salmon); }
 .cal .num {
   font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink2);
   font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 5px; border-radius: 8px; align-self: flex-start; letter-spacing: -0.03em;
 }
-.cal .num:hover { background: rgba(0,0,0,.06); color: var(--ink); }
+.cal .num:hover { background: rgba(255,255,255,.08); color: var(--ink); }
 .cal .cell.today .num { color: #101012; }
 .cal .num .tag { font-family: var(--ui); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
 .cal .chip {
   display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 10px;
-  background: #fff; font-size: 12.5px; color: var(--ink2); min-width: 0; font-weight: 600;
+  background: var(--raised); font-size: 12.5px; color: var(--ink2); min-width: 0; font-weight: 600;
 }
 .cal .chip:hover { background: var(--line); color: var(--ink); }
+.cal .cell.today .chip { background: #FBE3DF; color: #3A2A28; }
+.cal .cell.today .chip:hover { background: #fff; color: #101012; }
+.cal .cell.today .more, .cal .cell.today .num .tag { color: #3A2A28; }
 .cal .chip[draggable] { cursor: grab; }
 .cal .chip.dragging { opacity: .35; }
 .cal .chip.saving { opacity: .6; }
@@ -378,12 +384,12 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 }
 .cattoggle i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); display: block; }
 .cattoggle:hover { background: #26262A; }
-.cattoggle.off { color: #6A6A73; }
+.cattoggle.off { color: #85858F; }
 .cattoggle.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
 .cattoggle.all { background: transparent; color: #9A9AA3; }
-.draghint { color: #6A6A73; font-size: 12px; margin-left: auto; }
+.draghint { color: var(--dim); font-size: 12px; margin-left: auto; }
 .cal .chip { box-shadow: inset 3px 0 0 var(--c); }
-.cal .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
+.cal .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px var(--ring); }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
 .cal .more { font-size: 12px; color: var(--ink3); padding: 2px 9px; font-weight: 700; margin-top: auto; }
 .cal .more:hover { color: var(--ink); }
@@ -412,7 +418,7 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   font-family: var(--display); font-weight: 700; font-size: 13px; min-width: 28px; height: 28px;
   border-radius: 999px; background: var(--sunk); display: grid; place-items: center; padding: 0 8px;
 }
-.daycol.today > header { background: var(--salmon); border-radius: 16px; padding: 10px 12px 12px; margin-bottom: 8px; }
+.daycol.today > header { background: var(--salmon); color: #101012; border-radius: 16px; padding: 10px 12px 12px; margin-bottom: 8px; }
 .daycol.today .dt, .daycol.today .rel { color: #3A2A28; }
 .daycol.today .cnt { background: rgba(0,0,0,.1); }
 .daycol.focus { box-shadow: 0 0 0 3px var(--yellow); }
@@ -441,20 +447,21 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .dcard .t:hover { text-decoration: underline; }
 .dcard .t .chdot {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--ch);
-  margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.16);
+  margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 1px var(--ring);
 }
 .dcard .chan {
   color: var(--ink, var(--ch)); font-weight: 700; font-size: 12.5px;
   display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
 }
-.dcard .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
-.dcard .pill { align-self: flex-start; background: #fff; }
+.dcard .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
+.dcard .pill { align-self: flex-start; background: var(--raised); }
 .dcard .foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .dcard .at { font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; flex: 1; min-width: 0; }
 .dcard .at.over { color: var(--late); font-weight: 700; }
-.dcard .tick button { width: 28px; height: 28px; background: #fff; }
-.dcard.cleared .t { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
-.dcard.cleared .chan, .dcard.cleared .top { opacity: .55; }
+.dcard .tick button { width: 28px; height: 28px; background: var(--card); }
+/* Finished work is muted and struck through — never faded, so it stays readable. */
+.dcard.cleared .t, .dcard.cleared .top, .dcard.cleared .code, .dcard.cleared .chan, .dcard.cleared .at { color: var(--ink3); }
+.dcard.cleared .t { text-decoration: line-through; text-decoration-color: #6E6E78; }
 
 /* ── week ──────────────────────────────────────────────────────────────── */
 .weekgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
@@ -478,7 +485,8 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 /* status toggles sit after the categories, behind a hairline */
 .tsep { width: 1px; height: 22px; background: #2A2A2F; margin: 0 4px; }
 .cattoggle.st i { border-radius: 50%; }
-.cal .chip.done .t { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
+.cal .chip.done .t { text-decoration: line-through; text-decoration-color: #6E6E78; color: var(--ink3); }
+.cal .cell.today .chip.done .t { color: #6A5552; text-decoration-color: #9A8581; }
 .calbar .tabs.views { margin-left: auto; }
 .calbar .tabs.views + .tabs { margin-left: 0; }
 
@@ -499,19 +507,19 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 @media (hover: none) { .pin-ghost { opacity: .45; } }
 .pinned-tag {
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px;
-  background: #101012; color: var(--yellow); font-size: 10.5px; font-weight: 700;
+  background: var(--yellow); color: #101012; font-size: 10.5px; font-weight: 700;
   letter-spacing: 0.08em; text-transform: uppercase;
 }
-.pinned-tag:hover { background: #2A2A2F; }
+.pinned-tag:hover { background: #FFF6A8; }
 .pinned-tag:hover span { display: none; }
 .pinned-tag:hover::after { content: "Unpin"; }
-.row.pinned { background: #FFF8D9; }
+.row.pinned { background: #27251A; box-shadow: inset 0 0 0 1px rgba(243,233,108,.22); }
 .row.pinned + .row:not(.pinned) { margin-top: 6px; }
 .dcard .pinform { margin-left: auto; }
 /* In a card the tag is the pin alone; the cream card already says pinned. */
 .dcard .pinned-tag { padding: 5px; }
 .dcard .pinned-tag span, .dcard .pinned-tag:hover::after { display: none; }
-.dcard.pinned { background: #FFF8D9; }
+.dcard.pinned { background: #2A2819; }
 
 /* ── bell ──────────────────────────────────────────────────────────────── */
 .bellwrap { position: relative; align-self: center; flex: none; }
@@ -523,14 +531,14 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .bell svg { width: 21px; height: 21px; }
 .bell .badge {
   position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px;
-  border-radius: 999px; background: var(--late); color: #fff; font-size: 11px; font-weight: 700;
+  border-radius: 999px; background: #C8352B; color: #fff; font-size: 11px; font-weight: 700;
   display: grid; place-items: center; box-shadow: 0 0 0 3px var(--shell); font-variant-numeric: tabular-nums;
 }
 .bell .badge[hidden] { display: none; }
 .notices {
   position: absolute; right: 0; top: calc(100% + 10px); width: 400px; max-height: min(560px, 72vh);
   overflow-y: auto; background: var(--card); color: var(--ink); border-radius: 22px; padding: 8px;
-  box-shadow: 0 24px 60px rgba(0,0,0,.45); z-index: 20;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6), 0 0 0 1px #2E2E35; z-index: 20;
 }
 .notices[hidden] { display: none; }
 .nhead { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; }
@@ -542,34 +550,50 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .nhead .alerts.on { background: var(--gm); color: #fff; }
 .notice { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-radius: 14px; }
 .notice:hover { background: var(--sunk); }
+.notice[hidden] { display: none; }
 .notice .ico {
-  width: 32px; height: 32px; border-radius: 10px; flex: none; display: grid; place-items: center;
-  font-size: 12px; font-weight: 800; color: #fff; background: var(--lf);
+  width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center;
+  color: #fff; background: var(--nc);
 }
-.notice.overdue .ico { background: var(--late); font-size: 15px; }
+.notice .ico svg { width: 19px; height: 19px; }
+.nfilters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 8px 10px; }
+.nf {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer; border-radius: 999px;
+  padding: 6px 11px; background: var(--sunk); color: var(--ink2); font: 600 12px var(--ui);
+}
+.nf i { width: 8px; height: 8px; border-radius: 3px; background: var(--nc); }
+.nf span { color: var(--ink3); font-variant-numeric: tabular-nums; }
+.nf:hover { background: var(--line); color: var(--ink); }
+.nf.on { background: var(--ink); color: #101012; }
+.nf.on span { color: #55555E; }
+.nf:disabled, .nf:disabled span { color: #8E8E98; cursor: default; }
+.nf:disabled i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--nc); }
+.nf:disabled:hover { background: var(--sunk); }
+.nempty[hidden] { display: none; }
 .notice .body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .notice .nt { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notice .ns { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notice .ago { color: var(--ink3); font-size: 11.5px; flex: none; }
-.notice.new .ago { color: var(--late); font-weight: 700; }
-.notice.new .ago::before { content: "● "; }
+.notice.new-item .ago { color: var(--late); font-weight: 700; }
+.notice.new-item .ago::before { content: "● "; }
+.notice.new-item.airing .ago::before { content: "●"; }
 .nempty { color: var(--ink3); font-size: 13px; padding: 24px 12px 28px; text-align: center; }
 
 /* ── sign in ───────────────────────────────────────────────────────────── */
 .login { max-width: 380px; margin: 15vh auto; padding: 0 20px; }
 .login h1 { font-size: 44px; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 6px; line-height: 1; }
-.login p { color: #6A6A73; font-size: 13.5px; margin: 0 0 22px; }
+.login p { color: var(--dim); font-size: 13.5px; margin: 0 0 22px; }
 .login form { background: var(--card); border-radius: var(--r); padding: 24px; }
 .login input {
   width: 100%; padding: 14px 16px; border-radius: 16px; background: var(--sunk);
   border: 1px solid transparent; color: var(--ink); font: inherit; margin-bottom: 11px;
 }
-.login input:focus { outline: 0; border-color: var(--salmon); background: #fff; }
+.login input:focus { outline: 0; border-color: var(--salmon); background: var(--raised); }
 .login button {
   width: 100%; padding: 14px; border-radius: 16px; border: 0; cursor: pointer;
-  background: var(--ink); color: #fff; font-family: var(--ui); font-size: 14px; font-weight: 700;
+  background: var(--salmon); color: #101012; font-family: var(--ui); font-size: 14px; font-weight: 700;
 }
-.login button:hover { background: #2A2A2E; }
+.login button:hover { filter: brightness(1.06); }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
 .row .when { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
@@ -578,21 +602,22 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .acts { display: flex; gap: 6px; align-items: center; flex: none; }
 .tick { display: flex; }
 .tick button {
-  width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--line);
-  background: transparent; color: #C9C9CF; cursor: pointer; font-size: 13px; line-height: 1;
+  width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid #45454D;
+  background: transparent; color: #A6A6B0; cursor: pointer; font-size: 13px; line-height: 1;
   font-family: var(--ui); flex: none; transition: all .12s ease;
 }
-.tick button:hover { border-color: var(--gm); color: var(--gm); }
-.tick button.on { background: var(--gm); border-color: var(--gm); color: #fff; }
-.row.cleared .title { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
-.row.cleared .meta { opacity: .55; }
+.tick button:hover { border-color: var(--ok); color: var(--ok); }
+.tick button.on { background: #26805A; border-color: #26805A; color: #fff; }
+.row.cleared .title, .row.cleared .title .code { color: var(--ink3); }
+.row.cleared .title a { text-decoration: line-through; text-decoration-color: #6E6E78; }
+.row.cleared .meta, .row.cleared .meta .chan, .row.cleared .meta .airs, .row.cleared .meta .count { color: var(--ink3); }
 .tick.remove button { font-size: 16px; }
 .tick.remove button:hover { border-color: var(--late); color: var(--late); }
-.tick.restore button:hover { border-color: var(--lf); color: var(--lf); }
+.tick.restore button:hover { border-color: #8D9BF2; color: #8D9BF2; }
 
 /* ── sorting ─────────────────────────────────────────────────────────────── */
 .sortbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 4px 14px; }
-.sortlabel { color: #6A6A73; font-size: 12px; font-weight: 600; margin-right: 4px; }
+.sortlabel { color: var(--dim); font-size: 12px; font-weight: 600; margin-right: 4px; }
 .sortpill {
   padding: 7px 13px; border-radius: 999px; background: var(--rail); color: #9A9AA3;
   font-size: 12.5px; font-weight: 600;
@@ -610,18 +635,18 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .batch .who { display: flex; align-items: center; gap: 12px; min-width: 250px; }
 .batch .tick button { width: 26px; height: 26px; font-size: 12px; }
 .tick-space { width: 26px; flex: none; }
-.batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.16); }
+.batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px var(--ring); }
 .batch .name { font-weight: 600; min-width: 160px; }
 .batch .bar {
-  flex: 1; height: 7px; border-radius: 999px; background: #E2E2E5; overflow: hidden; min-width: 60px;
+  flex: 1; height: 7px; border-radius: 999px; background: #3A3A42; overflow: hidden; min-width: 60px;
 }
 .pips { flex: 1; display: flex; gap: 5px; min-width: 120px; }
 .pips form { flex: 1; display: flex; }
 .pip {
   flex: 1; height: 26px; border-radius: 8px; border: 0; cursor: pointer; padding: 0;
-  background: #E2E2E5; transition: background .12s ease;
+  background: #3A3A42; transition: background .12s ease;
 }
-.pip:hover { background: #D2D2D7; }
+.pip:hover { background: #4A4A53; }
 .pip.on { background: var(--c); }
 .pip.on:hover { filter: brightness(1.08); }
 .batch.done .pip.on { background: var(--gm); }
@@ -631,13 +656,13 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   font-family: var(--display); font-weight: 700; font-size: 13px; color: var(--ink2);
   font-variant-numeric: tabular-nums; min-width: 58px; text-align: right;
 }
-.batch.done .state { color: var(--gm); }
+.batch.done .state { color: var(--ok); }
 .batch.done .bar > span { background: var(--gm); }
 .airform { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .airform label { font-family: var(--display); font-weight: 700; color: #fff; font-size: 15px; }
 .airform input {
-  padding: 10px 14px; border-radius: 12px; border: 0; background: var(--card); color: var(--ink);
-  font: inherit; font-size: 14px; color-scheme: light;
+  padding: 10px 14px; border-radius: 12px; border: 0; background: var(--raised); color: var(--ink);
+  font: inherit; font-size: 14px; color-scheme: dark;
 }
 .airform .hint { margin: 0; }
 .batch-group + .batch-group { margin-top: 18px; }
@@ -897,26 +922,83 @@ const BELL_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" st
  * permission, then the open dashboard checks every minute and pops a system
  * notification for anything new.
  */
+/** Each kind of notification: its filter label, its icon and its colour. */
+const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; icon: string }> = [
+  {
+    kind: "revision", label: "Revisions", colour: "#5B6CF0",
+    icon: `<path d="M3.5 5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2z"/><path d="M8.5 7.5v5l4-2.5z" fill="currentColor"/>`,
+  },
+  {
+    kind: "overdue", label: "Overdue", colour: "#E5534B",
+    icon: `<path d="M10 3.2 17.4 16H2.6z"/><path d="M10 8v3.6"/><circle cx="10" cy="13.9" r=".6" fill="currentColor"/>`,
+  },
+  {
+    kind: "upcoming", label: "Due soon", colour: "#D9822B",
+    icon: `<circle cx="10" cy="10" r="6.8"/><path d="M10 6.2V10l2.6 1.8"/>`,
+  },
+  {
+    kind: "airing", label: "Airing", colour: "#2F9E6A",
+    icon: `<rect x="3" y="6.5" width="14" height="9.5" rx="2"/><path d="m7 3.5 3 3 3-3"/>`,
+  },
+  {
+    kind: "new", label: "New", colour: "#A35BC4",
+    icon: `<path d="M5 3.5h6.5L15 7v9.5H5z"/><path d="M10 9.5v4.5M7.8 11.8h4.4"/>`,
+  },
+];
+
+const noticeIcon = (kind: NoticeKind) => {
+  const k = NOTICE_KINDS.find((n) => n.kind === kind)!;
+  return `<span class="ico" style="--nc:${k.colour}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${k.icon}</svg></span>`;
+};
+
+/**
+ * The dashboard's bell. Five kinds, each with its own icon and colour, and a
+ * filter row to see one kind at a time. The badge counts what arrived since
+ * you last opened it; opening it marks everything read. "Desktop alerts"
+ * asks the browser for permission, then an open dashboard checks every minute
+ * and pops a system notification for anything new.
+ */
 function bell(notices: Notice[], seen: number): string {
   const unread = notices.filter((n) => n.at.getTime() > seen).length;
+  const what = (n: Notice): string => {
+    const r = n.record;
+    switch (n.kind) {
+      case "revision": return `Revision ready${r.version ? ` · v${r.version}` : ""}`;
+      case "overdue": return `Overdue · was due ${esc(renderIn(n.at, ORG_TZ, "ET"))}`;
+      case "upcoming": {
+        const due = r.voDue ?? r.deadline ?? r.scriptDue;
+        return `Due ${due ? esc(renderIn(due, ORG_TZ, "ET")) : "soon"}`;
+      }
+      case "airing": return `Airs ${esc(relativeDay(r.airDate!))} · ${esc(usDate(r.airDate!))}`;
+      case "new": return `New ${esc(r.stage ?? "assignment")}${r.code ? ` · ${esc(r.code)}` : ""}`;
+    }
+  };
   const items = notices
     .map((n) => {
       const r = n.record;
       const isNew = n.at.getTime() > seen;
-      const what =
-        n.kind === "revision"
-          ? `Revision ready${r.version ? ` · v${r.version}` : ""}`
-          : `Overdue · was due ${esc(renderIn(n.at, ORG_TZ, "ET"))}`;
-      return `<a class="notice ${n.kind}${isNew ? " new" : ""}" href="/r/${r.id}">
-        <span class="ico">${n.kind === "revision" ? "▶" : "!"}</span>
+      return `<a class="notice ${n.kind}${isNew ? " new-item" : ""}" data-kind="${n.kind}" href="/r/${r.id}">
+        ${noticeIcon(n.kind)}
         <span class="body">
           <span class="nt">${esc(displayTitle(r))}</span>
-          <span class="ns">${what}${r.channel ? ` · ${esc(r.channel)}` : ""}</span>
+          <span class="ns">${what(n)}${r.channel ? ` · ${esc(r.channel)}` : ""}</span>
         </span>
-        <span class="ago">${esc(timeAgo(n.at))}</span>
+        <span class="ago">${esc(n.kind === "airing" ? "" : timeAgo(n.at))}</span>
       </a>`;
     })
     .join("");
+
+  const counts = new Map<string, number>();
+  for (const n of notices) counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1);
+  const filters = `<div class="nfilters" role="tablist" aria-label="Show">
+    <button type="button" class="nf on" data-f="all" style="--nc:var(--ink)">All<span>${notices.length}</span></button>
+    ${NOTICE_KINDS.map(
+      (k) => `<button type="button" class="nf" data-f="${k.kind}" style="--nc:${k.colour}"${
+        counts.get(k.kind) ? "" : " disabled"
+      }><i></i>${k.label}<span>${counts.get(k.kind) ?? 0}</span></button>`,
+    ).join("")}
+  </div>`;
 
   return `<div class="bellwrap">
     <button class="bell" type="button" id="bell" aria-haspopup="true" aria-expanded="false"
@@ -928,7 +1010,9 @@ function bell(notices: Notice[], seen: number): string {
         <b>Notifications</b>
         <button type="button" class="alerts" id="alerts">Desktop alerts</button>
       </div>
-      ${items || `<div class="nempty">Nothing yet. Revisions and overdue work show up here.</div>`}
+      ${filters}
+      <div class="nlist">${items || `<div class="nempty">Nothing yet. Revisions, deadlines and air dates show up here.</div>`}</div>
+      <div class="nempty nfiltered" hidden>Nothing of this kind right now.</div>
     </div>
   </div>
   <script>
@@ -949,6 +1033,27 @@ function bell(notices: Notice[], seen: number): string {
       if (!panel.hidden && !panel.contains(e.target)) { panel.hidden = true; bell.setAttribute("aria-expanded", "false"); }
     });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") panel.hidden = true; });
+
+    // One kind at a time, remembered in this browser.
+    function filter(f) {
+      var shown = 0;
+      panel.querySelectorAll(".nf").forEach(function (b) { b.classList.toggle("on", b.dataset.f === f); });
+      panel.querySelectorAll(".notice").forEach(function (n) {
+        var show = f === "all" || n.dataset.kind === f;
+        n.hidden = !show;
+        if (show) shown += 1;
+      });
+      panel.querySelector(".nfiltered").hidden = shown > 0 || !panel.querySelector(".notice");
+      try { localStorage.setItem("noticeFilter", f); } catch (x) {}
+    }
+    panel.querySelectorAll(".nf").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); filter(b.dataset.f); });
+    });
+    try {
+      var saved = localStorage.getItem("noticeFilter");
+      var btn = saved && panel.querySelector('.nf[data-f="' + saved + '"]');
+      if (btn && !btn.disabled) filter(saved);
+    } catch (x) {}
 
     // Desktop alerts: remembered per browser, and only for what arrives after
     // they were turned on, so switching them on never fires a backlog.
@@ -987,7 +1092,8 @@ function bell(notices: Notice[], seen: number): string {
           try { since = Number(localStorage.getItem("alertedTo")) || Date.now(); } catch (x) {}
           var now = Date.now(), fresh = data.items.filter(function (n) { return n.at > since && n.at <= now; });
           fresh.slice(0, 5).forEach(function (n) {
-            var note = new Notification(n.kind === "revision" ? "Revision ready" : "Overdue", {
+            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment" };
+            var note = new Notification(heads[n.kind] || "Specular", {
               body: n.title + (n.channel ? " — " + n.channel : ""), tag: n.kind + ":" + n.id,
             });
             note.onclick = function () { window.focus(); location.href = "/r/" + n.id; };
@@ -1190,7 +1296,7 @@ function dueChart(buckets: DayBucket[]): string {
       // so an empty week reads as empty rather than as missing.
       const track = `<rect class="track" x="${x.toFixed(1)}" y="${PAD_T}" width="${barW}"
         height="${plotH}" rx="${r}" fill="${
-          isToday ? "#FCF6C4" : isLate ? "#FCEBE9" : "#F1F1F3"
+          isToday ? "#3A3721" : isLate ? "#3B2426" : "#26262C"
         }"/>`;
 
       // The work is liquid poured into the pill: clipped to the track's own
@@ -1281,7 +1387,7 @@ function dueChart(buckets: DayBucket[]): string {
   // from what is merely scheduled.
   const dividerX = slot;
   const divider = `<line x1="${dividerX.toFixed(1)}" x2="${dividerX.toFixed(1)}" y1="${PAD_T - 10}"
-    y2="${(PAD_T + plotH + 44).toFixed(1)}" stroke="#E8E8EA" stroke-width="1" stroke-dasharray="3 4"/>`;
+    y2="${(PAD_T + plotH + 44).toFixed(1)}" stroke="#3A3A42" stroke-width="1" stroke-dasharray="3 4"/>`;
 
   const ahead = buckets.reduce((n, b) => (b.date ? n + b.total : n), 0);
   const late = buckets.find((b) => b.date === null)?.total ?? 0;

@@ -155,7 +155,7 @@ export async function startWeb(): Promise<void> {
       dueByDay(ORG_TZ, 14),
       openByCategory(),
       channelCounts(),
-      listNotices(),
+      listNotices(ORG_TZ),
     ]);
 
     return reply
@@ -173,7 +173,7 @@ export async function startWeb(): Promise<void> {
   // desktop alerts, what came in.
   app.get("/notifications.json", async (request, reply) => {
     const seen = noticesSeen(request);
-    const notices = await listNotices();
+    const notices = await listNotices(ORG_TZ);
     return reply.send({
       unread: notices.filter((n) => n.at.getTime() > seen).length,
       items: notices.map((n) => ({

@@ -212,20 +212,23 @@ export function contrastRatio(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
+/** The dark surfaces a channel's name is written on: card, row hover, chip, pinned. */
+export const DARK_SURFACES = ["#18181C", "#222227", "#2C2C33", "#2A2819"];
+
 /**
- * The shade a channel's name is written in on the white cards. Its own colour
- * when that reads at 4.5:1 — on the grey hover row too — and otherwise the
- * same colour taken darker, step by step, only as far as it needs to go.
- * FNAF's yellow can't be read as text on white; its name is written in a
- * darker gold, and its dot stays the exact yellow.
+ * The shade a channel's name is written in on the dark cards. Its own colour
+ * when that reads at 4.5:1 on every dark surface, and otherwise the same hue
+ * taken lighter, step by step, only as far as it needs to go. Verse's navy
+ * can't be read as text on charcoal; its name is written in a lighter blue,
+ * and its dot stays the exact navy.
  */
 export function channelInk(hex: string): string {
-  const readable = (h: string) => contrastRatio(h, "#FFFFFF") >= 4.5 && contrastRatio(h, "#F4F4F5") >= 4.5;
+  const readable = (h: string) => DARK_SURFACES.every((bg) => contrastRatio(h, bg) >= 4.5);
   if (readable(hex)) return hex.toUpperCase();
   const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  for (let f = 0.98; f > 0.2; f -= 0.02) {
-    const h = "#" + rgb.map((c) => Math.round(c * f).toString(16).padStart(2, "0")).join("").toUpperCase();
+  for (let t = 0.02; t < 1; t += 0.02) {
+    const h = "#" + rgb.map((c) => Math.round(c + (255 - c) * t).toString(16).padStart(2, "0")).join("").toUpperCase();
     if (readable(h)) return h;
   }
-  return "#3A3A40";
+  return "#E4E4E8";
 }

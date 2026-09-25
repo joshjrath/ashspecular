@@ -481,19 +481,6 @@ export async function openBatchCount(date: string): Promise<number> {
 }
 
 /** What has been removed, newest first — where Restore lives. */
-/**
- * What the dashboard's bell rings for: a revision that has come in, and work
- * that has gone past its time. Each carries the moment it happened — when the
- * revision arrived, when the deadline passed — so "unread" is simply anything
- * after the last time the bell was opened. Recurring batches are left out:
- * they fall due every evening and would drown the rest.
- */
-export interface Notice {
-  kind: "revision" | "overdue";
-  at: Date;
-  record: StoredRecord;
-}
-
 /** Open work past its time, most overdue first — the chart's LATE column. */
 export async function listLate(limit = 300): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
@@ -503,25 +490,55 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
   return rows.map(hydrate);
 }
 
-export async function listNotices(limit = 30): Promise<Notice[]> {
-  const [revisions, overdue] = await Promise.all([
-    pool.query<Row>(
-      `${SELECT} WHERE kind = 'review' AND status = 'open' ORDER BY created_at DESC LIMIT $1`,
-      [limit],
-    ),
-    pool.query<Row>(
-      `${SELECT} WHERE status = 'open' AND batch_no IS NULL AND ${DUE} < now()
-       ORDER BY ${DUE} DESC LIMIT $1`,
-      [limit],
-    ),
+/**
+ * What the dashboard's bell rings for, by kind:
+ *
+ *   revision  a Frame.io revision came in           — when it arrived
+ *   overdue   work went past its time               — when the deadline passed
+ *   upcoming  work is due within the next 24 hours  — when it came into that window
+ *   airing    a video airs today or tomorrow        — the start of the day before
+ *   new       an assignment was filed (last 3 days) — when it was filed
+ *
+ * Each carries the moment it happened, so "unread" is simply anything after
+ * the last time the bell was opened. Recurring batches are left out: they
+ * fall due every evening and would drown the rest.
+ */
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new";
+export interface Notice {
+  kind: NoticeKind;
+  at: Date;
+  record: StoredRecord;
+}
+
+export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
+  const q = (where: string, order: string) =>
+    pool.query<Row>(`${SELECT} WHERE ${where} ORDER BY ${order} LIMIT 30`).then((r) => r.rows.map(hydrate));
+  const open = "status = 'open' AND batch_no IS NULL";
+  const [revisions, overdue, upcoming, airing, fresh] = await Promise.all([
+    q("kind = 'review' AND status = 'open'", "created_at DESC"),
+    q(`${open} AND ${DUE} < now()`, `${DUE} DESC`),
+    q(`${open} AND ${DUE} >= now() AND ${DUE} < now() + interval '24 hours'`, `${DUE} ASC`),
+    pool
+      .query<Row>(
+        `${SELECT} WHERE ${open} AND air_date BETWEEN (now() AT TIME ZONE $1)::date
+           AND (now() AT TIME ZONE $1)::date + 1 ORDER BY air_date ASC LIMIT 30`,
+        [zone],
+      )
+      .then((r) => r.rows.map(hydrate)),
+    q("kind = 'assignment' AND status <> 'removed' AND created_at > now() - interval '3 days'", "created_at DESC"),
   ]);
+  const due = (r: StoredRecord) => (r.voDue ?? r.deadline ?? r.scriptDue)!;
+  const dayBefore = (air: string) => {
+    const d = new Date(`${air}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return new Date(`${d.toISOString().slice(0, 10)}T04:00:00Z`);
+  };
   const notices: Notice[] = [
-    ...revisions.rows.map(hydrate).map((record) => ({ kind: "revision" as const, at: record.createdAt, record })),
-    ...overdue.rows.map(hydrate).map((record) => ({
-      kind: "overdue" as const,
-      at: (record.voDue ?? record.deadline ?? record.scriptDue)!,
-      record,
-    })),
+    ...revisions.map((record) => ({ kind: "revision" as const, at: record.createdAt, record })),
+    ...overdue.map((record) => ({ kind: "overdue" as const, at: due(record), record })),
+    ...upcoming.map((record) => ({ kind: "upcoming" as const, at: new Date(due(record).getTime() - 86_400_000), record })),
+    ...airing.map((record) => ({ kind: "airing" as const, at: dayBefore(record.airDate!), record })),
+    ...fresh.map((record) => ({ kind: "new" as const, at: record.createdAt, record })),
   ];
   return notices.sort((x, y) => y.at.getTime() - x.at.getTime()).slice(0, limit);
 }

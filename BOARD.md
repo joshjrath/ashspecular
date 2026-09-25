@@ -8,6 +8,13 @@ short records does not need a bundler.
 
 ## What's on it
 
+The board is dark throughout: charcoal cards on a near-black shell, with the
+salmon and yellow blocks carrying black text. Every piece of text on every
+page, desktop and phone, is checked to read at 4.5:1 (3:1 for large type)
+against what is actually behind it; channel names are lightened just enough
+where their own colour is too dark, and finished work is muted and struck
+through rather than faded.
+
 The board uses the whole width of the window. The button beside each page's
 title — or the `[` key — puts the sidebar away, and it stays away until you
 bring it back.
@@ -17,12 +24,22 @@ row turns cream, carries a black *Pinned* tag, and sits at the top of its own
 category — on the dashboard and on the category page, whatever the sort. Pin
 as many as you like; the newest pin comes first. Press the tag to unpin.
 
-**The bell** — top right of the dashboard. It lists revisions that have come
-in and anything past its time, newest first, with a red count of what arrived
-since you last opened it. Recurring batches are left out; they fall due every
-evening. **Desktop alerts** in the panel asks your browser for permission,
-then an open dashboard checks every minute and pops a system notification for
-anything new.
+**The bell** — top right of the dashboard. Five kinds, each with its own icon
+and colour:
+
+| | Kind | When it shows |
+|---|---|---|
+| ▶ blue | **Revisions** | a Frame.io revision came in |
+| ⚠ red | **Overdue** | open work went past its time |
+| ◷ amber | **Due soon** | open work is due within 24 hours |
+| ▭ green | **Airing** | a video airs today or tomorrow |
+| + purple | **New** | an assignment was filed in the last 3 days |
+
+A filter row picks one kind at a time (remembered in your browser), with a
+count on each. The red badge counts what arrived since you last opened it.
+Recurring batches are left out; they fall due every evening. **Desktop alerts**
+in the panel asks your browser for permission, then an open dashboard checks
+every minute and pops a system notification for anything new.
 
 **Work due by day** — a headline count, then a column per day.
 
