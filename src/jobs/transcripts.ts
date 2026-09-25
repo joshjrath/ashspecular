@@ -170,53 +170,128 @@ export function tracksFromWatchPage(html: string): CaptionTrack[] {
 export class Blocked extends Error {}
 export class NoCaptions extends Error {}
 
-export async function fetchTranscript(
-  videoId: string,
-  fetcher: Fetcher = fetch,
-): Promise<{ segments: Segment[]; language: string; auto: boolean }> {
+type Got = { segments: Segment[]; language: string; auto: boolean };
+
+/**
+ * The player clients to ask as, in order. YouTube checks some for bots more
+ * than others, and which ones get through changes; the one that last worked
+ * is tried first.
+ */
+export const PLAYER_CLIENTS: Array<{ name: string; client: Record<string, unknown>; embedded?: boolean }> = [
+  { name: "android", client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 30 } },
+  { name: "ios", client: { clientName: "IOS", clientVersion: "20.10.4", deviceMake: "Apple", deviceModel: "iPhone16,2", osName: "iPhone", osVersion: "18.3.2.22D82" } },
+  { name: "tv-embedded", client: { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0" }, embedded: true },
+  { name: "web-embedded", client: { clientName: "WEB_EMBEDDED_PLAYER", clientVersion: "1.20250310.01.00" }, embedded: true },
+  { name: "mweb", client: { clientName: "MWEB", clientVersion: "2.20250311.03.00" } },
+];
+let lastWorking: string | null = null;
+
+/** Every transcript segment in a get_transcript answer, wherever it's nested. */
+export function segmentsFromTranscriptPanel(data: unknown): Segment[] {
+  const out: Segment[] = [];
+  const walk = (x: unknown): void => {
+    if (!x || typeof x !== "object") return;
+    if (Array.isArray(x)) { for (const y of x) walk(y); return; }
+    const o = x as Record<string, unknown>;
+    const seg = o.transcriptSegmentRenderer as { startMs?: string; endMs?: string; snippet?: { runs?: Array<{ text?: string }>; simpleText?: string } } | undefined;
+    if (seg) {
+      const t = (seg.snippet?.runs?.map((r) => r.text ?? "").join("") ?? seg.snippet?.simpleText ?? "").replace(/\s+/g, " ").trim();
+      const s0 = Number(seg.startMs ?? NaN) / 1000, s1 = Number(seg.endMs ?? NaN) / 1000;
+      if (t && Number.isFinite(s0)) out.push({ s: s0, d: Number.isFinite(s1) ? Math.max(0, s1 - s0) : 0, t });
+      return;
+    }
+    for (const v of Object.values(o)) walk(v);
+  };
+  walk(data);
+  return out;
+}
+
+export async function fetchTranscript(videoId: string, fetcher: Fetcher = fetch): Promise<Got> {
   const headers = { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", Cookie: "CONSENT=YES+cb; SOCS=CAI" };
   const page = await fetcher(`https://www.youtube.com/watch?v=${videoId}&hl=en`, { headers, signal: AbortSignal.timeout(15_000) });
   if (page.status === 429) throw new Blocked("YouTube is rate-limiting this server (429).");
   if (!page.ok) throw new Error(`YouTube answered ${page.status}.`);
   const html = await page.text();
-  if (html.includes('class="g-recaptcha"') || html.includes("unusual traffic")) throw new Blocked("YouTube asked this server to prove it isn't a robot.");
+  const pageBlocked = html.includes('class="g-recaptcha"') || html.includes("unusual traffic");
+  const key = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1] ?? "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+  const webVersion = html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/)?.[1] ?? "2.20250312.04.00";
 
-  // The player's own data, asked for as the Android app does — its caption
-  // links work without the extra token the web player now needs.
-  let tracks: CaptionTrack[] = [];
-  const key = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
-  if (key) {
-    const res = await fetcher(`https://www.youtube.com/youtubei/v1/player?key=${key}`, {
+  const refusals: string[] = [];
+  let sawTracks = false;
+  const readTrack = async (track: CaptionTrack): Promise<Got | null> => {
+    const url = track.baseUrl.replace(/&fmt=[^&]*/g, "");
+    const res = await fetcher(url.startsWith("http") ? url : `https://www.youtube.com${url}`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) { refusals.push(`caption file ${res.status}`); return null; }
+    const segments = parseTimedText(await res.text());
+    if (!segments.length) { refusals.push("empty caption file"); return null; }
+    return { segments, language: track.languageCode, auto: track.kind === "asr" };
+  };
+
+  // 1. The player, asked as each app in turn — the last one that worked first.
+  const clients = [...PLAYER_CLIENTS].sort((a, b) => Number(b.name === lastWorking) - Number(a.name === lastWorking));
+  for (const c of clients) {
+    const res = await fetcher(`https://www.youtube.com/youtubei/v1/player?key=${key}&prettyPrint=false`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ context: { client: { clientName: "ANDROID", clientVersion: "20.10.38" } }, videoId }),
+      body: JSON.stringify({
+        context: { client: { ...c.client, hl: "en", gl: "US" }, ...(c.embedded ? { thirdParty: { embedUrl: "https://www.google.com/" } } : {}) },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
       signal: AbortSignal.timeout(15_000),
-    });
+    }).catch(() => null);
+    if (!res) { refusals.push(`${c.name}: no answer`); continue; }
     if (res.status === 429) throw new Blocked("YouTube is rate-limiting this server (429).");
-    if (res.ok) {
-      const data = (await res.json()) as {
-        playabilityStatus?: { status?: string; reason?: string };
-        captions?: { playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] } };
-      };
-      const status = data.playabilityStatus?.status;
-      if (status === "LOGIN_REQUIRED" && /bot/i.test(data.playabilityStatus?.reason ?? "")) {
-        throw new Blocked("YouTube wants this server to sign in to prove it isn't a bot.");
-      }
-      tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+    if (!res.ok) { refusals.push(`${c.name}: ${res.status}`); continue; }
+    const data = (await res.json().catch(() => ({}))) as {
+      playabilityStatus?: { status?: string; reason?: string };
+      captions?: { playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] } };
+    };
+    const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+    if (!tracks.length) {
+      const st = data.playabilityStatus;
+      refusals.push(`${c.name}: ${st?.status === "OK" ? "no captions listed" : `${st?.status ?? "?"} ${st?.reason ?? ""}`.trim()}`);
+      continue;
     }
+    sawTracks = true;
+    const got = await readTrack(pickTrack(tracks)!);
+    if (got) { lastWorking = c.name; return got; }
   }
-  if (!tracks.length) tracks = tracksFromWatchPage(html);
-  const track = pickTrack(tracks);
-  if (!track) throw new NoCaptions("This video has no captions, not even automatic ones (yet).");
 
-  const url = track.baseUrl.replace(/&fmt=[^&]*/g, "");
-  const res = await fetcher(url.startsWith("http") ? url : `https://www.youtube.com${url}`, { headers, signal: AbortSignal.timeout(15_000) });
-  if (res.status === 429) throw new Blocked("YouTube is rate-limiting this server (429).");
-  if (!res.ok) throw new Error(`The caption file answered ${res.status}.`);
-  const body = await res.text();
-  const segments = parseTimedText(body);
-  if (!segments.length) throw new Blocked("YouTube sent an empty caption file — it may be refusing this server.");
-  return { segments, language: track.languageCode, auto: track.kind === "asr" };
+  // 2. The watch page's own caption list.
+  const pageTracks = tracksFromWatchPage(html);
+  if (pageTracks.length) {
+    sawTracks = true;
+    const got = await readTrack(pickTrack(pageTracks)!);
+    if (got) return got;
+  }
+
+  // 3. The "Show transcript" panel youtube.com opens under a video.
+  const params = html.match(/"getTranscriptEndpoint":\{"params":"([^"]+)"/)?.[1];
+  if (params) {
+    const res = await fetcher(`https://www.youtube.com/youtubei/v1/get_transcript?key=${key}&prettyPrint=false`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: webVersion, hl: "en", gl: "US" } }, params }),
+      signal: AbortSignal.timeout(15_000),
+    }).catch(() => null);
+    if (res?.ok) {
+      const segments = segmentsFromTranscriptPanel(await res.json().catch(() => null));
+      if (segments.length) return { segments, language: "en", auto: true };
+      refusals.push("transcript panel: empty");
+    } else refusals.push(`transcript panel: ${res?.status ?? "no answer"}`);
+    sawTracks = true;
+  }
+
+  const botty = pageBlocked || refusals.some((r) => /bot|LOGIN_REQUIRED|UNPLAYABLE|empty|403|401/i.test(r));
+  if (!sawTracks && !botty) throw new NoCaptions("This video has no captions, not even automatic ones (yet).");
+  const bots = refusals.filter((r) => /bot/i.test(r)).length;
+  throw new Blocked(
+    bots && bots >= refusals.length - 1
+      ? `YouTube wants this server to prove it isn't a bot — all ${refusals.length} ways in were refused.`
+      : `YouTube is refusing this server (${refusals.slice(0, 3).join("; ") || "bot check"}).`,
+  );
 }
 
 // ── storage ───────────────────────────────────────────────────────────────
@@ -233,12 +308,14 @@ export async function saveTranscript(videoId: string, title: string, segments: S
   );
 }
 
-async function saveFailure(videoId: string, message: string): Promise<void> {
+async function saveFailure(videoId: string, message: string, blocked: boolean): Promise<void> {
+  // A refusal doesn't count against the video: it's tried again next hour.
   await pool.query(
-    `INSERT INTO transcripts (video_id, error, attempts, tried_at) VALUES ($1, $2, 1, now())
-     ON CONFLICT (video_id) DO UPDATE SET error = $2, attempts = transcripts.attempts + 1, tried_at = now()
+    `INSERT INTO transcripts (video_id, error, attempts, tried_at, blocked) VALUES ($1, $2, CASE WHEN $3 THEN 0 ELSE 1 END, now(), $3)
+     ON CONFLICT (video_id) DO UPDATE SET error = $2, blocked = $3, tried_at = now(),
+       attempts = CASE WHEN $3 THEN transcripts.attempts ELSE transcripts.attempts + 1 END
      WHERE transcripts.segments IS NULL`,
-    [videoId, message],
+    [videoId, message, blocked],
   );
 }
 
@@ -309,7 +386,9 @@ export async function syncTranscripts(fetcher: Fetcher = fetch, limit = PER_RUN)
   const { rows } = await pool.query<{ video_id: string; title: string }>(
     `SELECT u.video_id, u.title FROM uploads u LEFT JOIN transcripts t ON t.video_id = u.video_id
       WHERE u.channel = ANY($1) AND u.published_at < now() - interval '3 hours'
-        AND (t.video_id IS NULL OR (t.segments IS NULL AND t.tried_at < now() - LEAST(power(2, t.attempts - 1), 7) * interval '1 day'))
+        AND (t.video_id IS NULL OR (t.segments IS NULL AND (
+              (t.blocked AND t.tried_at < now() - interval '50 minutes')
+           OR (NOT t.blocked AND t.tried_at < now() - LEAST(power(2, t.attempts - 1), 7) * interval '1 day'))))
       ORDER BY u.published_at DESC LIMIT $2`,
     [channels, limit],
   );
@@ -324,7 +403,7 @@ export async function syncTranscripts(fetcher: Fetcher = fetch, limit = PER_RUN)
     } catch (err) {
       failed += 1;
       const message = err instanceof Error ? err.message : "Couldn't read the captions.";
-      await saveFailure(row.video_id, message);
+      await saveFailure(row.video_id, message, err instanceof Blocked);
       if (err instanceof Blocked) {
         strikes += 1;
         // Three refusals in a row: stop for this hour rather than dig deeper.
@@ -340,7 +419,7 @@ export async function syncTranscripts(fetcher: Fetcher = fetch, limit = PER_RUN)
 /** How far the catalogue has got: videos, with transcripts, and failing. */
 export async function transcriptCoverage(channels: string[]): Promise<{ videos: number; done: number; failing: number }> {
   const { rows } = await pool.query<{ videos: string; done: string; failing: string }>(
-    `SELECT count(*) AS videos, count(t.segments) AS done, count(*) FILTER (WHERE t.segments IS NULL AND t.error IS NOT NULL) AS failing
+    `SELECT count(*) AS videos, count(t.segments) AS done, count(*) FILTER (WHERE t.segments IS NULL AND t.error IS NOT NULL AND NOT t.blocked) AS failing
        FROM uploads u LEFT JOIN transcripts t ON t.video_id = u.video_id WHERE u.channel = ANY($1)`,
     [channels],
   );

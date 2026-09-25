@@ -245,8 +245,12 @@ first, so the whole back catalogue fills in over a few days. The coverage
 bar shows how far it's got. (The YouTube API key can't do this: Google only
 lets the channel owner, signed in, download captions through the API.)
 
-If YouTube turns this server away (it sometimes blocks cloud servers), the
-panel says so and it tries again the next hour. Any video's transcript can
+YouTube sometimes asks cloud servers to prove they aren't bots. So each
+video is tried several ways: as the Android app, the iPhone app, the TV
+and embedded players, the watch page's own caption list, and finally the
+"Show transcript" panel under a video. Whichever way last worked goes
+first. If every way is refused, the panel says so, and those videos are
+tried again the next hour: a refusal never counts against the video. Any video's transcript can
 also be added by hand on its page: in YouTube Studio → Subtitles → ⋮ →
 Download, then drop the .srt/.vtt/.sbv on the video's page, or paste plain
 text.

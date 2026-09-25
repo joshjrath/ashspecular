@@ -817,6 +817,29 @@ t("no caption tracks: says so", await err(fakeYT({ player: { playabilityStatus: 
 t("an empty caption file reads as a refusal", await err(fakeYT({ player: okPlayer, captions: "" })), "blocked");
 t("a bot check reads as a refusal", await err(fakeYT({ player: { playabilityStatus: { status: "LOGIN_REQUIRED", reason: "Sign in to confirm you're not a bot" } } })), "blocked");
 t("429 reads as a refusal", await err(fakeYT({ status: 429 })), "blocked");
+// Android turned away as a bot, the iPhone app let through.
+const perClient = (async (u: string | URL, init?: RequestInit) => {
+  const url = String(u);
+  if (url.startsWith("https://www.youtube.com/watch")) return new Response(`{"INNERTUBE_API_KEY":"K"}`);
+  if (url.includes("/player")) {
+    const name = JSON.parse(String(init?.body)).context.client.clientName;
+    return new Response(JSON.stringify(name === "IOS" ? okPlayer : { playabilityStatus: { status: "LOGIN_REQUIRED", reason: "Sign in to confirm you're not a bot" } }));
+  }
+  return new Response(classic);
+}) as unknown as typeof fetch;
+t("a bot check on one app, another app gets through", (await fetchTranscript("x", perClient)).segments.length, 2);
+// Every app turned away, the "Show transcript" panel still answers.
+const panelOnly = (async (u: string | URL) => {
+  const url = String(u);
+  if (url.startsWith("https://www.youtube.com/watch")) return new Response(`{"INNERTUBE_API_KEY":"K","INNERTUBE_CLIENT_VERSION":"2.1"} "getTranscriptEndpoint":{"params":"CgtBQkM="}`);
+  if (url.includes("/player")) return new Response(JSON.stringify({ playabilityStatus: { status: "LOGIN_REQUIRED", reason: "bot" } }));
+  if (url.includes("/get_transcript")) return new Response(JSON.stringify({ actions: [{ updateEngagementPanelAction: { content: { transcriptRenderer: { body: { initialSegments: [
+    { transcriptSegmentRenderer: { startMs: "1000", endMs: "3500", snippet: { runs: [{ text: "what if gojo" }] } } },
+    { transcriptSegmentRenderer: { startMs: "3500", endMs: "5000", snippet: { runs: [{ text: "joined them" }] } } },
+  ] } } } } }] }));
+  return new Response("", { status: 404 });
+}) as unknown as typeof fetch;
+t("the transcript panel as a last way in", (await fetchTranscript("x", panelOnly)).segments, [{ s: 1, d: 2.5, t: "what if gojo" }, { s: 3.5, d: 1.5, t: "joined them" }]);
 t("the player's tracks, else the page's", (await fetchTranscript("x", fakeYT({ page: watchHtml, captions: classic }))).segments.length, 2);
 
 section("Scripts — how each video is built");
