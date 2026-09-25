@@ -64,6 +64,17 @@ export const CATEGORIES: Category[] = [
 export interface Channel {
   id: string;
   name: string;
+  /**
+   * The channel's own colour, distinct from every other channel's. Its
+   * category keeps its colour for category-level things — the chart, the
+   * tiles, the toggles — and the channel's name and dot wear this one.
+   *
+   * Generated, not picked: each reads as text on the white cards (4.5:1, and
+   * on the hover row) and as a dot on the dark rail (3:1), and the thirty are
+   * spread as far apart as those limits allow, with channels in the same
+   * category kept furthest apart — they are the ones shown side by side.
+   */
+  color: string;
   category: CategoryId;
   /** Code prefix for this channel's own sequence. Bits channels each have one. */
   codePrefix?: string;
@@ -88,45 +99,45 @@ export interface Channel {
  */
 export const CHANNELS: Channel[] = [
   // ── Gaming ──────────────────────────────────────────────────────────────
-  { id: "minecraft", name: "Specular Minecraft", category: "gaming", aliases: ["minecraft", "smp"] },
-  { id: "roblox", name: "Specular Roblox", category: "gaming", aliases: ["roblox"] },
+  { id: "minecraft", name: "Specular Minecraft", color: "#A35E16", category: "gaming", aliases: ["minecraft", "smp"] },
+  { id: "roblox", name: "Specular Roblox", color: "#047E67", category: "gaming", aliases: ["roblox"] },
 
   // ── Stories ─────────────────────────────────────────────────────────────
-  { id: "studios", name: "Specular Studios", category: "stories", aliases: ["studios", "specular studio"] },
-  { id: "anime", name: "Specular Anime", category: "stories" },
-  { id: "comics", name: "Specular Comics", category: "stories" },
-  { id: "animation", name: "Specular Animation", category: "stories" },
-  { id: "law", name: "Specular Law", category: "stories" },
-  { id: "manga", name: "Specular Manga", category: "stories" },
-  { id: "fnaf", name: "Specular FNAF", category: "stories", aliases: ["fnaf", "five nights"] },
-  { id: "force", name: "Specular Force", category: "stories" },
-  { id: "verse", name: "Specular Verse", category: "stories" },
-  { id: "horror", name: "Specular Horror", category: "stories" },
-  { id: "you", name: "Specular YOU", category: "stories" },
-  { id: "battles", name: "Specular Battles", category: "stories" },
-  { id: "survives", name: "Specular Survives", category: "stories" },
-  { id: "documentaries", name: "Specular Documentaries", category: "stories", aliases: ["specular docs"] },
+  { id: "studios", name: "Specular Studios", color: "#0B66D6", category: "stories", aliases: ["studios", "specular studio"] },
+  { id: "anime", name: "Specular Anime", color: "#CB3904", category: "stories" },
+  { id: "comics", name: "Specular Comics", color: "#1C7F02", category: "stories" },
+  { id: "animation", name: "Specular Animation", color: "#A83DAA", category: "stories" },
+  { id: "law", name: "Specular Law", color: "#327780", category: "stories" },
+  { id: "manga", name: "Specular Manga", color: "#8A691B", category: "stories" },
+  { id: "fnaf", name: "Specular FNAF", color: "#8D5E76", category: "stories", aliases: ["fnaf", "five nights"] },
+  { id: "force", name: "Specular Force", color: "#7957D9", category: "stories" },
+  { id: "verse", name: "Specular Verse", color: "#C93573", category: "stories" },
+  { id: "horror", name: "Specular Horror", color: "#5C66A5", category: "stories" },
+  { id: "you", name: "Specular YOU", color: "#527446", category: "stories" },
+  { id: "battles", name: "Specular Battles", color: "#A45540", category: "stories" },
+  { id: "survives", name: "Specular Survives", color: "#885AAA", category: "stories" },
+  { id: "documentaries", name: "Specular Documentaries", color: "#0275B3", category: "stories", aliases: ["specular docs"] },
 
   // ── Reading (each opens its day's batch automatically, like bits) ───────
-  { id: "dc", name: "Specular DC", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "torch", name: "Specular Torch", category: "reading", codePrefix: "RTO", aliases: ["torch"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "action", name: "Specular Action", category: "reading", codePrefix: "RAC", aliases: ["action"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "balls", name: "Specular Balls", category: "reading", codePrefix: "RBA", aliases: ["balls"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "nove", name: "Specular Nove", category: "reading", codePrefix: "RNO", aliases: ["nove"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "dc", name: "Specular DC", color: "#B75015", category: "reading", codePrefix: "RDC", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "torch", name: "Specular Torch", color: "#047A40", category: "reading", codePrefix: "RTO", aliases: ["torch"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "action", name: "Specular Action", color: "#7A6894", category: "reading", codePrefix: "RAC", aliases: ["action"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "balls", name: "Specular Balls", color: "#A54881", category: "reading", codePrefix: "RBA", aliases: ["balls"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "nove", name: "Specular Nove", color: "#6D7504", category: "reading", codePrefix: "RNO", aliases: ["nove"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
 
   // ── Bits (each opens a numbered batch daily) ────────────────────────────
   // Ids are unchanged from before the rename: batch keys are built from them.
-  { id: "studios_bits", name: "Specular Studios Bits", category: "bits", codePrefix: "SSB", aliases: ["studios bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "anime_bits", name: "Specular Anime Bits", category: "bits", codePrefix: "SNB", aliases: ["anime bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "fnaf_bits", name: "Specular FNAF Bits", category: "bits", codePrefix: "SFB", aliases: ["fnaf bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "animation_bits", name: "Specular Animation Bits", category: "bits", codePrefix: "SAB", aliases: ["animation bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "gaming_bits", name: "Specular Gaming Bits", category: "bits", codePrefix: "SGB", aliases: ["gaming bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "undertale_bits", name: "Specular Undertale Bits", category: "bits", codePrefix: "SUB", aliases: ["undertale bits", "undertale"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
-  { id: "nk_bits", name: "Specular & Kay Bits", category: "bits", codePrefix: "SKB", aliases: ["nk bits", "specular nk bits", "kay bits", "specular and kay bits", "specular & kay"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "studios_bits", name: "Specular Studios Bits", color: "#954BC7", category: "bits", codePrefix: "SSB", aliases: ["studios bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "anime_bits", name: "Specular Anime Bits", color: "#4B781A", category: "bits", codePrefix: "SNB", aliases: ["anime bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "fnaf_bits", name: "Specular FNAF Bits", color: "#BD404D", category: "bits", codePrefix: "SFB", aliases: ["fnaf bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "animation_bits", name: "Specular Animation Bits", color: "#406D94", category: "bits", codePrefix: "SAB", aliases: ["animation bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "gaming_bits", name: "Specular Gaming Bits", color: "#8B6143", category: "bits", codePrefix: "SGB", aliases: ["gaming bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "undertale_bits", name: "Specular Undertale Bits", color: "#BB3B95", category: "bits", codePrefix: "SUB", aliases: ["undertale bits", "undertale"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
+  { id: "nk_bits", name: "Specular & Kay Bits", color: "#5566CD", category: "bits", codePrefix: "SKB", aliases: ["nk bits", "specular nk bits", "kay bits", "specular and kay bits", "specular & kay"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } },
 
   // ── Movies ──────────────────────────────────────────────────────────────
-  { id: "main", name: "Specular", category: "movies", exactOnly: true, aliases: ["specular main", "main channel"] },
-  { id: "sleep", name: "Specular Sleep", category: "movies" },
+  { id: "main", name: "Specular", color: "#A75464", category: "movies", exactOnly: true, aliases: ["specular main", "main channel"] },
+  { id: "sleep", name: "Specular Sleep", color: "#955890", category: "movies" },
 ];
 
 export const CHANNEL_NAMES = CHANNELS.map((c) => c.name);

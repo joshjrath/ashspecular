@@ -29,6 +29,12 @@ const LABELS: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.id, c.label]),
 );
 
+/** A channel's own colour, falling back to its category's for an unknown name. */
+function channelColour(name: string | null): string {
+  const ch = CHANNELS.find((c) => c.name === name);
+  return ch ? ch.color : "#8A8A93";
+}
+
 function colourOf(category: string): string {
   return COLOURS[category] ?? "#8A8F98";
 }
@@ -234,7 +240,8 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   grid-column: 1; color: var(--ink3); font-size: 12.5px; display: flex; gap: 10px;
   flex-wrap: wrap; align-items: center; padding-left: 20px; letter-spacing: -0.005em;
 }
-.row .meta .chan { color: var(--c); font-weight: 700; }
+.row .meta .chan { color: var(--ch); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.row .meta .chan i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); display: block; }
 .row .when { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row .when .d { font-family: var(--display); font-size: 14.5px; font-weight: 600; letter-spacing: -0.022em; }
 .row .when .z { color: var(--ink3); font-size: 11.5px; }
@@ -261,7 +268,7 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   letter-spacing: -0.012em;
 }
 .chanlist a:hover { background: #26262A; color: #fff; }
-.chanlist a .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+.chanlist a .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
 .chanlist .n { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 12.5px; opacity: .7; }
 .back { color: #6A6A73; font-size: 13px; }
 .brief {
@@ -336,7 +343,8 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cattoggle.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
 .cattoggle.all { background: transparent; color: #9A9AA3; }
 .draghint { color: #6A6A73; font-size: 12px; margin-left: auto; }
-.cal .chip .dot { width: 6px; height: 6px; border-radius: 2px; background: var(--c); flex: none; }
+.cal .chip { box-shadow: inset 3px 0 0 var(--c); }
+.cal .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
 .cal .more { font-size: 11px; color: var(--ink3); padding: 2px 8px; font-weight: 700; }
 .cal .more:hover { color: var(--ink); }
@@ -376,6 +384,16 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .tick.remove button:hover { border-color: var(--late); color: var(--late); }
 .tick.restore button:hover { border-color: var(--lf); color: var(--lf); }
 
+/* ── sorting ─────────────────────────────────────────────────────────────── */
+.sortbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 4px 14px; }
+.sortlabel { color: #6A6A73; font-size: 12px; font-weight: 600; margin-right: 4px; }
+.sortpill {
+  padding: 7px 13px; border-radius: 999px; background: var(--rail); color: #9A9AA3;
+  font-size: 12.5px; font-weight: 600;
+}
+.sortpill:hover { color: #fff; background: #26262A; }
+.sortpill.on { background: var(--yellow); color: #101012; }
+
 /* ── recurring ─────────────────────────────────────────────────────────── */
 .batches { display: flex; flex-direction: column; gap: 8px; }
 .batch {
@@ -386,7 +404,7 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .batch .who { display: flex; align-items: center; gap: 12px; min-width: 180px; }
 .batch .tick button { width: 26px; height: 26px; font-size: 12px; }
 .tick-space { width: 26px; flex: none; }
-.batch .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); flex: none; }
+.batch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; }
 .batch .name { font-weight: 600; min-width: 160px; }
 .batch .bar {
   flex: 1; height: 7px; border-radius: 999px; background: #E2E2E5; overflow: hidden; min-width: 60px;
@@ -631,7 +649,9 @@ function row(r: StoredRecord): string {
 
   const meta: string[] = [];
   if (r.channel) {
-    meta.push(`<a class="chan" href="/channel/${encodeURIComponent(r.channel)}">${esc(r.channel)}</a>`);
+    meta.push(
+      `<a class="chan" style="--ch:${channelColour(r.channel)}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`,
+    );
   } else {
     meta.push(`<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`);
   }
@@ -889,7 +909,7 @@ export function renderDashboard(
 
   const chanList = CHANNELS.map((ch) => {
     const n = data.channels[ch.name] ?? 0;
-    return `<a href="/channel/${encodeURIComponent(ch.name)}" style="--c:${colourOf(ch.category)}">
+    return `<a href="/channel/${encodeURIComponent(ch.name)}" style="--c:${ch.color}">
       <span class="dot"></span>${esc(ch.name)}<span class="n">${n}</span></a>`;
   }).join("");
 
@@ -930,11 +950,13 @@ export function renderList(
   title: string,
   subtitle: string,
   list: StoredRecord[],
+  sort?: SortState,
 ): string {
+  const shown = sort ? sortRecords(list, sort.key, sort.dir) : list;
   return layout(
     title,
     shell,
-    `${pageHeader(title)}${rows(list, subtitle)}`,
+    `${pageHeader(title)}${list.length > 1 ? sortBar(sort) : ""}${rows(shown, subtitle)}`,
   );
 }
 
@@ -945,13 +967,14 @@ export function renderCategory(
   id: string,
   list: StoredRecord[],
   channels: Record<string, number>,
+  sort?: SortState,
 ): string {
   const chans = CHANNELS.filter((c) => c.category === id);
   const chips = chans.length
     ? `<div class="chanlist" style="margin-bottom:18px">${chans
         .map(
           (ch) =>
-            `<a href="/channel/${encodeURIComponent(ch.name)}" style="--c:${colourOf(id)}">
+            `<a href="/channel/${encodeURIComponent(ch.name)}" style="--c:${ch.color}">
               <span class="dot"></span>${esc(ch.name)}<span class="n">${channels[ch.name] ?? 0}</span></a>`,
         )
         .join("")}</div>`
@@ -960,7 +983,10 @@ export function renderCategory(
   return layout(
     label,
     shell,
-    `${pageHeader(label)}${chips}${rows(list, `Nothing open in ${label}.`)}`,
+    `${pageHeader(label)}${chips}${list.length > 1 ? sortBar(sort) : ""}${rows(
+      sort ? sortRecords(list, sort.key, sort.dir) : list,
+      `Nothing open in ${label}.`,
+    )}`,
   );
 }
 
@@ -1083,6 +1109,89 @@ export function renderEmptyState(): string {
 
 export type { CategoryId };
 
+
+// ── sorting lists ───────────────────────────────────────────────────────────
+
+export type SortKey = "air" | "code" | "due" | "channel" | "title" | "filed";
+export type SortDir = "asc" | "desc";
+
+export const SORTS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> = [
+  { key: "air", label: "Air date", defaultDir: "asc" },
+  { key: "code", label: "Video #", defaultDir: "asc" },
+  { key: "due", label: "Deadline", defaultDir: "asc" },
+  { key: "channel", label: "Channel", defaultDir: "asc" },
+  { key: "title", label: "Title", defaultDir: "asc" },
+  { key: "filed", label: "Newest", defaultDir: "desc" },
+];
+
+/** "VIDEO-011" → ["VIDEO", 11], so VIDEO-9 sorts before VIDEO-10. */
+function codeParts(code: string | null): [string, number] | null {
+  const m = code?.match(/^([A-Z]+)-?(\d+)$/i);
+  return m ? [m[1]!.toUpperCase(), Number(m[2])] : null;
+}
+
+/**
+ * Sort a list by one key. Records without that value — no air date, no code —
+ * always go to the bottom whichever way it runs, so flipping the direction
+ * reorders the real values instead of burying them under the blanks.
+ */
+export function sortRecords(list: StoredRecord[], key: SortKey, dir: SortDir): StoredRecord[] {
+  const sign = dir === "asc" ? 1 : -1;
+  const due = (r: StoredRecord) => (r.voDue ?? r.deadline ?? r.scriptDue)?.getTime() ?? null;
+
+  const value = (r: StoredRecord): string | number | [string, number] | null => {
+    switch (key) {
+      case "air": return r.airDate;
+      case "code": return codeParts(r.code);
+      case "due": return due(r);
+      case "channel": return r.channel?.toLowerCase() ?? null;
+      case "title": return displayTitle(r).toLowerCase();
+      case "filed": return r.createdAt.getTime();
+    }
+  };
+
+  const cmp = (a: unknown, b: unknown): number => {
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return a[0] === b[0] ? (a[1] as number) - (b[1] as number) : String(a[0]).localeCompare(String(b[0]));
+    }
+    if (typeof a === "number" && typeof b === "number") return a - b;
+    return String(a).localeCompare(String(b), "en", { numeric: true });
+  };
+
+  return [...list].sort((x, y) => {
+    const a = value(x);
+    const b = value(y);
+    if (a === null && b === null) return y.createdAt.getTime() - x.createdAt.getTime();
+    if (a === null) return 1;
+    if (b === null) return -1;
+    const c = cmp(a, b) * sign;
+    // Ties fall back to the air date, then the newest filed.
+    if (c !== 0) return c;
+    if (key !== "air" && x.airDate && y.airDate && x.airDate !== y.airDate) return x.airDate < y.airDate ? -1 : 1;
+    return y.createdAt.getTime() - x.createdAt.getTime();
+  });
+}
+
+export interface SortState {
+  key: SortKey;
+  dir: SortDir;
+  /** The page's own path and query, ending in ? or &, for the sort links. */
+  base: string;
+}
+
+/** The pills above a list. The active one shows its direction; pressing it again reverses. */
+function sortBar(sort: SortState | undefined): string {
+  if (!sort) return "";
+  const pills = SORTS.map((o) => {
+    const on = o.key === sort.key;
+    const dir = on ? (sort.dir === "asc" ? "desc" : "asc") : o.defaultDir;
+    const arrow = on ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
+    return `<a class="sortpill${on ? " on" : ""}" href="${esc(sort.base)}sort=${o.key}&amp;dir=${dir}"
+      aria-pressed="${on}">${esc(o.label)}${arrow}</a>`;
+  }).join("");
+  return `<div class="sortbar"><span class="sortlabel">Sort</span>${pills}</div>`;
+}
+
 // ── the content calendar ──────────────────────────────────────────────────
 
 /** Sunday-first, matching how the studio's week is written. */
@@ -1157,7 +1266,7 @@ export function renderCalendar(
         .slice(0, 3)
         .map(
           (e) => `<a class="chip" draggable="true" data-id="${e.record.id}"
-            style="--c:${colourOf(e.record.category)}"
+            style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
             href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
             <span class="dot"></span><span class="t">${esc(displayTitle(e.record))}</span>
           </a>`,
@@ -1336,7 +1445,7 @@ export function renderRecurring(
            </form>`
         : `<span class="tick-space"></span>`;
 
-    return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${colourOf(categoryOf(r.channel))}">
+    return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${colourOf(categoryOf(r.channel))};--ch:${channelColour(r.channel)}">
       <a class="who" href="/channel/${encodeURIComponent(r.channel)}">
         <span class="dot"></span><span class="name">${esc(r.channel)}</span>
       </a>

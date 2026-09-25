@@ -19,7 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, shiftMonth } from "../src/web/page.js";
+import { calendarGrid, shiftMonth, sortRecords } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
@@ -348,6 +348,56 @@ t("late evening ET is still today, not tomorrow in UTC", relativeDay("2026-09-25
 
 t("the five reading channels open daily", CHANNELS.filter((c) => c.category === "reading").every((c) => c.recurring?.perDay === 1), true);
 t("twelve recurring channels in all", CHANNELS.filter((c) => c.recurring).length, 12);
+
+// ── channel colours ───────────────────────────────────────────────────────
+section("channel colours");
+
+const linear = (hex: string) =>
+  [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+const luminance = (hex: string) => {
+  const [r, g, b] = linear(hex);
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+const ratio = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+};
+
+t("every channel has a colour", CHANNELS.every((c) => /^#[0-9A-F]{6}$/i.test(c.color)), true);
+t("all 30 are different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, 30);
+t("none reuses a category colour", CHANNELS.some((c) => CATEGORIES.some((k) => k.color.toUpperCase() === c.color.toUpperCase())), false);
+t("each reads as text on the white cards (4.5:1)", CHANNELS.filter((c) => ratio(c.color, "#FFFFFF") < 4.5).map((c) => c.name), []);
+t("and on the hover row (4.5:1)", CHANNELS.filter((c) => ratio(c.color, "#F4F4F5") < 4.5).map((c) => c.name), []);
+t("each shows as a dot on the dark rail (3:1)", CHANNELS.filter((c) => ratio(c.color, "#161618") < 3).map((c) => c.name), []);
+t("category colours are unchanged", CATEGORIES.map((c) => c.color), ["#35986A", "#4A5CD4", "#CE7118", "#AC63C8", "#A63F66"]);
+
+// ── sorting lists ─────────────────────────────────────────────────────────
+section("sorting");
+
+const sortRec = (code: string | null, airDate: string | null, vo: string | null, title: string, filed: string) =>
+  ({
+    code, airDate, title, voDue: vo ? new Date(vo) : null, deadline: null, scriptDue: null,
+    channel: "Specular Studios", createdAt: new Date(filed), raw: "", note: null, kind: "assignment",
+  }) as unknown as Parameters<typeof sortRecords>[0][number];
+
+const sample = [
+  sortRec("VIDEO-25", "2026-10-07", "2026-10-01T23:59:00-04:00", "Iron Man", "2026-09-01"),
+  sortRec("VIDEO-9", "2026-09-30", "2026-09-24T23:59:00-04:00", "Spider-Man", "2026-09-03"),
+  sortRec(null, null, null, "A loose note", "2026-09-05"),
+  sortRec("VIDEO-10", "2026-09-26", "2026-09-20T23:59:00-04:00", "Avengers", "2026-09-02"),
+];
+const codes = (key: Parameters<typeof sortRecords>[1], dir: Parameters<typeof sortRecords>[2]) =>
+  sortRecords(sample, key, dir).map((r) => r.code ?? "none");
+
+t("air date, soonest first", codes("air", "asc"), ["VIDEO-10", "VIDEO-9", "VIDEO-25", "none"]);
+t("video number counts, not spells: 9 before 10", codes("code", "asc"), ["VIDEO-9", "VIDEO-10", "VIDEO-25", "none"]);
+t("reversed, blanks still at the bottom", codes("code", "desc"), ["VIDEO-25", "VIDEO-10", "VIDEO-9", "none"]);
+t("deadline", codes("due", "asc"), ["VIDEO-10", "VIDEO-9", "VIDEO-25", "none"]);
+t("title A–Z", sortRecords(sample, "title", "asc").map((r) => r.title), ["A loose note", "Avengers", "Iron Man", "Spider-Man"]);
+t("newest filed first", codes("filed", "desc"), ["none", "VIDEO-9", "VIDEO-10", "VIDEO-25"]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

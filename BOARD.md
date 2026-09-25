@@ -50,6 +50,22 @@ is awkward, or for a date weeks out.
 Dates read M/D/YYYY everywhere, and every air date carries a live countdown:
 "airs 9/28/2026 · in 3 days", turning amber inside three days.
 
+**Colour.** Each of the five categories keeps its colour, shown as a rounded
+square — on the chart, the tiles, the toggles and beside every title. Each of
+the thirty channels has its own colour on top of that, shown as a circle and
+on the channel's name. Square is category, circle is channel.
+
+The channel colours were generated rather than picked: every one reads as text
+on the white cards (4.5:1, on the grey hover row too) and as a dot on the dark
+rail (3:1), and the thirty are spread as far apart as those limits allow, with
+channels in the same category kept furthest from each other. The tests check
+all of that, so a hand-edited colour that fails it is caught.
+
+**Sort** above every list — air date, video number, deadline, channel, title,
+newest. Pressing the active one reverses it. Blanks (no air date, no code)
+stay at the bottom either way, video numbers count rather than spell (VIDEO-9
+before VIDEO-10), and the choice is remembered across pages.
+
 **Channels** — every channel with its open count. Click one and you get
 everything filed under it, cleared items included.
 

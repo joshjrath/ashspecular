@@ -40,7 +40,7 @@ import {
 } from "../parse/derive.js";
 import { batchStatus, openBatchesFor, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import type { Shell } from "./page.js";
+import { SORTS, type Shell, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -210,6 +210,33 @@ export async function startWeb(): Promise<void> {
     },
   );
 
+  /**
+   * The list sort: an explicit ?sort= wins and is remembered in a cookie, so
+   * every list opens sorted the way you last chose. The links keep whatever
+   * else the page's address carried — a search keeps its words.
+   */
+  function listSort(
+    request: import("fastify").FastifyRequest,
+    reply: import("fastify").FastifyReply,
+  ): SortState {
+    const q = request.query as Record<string, string | undefined>;
+    const [savedKey, savedDir] = (request.cookies.list_sort ?? "").split(":");
+    const valid = (k: string | undefined): k is SortKey => SORTS.some((o) => o.key === k);
+    const key: SortKey = valid(q.sort) ? q.sort : valid(savedKey) ? savedKey : "air";
+    const dirRaw = valid(q.sort) ? q.dir : savedDir;
+    const dir: SortDir = dirRaw === "desc" || dirRaw === "asc"
+      ? dirRaw
+      : SORTS.find((o) => o.key === key)!.defaultDir;
+    if (valid(q.sort)) {
+      reply.setCookie("list_sort", `${key}:${dir}`, { path: "/", sameSite: "lax", httpOnly: true, maxAge: 60 * 60 * 24 * 365 });
+    }
+    const keep = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (k !== "sort" && k !== "dir" && v !== undefined) keep.set(k, v);
+    const path = request.url.split("?")[0]!;
+    const kept = keep.toString();
+    return { key, dir, base: `${path}?${kept ? `${kept}&` : ""}` };
+  }
+
   app.get<{ Querystring: { q?: string } }>("/search", async (request, reply) => {
     const q = (request.query.q ?? "").trim();
     const s = await shell("");
@@ -222,34 +249,34 @@ export async function startWeb(): Promise<void> {
     const list = await search(q);
     return reply
       .type("text/html")
-      .send(renderList(s, `“${q}”`, `Nothing matches “${q}”.`, list));
+      .send(renderList(s, `“${q}”`, `Nothing matches “${q}”.`, list, listSort(request, reply)));
   });
 
   // The old address keeps working for anything that already links to it.
   app.get("/reviews", async (_req, reply) => reply.redirect("/revisions"));
 
-  app.get("/removed", async (_req, reply) => {
+  app.get("/removed", async (request, reply) => {
     const [s, list] = await Promise.all([shell("removed"), listRemoved()]);
     return reply
       .type("text/html")
-      .send(renderList(s, "Removed", "Nothing removed. Anything you take off the board lands here, to restore.", list));
+      .send(renderList(s, "Removed", "Nothing removed. Anything you take off the board lands here, to restore.", list, listSort(request, reply)));
   });
 
-  app.get("/revisions", async (_req, reply) => {
+  app.get("/revisions", async (request, reply) => {
     const [s, list] = await Promise.all([shell("reviews"), listReviews(100)]);
     return reply
       .type("text/html")
       .send(
-        renderList(s, "Revisions", "No Frame.io links yet. Forward one into the intake channel.", list),
+        renderList(s, "Revisions", "No Frame.io links yet. Forward one into the intake channel.", list, listSort(request, reply)),
       );
   });
 
-  app.get("/queue", async (_req, reply) => {
+  app.get("/queue", async (request, reply) => {
     const [s, grouped] = await Promise.all([shell("queue"), openByCategory()]);
     const all = CATEGORIES.flatMap((c) => grouped.get(c.id) ?? []).concat(
       grouped.get("unknown") ?? [],
     );
-    return reply.type("text/html").send(renderList(s, "Queue", "Nothing open.", all));
+    return reply.type("text/html").send(renderList(s, "Queue", "Nothing open.", all, listSort(request, reply)));
   });
 
   app.get("/recurring", async (_req, reply) => {
@@ -285,7 +312,7 @@ export async function startWeb(): Promise<void> {
     const [s, list] = await Promise.all([shell(known?.category ?? ""), listByChannel(name)]);
     return reply
       .type("text/html")
-      .send(renderList(s, name, `Nothing filed under ${name} yet.`, list));
+      .send(renderList(s, name, `Nothing filed under ${name} yet.`, list, listSort(request, reply)));
   });
 
   app.get<{ Params: { id: string } }>("/category/:id", async (request, reply) => {
@@ -293,7 +320,7 @@ export async function startWeb(): Promise<void> {
     const s = await shell(cat?.id ?? "");
     if (!cat) return reply.code(404).type("text/html").send(renderList(s, "Not found", "No such category.", []));
     const [list, channels] = await Promise.all([listByCategory(cat.id), channelCounts()]);
-    return reply.type("text/html").send(renderCategory(s, cat.label, cat.id, list, channels));
+    return reply.type("text/html").send(renderCategory(s, cat.label, cat.id, list, channels, listSort(request, reply)));
   });
 
   app.get<{ Params: { id: string } }>("/r/:id", async (request, reply) => {
