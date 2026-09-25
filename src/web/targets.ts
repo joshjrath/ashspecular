@@ -45,6 +45,6 @@ export const UPLOAD_CATEGORIES = CATEGORIES.map((c) => ({ id: c.id, label: c.lab
 export function describeTarget(category: CategoryId): string {
   const t = UPLOAD_TARGETS[category];
   if (t.kind === "every") return `one long-form upload every ${t.days} days per channel`;
-  if (t.kind === "daily") return "Shorts per channel per day, against each channel's daily number";
+  if (t.kind === "daily") return "Shorts per channel per day (days run 3 AM to 3 AM ET), against each channel's daily number";
   return "long-form uploads per channel · no posting target set";
 }

@@ -32,7 +32,7 @@ import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from ".
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
-import { relativeDay, usDate } from "../src/parse/derive.js";
+import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
 
 let pass = 0;
 let fail = 0;
@@ -717,6 +717,16 @@ t("Shorts: the Shorts-only list first", firstAsk, "https://www.youtube.com/feeds
 t("everything on that list is a Short", shorts.videos.every((v) => v.url.includes("/shorts/")), true);
 const fallback = await readShortsFeed("UCabcdefghijklmnopqrstuv", (async (u: string) => (String(u).includes("UUSH") ? new Response("", { status: 404 }) : new Response(shortAtom))) as unknown as typeof fetch);
 t("without that list, long-form videos are left out", fallback.videos.map((v) => v.videoId), ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
+
+section("Bits and Reading days run 3 AM to 3 AM");
+t("2:59 AM ET belongs to the day before", shortsDay(new Date("2026-09-26T02:59:00-04:00")), "2026-09-25");
+t("3:00 AM ET starts the new day", shortsDay(new Date("2026-09-26T03:00:00-04:00")), "2026-09-26");
+t("in winter too (EST)", shortsDay(new Date("2026-12-10T02:30:00-05:00")), "2026-12-09");
+const lateNight = dailyFor("Specular DC", [new Date("2026-09-25T20:00:00-04:00"), new Date("2026-09-26T01:30:00-04:00")], 5, new Date("2026-09-26T02:00:00-04:00"));
+t("a 1:30 AM Short counts toward yesterday, which is still 'today' until 3", [lateNight.today, lateNight.counts.get("2026-09-25")], [2, 2]);
+const after3 = dailyFor("Specular DC", [new Date("2026-09-26T01:30:00-04:00")], 5, new Date("2026-09-26T09:00:00-04:00"));
+t("after 3 AM it's a new day with nothing up yet", after3.today, 0);
+t("Stories still turn over at midnight", cadenceFor("Specular FNAF", [new Date("2026-09-26T01:30:00-04:00")], new Date("2026-09-26T09:00:00-04:00")).lastDay, "2026-09-26");
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

@@ -165,6 +165,12 @@ changes to suit it:
 | **Gaming, Movies** | long form only | none yet — tracked | the same lanes, no late gaps |
 | **Bits, Reading** | **Shorts only** | each channel's daily number (the Recurring page's `units`) | a heatmap: a row per channel, a square per day, shaded by how much of that day's number went up |
 
+**Bits and Reading days run 3 AM to 3 AM Eastern.** A Short posted at
+1:30 AM counts toward the day before, and until 3 AM the Uploads heatmap and
+the Recurring page are still on the day being finished. Gaming, Stories and
+Movies turn over at midnight. (`SHORTS_DAY_STARTS_HOUR` in
+`src/parse/derive.ts`.)
+
 Long form is read from each channel's long-form-only list, Shorts from its
 Shorts-only list, so the two never mix. Change a target in
 `src/web/targets.ts`. Channel links are per category, under *Channel links*

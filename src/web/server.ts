@@ -51,7 +51,7 @@ import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
-import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
+import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -85,7 +85,7 @@ async function shell(active: string): Promise<Shell> {
     lastIntake(),
     monthEntries(monthOf()),
     removedCount(),
-    openBatchCount(dateIn(ORG_TZ)),
+    openBatchCount(shortsDay()),
     behindCount().catch(() => null),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
@@ -556,7 +556,7 @@ export async function startWeb(): Promise<void> {
 
   // Today, and any day ahead — ?day= picks it, tomorrow by default.
   app.get<{ Querystring: { day?: string } }>("/recurring", async (request, reply) => {
-    const today = dateIn(ORG_TZ);
+    const today = shortsDay();
     const first = tomorrow();
     const picked = safeDate(request.query.day);
     const day = picked && picked >= first ? picked : first;

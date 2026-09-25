@@ -11,7 +11,7 @@
  * belongs to.
  */
 import { CATEGORIES, CHANNELS, channelInk, contrastRatio, type CategoryId } from "../catalog.js";
-import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, usDate } from "../parse/derive.js";
+import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
@@ -2708,7 +2708,8 @@ function dailyView(
   category: CategoryId,
   now: Date,
 ): string {
-  const today = dayOf(now);
+  // The Bits/Reading day: until 3 AM, "today" is still the day being finished.
+  const today = shortsDay(now);
   const byName = new Map(daily.map((d) => [d.channel, d]));
   const linked = channels.filter((c) => linkOf.get(c)?.youtubeId);
   const live = linked.map((c) => byName.get(c)).filter((d): d is DailyCadence => Boolean(d));
@@ -2806,7 +2807,7 @@ function dailyView(
         <td class="num">${d ? d.streak : "—"}</td>
         <td class="num">${d?.avg7 != null ? d.avg7.toFixed(1) : "—"}</td>
         <td class="num">${d?.hit30 != null ? `${Math.round(d.hit30 * 100)}%` : "—"}</td>
-        <td>${d?.last ? `${esc(usDate(dayOf(d.last)))} <small>${esc(relativeDay(dayOf(d.last)))}</small>` : "—"}</td>
+        <td>${d?.last ? `${esc(usDate(shortsDay(d.last)))} <small>${esc(relativeDay(shortsDay(d.last)))}</small>` : "—"}</td>
         <td class="num">${t ? `${esc(compactViews(Math.round(t.views)))} <small>${esc(t.basis)}</small>` : "—"}</td>
       </tr>`;
     })

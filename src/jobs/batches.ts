@@ -14,7 +14,9 @@
  */
 import { CHANNELS, type Channel } from "../catalog.js";
 import { pool } from "../db/pool.js";
-import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate } from "../parse/derive.js";
+import { DEADLINE_TIME, ORG_TZ, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
+
+export { shortsDay };
 
 /** Bits channels, in catalog order. */
 export function recurringChannels(): Channel[] {
@@ -35,7 +37,7 @@ export interface OpenResult {
  * Open every channel's batches for one day. Returns what it actually created,
  * so a scheduled run can stay quiet when there was nothing to do.
  */
-export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult> {
+export async function openBatchesFor(date = shortsDay()): Promise<OpenResult> {
   let opened = 0;
   let alreadyThere = 0;
 
@@ -120,9 +122,9 @@ export async function batchDays(
   return out;
 }
 
-/** Tomorrow, in the studio's zone. */
+/** Tomorrow, on the Bits/Reading day. */
 export function tomorrow(): string {
-  const d = new Date(`${dateIn(ORG_TZ)}T12:00:00Z`);
+  const d = new Date(`${shortsDay()}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }

@@ -1,6 +1,6 @@
 import type { CategoryId } from "../catalog.js";
 import type { DerivedRecord } from "../parse/derive.js";
-import { ORG_TZ } from "../parse/derive.js";
+import { ORG_TZ, SHORTS_DAY_STARTS_HOUR } from "../parse/derive.js";
 import type { Extraction } from "../parse/schema.js";
 import { pool } from "./pool.js";
 
@@ -344,9 +344,10 @@ const DUE = "COALESCE(vo_due, deadline, script_due)";
 /**
  * Open work that is live today. A recurring batch opened ahead for a later day
  * is real, but it isn't today's work: it stays on Recurring and the calendar,
- * and joins the dashboard, the lists and every count on the morning it's for.
+ * and joins the dashboard, the lists and every count when its day begins —
+ * 3 AM, the Bits/Reading day.
  */
-const LIVE = `NOT (batch_no IS NOT NULL AND air_date > (now() AT TIME ZONE '${ORG_TZ}')::date)`;
+const LIVE = `NOT (batch_no IS NOT NULL AND air_date > ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date)`;
 
 export interface Stats {
   late: number;

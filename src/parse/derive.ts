@@ -86,6 +86,18 @@ export function dateIn(zone: string, at: Date = new Date()): string {
   return f.format(at);
 }
 
+/**
+ * Bits and Reading run on a 3 AM day: a Short posted at 1:30 AM still counts
+ * toward the day before, and until 3 AM the Recurring page is still on the
+ * day being finished. Gaming, Stories and Movies turn over at midnight.
+ */
+export const SHORTS_DAY_STARTS_HOUR = 3;
+
+/** The Bits/Reading day a moment belongs to, in the studio's zone. */
+export function shortsDay(at: Date = new Date()): string {
+  return dateIn(ORG_TZ, new Date(at.getTime() - SHORTS_DAY_STARTS_HOUR * 3_600_000));
+}
+
 /** Shift a YYYY-MM-DD by whole days without touching clock time. */
 export function shiftDate(dateISO: string, days: number): string {
   const d = new Date(`${dateISO}T12:00:00Z`);

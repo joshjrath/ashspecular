@@ -9,7 +9,7 @@
  *   due      today is the fourth day — an upload today keeps the pace
  *   behind   more than four days since the last one, by that many days
  */
-import { ORG_TZ, dateIn } from "../parse/derive.js";
+import { ORG_TZ, dateIn, shortsDay } from "../parse/derive.js";
 
 export const STORIES_EVERY_DAYS = 4;
 
@@ -110,11 +110,12 @@ export interface DailyCadence {
   last: Date | null;
 }
 
+/** Counted on the Bits/Reading day, which turns over at 3 AM, not midnight. */
 export function dailyFor(channel: string, uploads: Date[], perDay: number, now: Date = new Date()): DailyCadence {
-  const today = dayOf(now);
+  const today = shortsDay(now);
   const counts = new Map<string, number>();
-  for (const u of uploads) counts.set(dayOf(u), (counts.get(dayOf(u)) ?? 0) + 1);
-  const first = uploads.length ? dayOf(new Date(Math.min(...uploads.map((u) => u.getTime())))) : null;
+  for (const u of uploads) counts.set(shortsDay(u), (counts.get(shortsDay(u)) ?? 0) + 1);
+  const first = uploads.length ? shortsDay(new Date(Math.min(...uploads.map((u) => u.getTime())))) : null;
   const met = (d: string) => (counts.get(d) ?? 0) >= perDay;
 
   let streak = met(today) ? 1 : 0;
