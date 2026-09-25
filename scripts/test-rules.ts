@@ -19,7 +19,7 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
@@ -464,6 +464,13 @@ t("bell: badge shows the unread count", /id="bellcount">1</.test(pages.dashboard
 t("status toggle: Complete shown off when hidden", /cattoggle st off[^>]*>[\s\S]*?Complete/.test(pages.calendar), true);
 t("calendar links carry the status filter", pages.calendar.includes("&amp;st=done"), true);
 t("week starts on Sunday", [weekStart("2026-09-23"), weekStart("2026-09-20"), weekStart("2026-09-26")], ["2026-09-20", "2026-09-20", "2026-09-20"]);
+
+const batchRec = { ...pinnedRec, id: 9, pinnedAt: null, batchNo: 1, batchTarget: 5, batchDone: 2, code: null,
+  title: "Specular FNAF Bits", channel: "Specular FNAF Bits", category: "bits", airDate: "2026-09-28" } as typeof pinnedRec;
+const batchDay = renderDay(shellFix, "2026-09-28", "posting", [{ date: "2026-09-28", list: [batchRec] }]);
+t("a batch card is its channel, no number", /class="t"[^>]*>(<i[^>]*><\/i>)?Specular FNAF Bits</.test(batchDay), true);
+t("no batch numbers anywhere on it", /batch \d|SFB-\d/.test(batchDay), false);
+t("in a list a batch carries its air date", renderList(shellFix, "Queue", "", [batchRec]).includes("Specular FNAF Bits · 9/28/2026"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

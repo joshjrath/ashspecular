@@ -1,8 +1,9 @@
 /**
  * The daily bits batches.
  *
- * Each bits channel opens a fixed number of numbered batches every day without
- * anyone sending a message. The opener is idempotent: every batch has a
+ * Each bits and reading channel opens its day's batch every morning without
+ * anyone sending a message. A batch has no number of its own — it is known by
+ * its channel and its air date. The opener is idempotent: every batch has a
  * synthetic key of channel + date + index, and the records table already makes
  * that column unique, so running this twice — on a schedule, at boot, or by
  * hand — can never produce a duplicate.
@@ -24,15 +25,6 @@ function key(channel: Channel, date: string, n: number): string {
   return `batch:${channel.id}:${date}:${n}`;
 }
 
-/** The highest batch number a channel has ever had. */
-async function lastBatchNo(channel: string): Promise<number> {
-  const { rows } = await pool.query<{ n: number | null }>(
-    `SELECT MAX(batch_no) AS n FROM records WHERE channel = $1`,
-    [channel],
-  );
-  return rows[0]?.n ?? 0;
-}
-
 export interface OpenResult {
   date: string;
   opened: number;
@@ -52,11 +44,10 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
     const dueAt = channel.recurring?.dueAt ?? DEADLINE_TIME;
     const deadline = instantIn(date, dueAt, ORG_TZ);
 
-    // Read the counter once per channel, then walk it forward locally.
-    let n = await lastBatchNo(channel.name);
-
+    // No running number: a batch is its channel and its day. The title is
+    // the channel alone; the board adds the air date wherever it shows one,
+    // so a batch dragged to another day never carries a stale date.
     for (let i = 1; i <= perDay; i += 1) {
-      n += 1;
       const { rowCount } = await pool.query(
         `INSERT INTO records (
            kind, category, channel, code, title, air_date, deadline, vo_source,
@@ -65,11 +56,11 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
          ON CONFLICT (source_message_id) DO NOTHING`,
         [
           channel.name,
-          channel.codePrefix ? `${channel.codePrefix}-${String(n).padStart(4, "0")}` : null,
-          `${channel.name} batch ${n}`,
+          null,
+          channel.name,
           date,
           deadline,
-          n,
+          i,
           key(channel, date, i),
           // A batch takes its channel's category — Reading batches are Reading.
           channel.category === "bits" ? "bits" : "update",
@@ -79,10 +70,7 @@ export async function openBatchesFor(date = dateIn(ORG_TZ)): Promise<OpenResult>
       );
 
       if (rowCount) opened += 1;
-      else {
-        alreadyThere += 1;
-        n -= 1; // nothing was created, so the counter must not advance
-      }
+      else alreadyThere += 1;
     }
   }
 

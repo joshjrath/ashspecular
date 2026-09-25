@@ -439,6 +439,10 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   line-height: 1.2; overflow-wrap: anywhere;
 }
 .dcard .t:hover { text-decoration: underline; }
+.dcard .t .chdot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--ch);
+  margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.16);
+}
 .dcard .chan {
   color: var(--ink, var(--ch)); font-weight: 700; font-size: 12.5px;
   display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
@@ -997,12 +1001,19 @@ function bell(notices: Notice[], seen: number): string {
   </script>`;
 }
 
+/** Where the date is already the column — a calendar cell, a day card. */
+function titleOnDay(r: StoredRecord): string {
+  return r.batchNo && r.channel ? r.channel : displayTitle(r);
+}
+
 /**
  * A row with no title of its own shows its own first line, not the parser's
  * note about it — "need 2 more before 6" is what you wrote and what you will
  * recognise; "Filed by the channel name only" is bookkeeping.
  */
 function displayTitle(r: StoredRecord): string {
+  // A recurring batch is its channel and its day, and nothing else.
+  if (r.batchNo && r.channel) return r.airDate ? `${r.channel} · ${usDate(r.airDate)}` : r.channel;
   if (r.title) return r.title;
   const firstLine = r.raw.split("\n").map((l) => l.trim()).find(Boolean);
   // A bare link says nothing the link chip beside it doesn't already say.
@@ -1869,7 +1880,7 @@ export function renderCalendar(
           (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}" draggable="true" data-id="${e.record.id}"
             style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
             href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
-            <span class="dot"></span><span class="t">${esc(displayTitle(e.record))}</span>
+            <span class="dot"></span><span class="t">${esc(titleOnDay(e.record))}</span>
           </a>`,
         )
         .join("");
@@ -2164,7 +2175,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
   if (r.stage) bits.push(esc(r.stage));
   if (r.version) bits.push(`v${r.version}`);
   if (r.batchTarget && r.batchTarget > 1) {
-    bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded`);
+    bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget}`);
   }
 
   return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" draggable="true" data-id="${r.id}"
@@ -2175,9 +2186,13 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
       ${bits.length ? `<span class="bits">${bits.join(" · ")}</span>` : ""}
       ${pinControl(r)}
     </div>
-    <a class="t" href="/r/${r.id}">${esc(displayTitle(r))}</a>
+    <a class="t" href="/r/${r.id}">${
+      r.batchNo && ch ? `<i class="chdot" style="--ch:${ch}"></i>` : ""
+    }${esc(titleOnDay(r))}</a>
     ${
-      r.channel && ch
+      r.batchNo
+        ? ""
+        : r.channel && ch
         ? `<a class="chan" style="--ch:${ch};--ink:${channelInk(ch)}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`
         : `<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`
     }

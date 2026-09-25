@@ -125,8 +125,10 @@ A row the parser wasn't sure about is flagged **needs a look**.
 ![Recurring](docs/recurring.png)
 
 Every bits channel and every reading channel opens its batch by itself each
-morning at 06:00 ET — twelve a day, shown as two groups. You send nothing. Numbers run continuously per channel, so "FNAF Bits batch 141" is
-that channel's 141st batch ever, not its 141st this month.
+morning at 06:00 ET — twelve a day, shown as two groups. You send nothing. A
+batch has no number: it is its channel and its day — "Specular FNAF Bits ·
+9/25/2026" in a list, just "Specular FNAF Bits" in a calendar cell or day
+column, where the date is already there.
 
 One batch per channel, twelve a day. To change that, edit `perDay` on the
 channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
