@@ -254,39 +254,56 @@ aside .search input:focus { outline: 0; border-color: var(--salmon); background:
   margin-left: auto; font-family: var(--display); font-weight: 700; font-size: 15px;
   color: var(--dim); font-variant-numeric: tabular-nums;
 }
-.rows { background: var(--card); border-radius: var(--r); padding: 10px; }
+.rows { background: var(--card); border-radius: var(--r); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+/* Two tight lines and a pill: title over whose-and-when, deadline at the right. */
 .row {
-  display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; align-items: center;
-  padding: 15px 18px 16px; border-radius: 18px; color: var(--ink);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
+  gap: 4px 14px; padding: 10px 12px 10px 14px; border-radius: 14px; color: var(--ink);
 }
 .row:hover { background: var(--sunk); }
 .row .title {
-  font-family: var(--display); font-weight: 600; font-size: 16px; letter-spacing: -0.028em;
-  display: flex; align-items: baseline; gap: 10px; min-width: 0;
+  grid-column: 1; font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: -0.022em;
+  display: flex; align-items: center; gap: 9px; min-width: 0; line-height: 1.3;
 }
-/* A forwarded message is often one long unbroken URL, which no amount of
-   column sizing will wrap on its own. */
-.row .title a { min-width: 0; overflow-wrap: anywhere; }
-.row .title .swatch { width: 10px; height: 10px; border-radius: 4px; background: var(--c); flex: none; transform: translateY(-1px); }
-.row .title .code {
-  color: var(--ink3); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums;
-  white-space: nowrap; flex: none;
-}
+.row .title a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .title a:hover { text-decoration: underline; text-decoration-color: var(--ink3); }
+.row .title .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
 .row .meta {
-  grid-column: 1; color: var(--ink3); font-size: 12.5px; display: flex; gap: 10px;
-  flex-wrap: wrap; align-items: center; padding-left: 20px; letter-spacing: -0.005em;
+  grid-column: 1; color: var(--ink3); font-size: 12px; display: flex; gap: 4px 12px;
+  flex-wrap: wrap; align-items: center; padding-left: 19px; min-width: 0;
 }
+.row .meta .code { color: var(--ink2); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 .row .meta .chan { color: var(--ink, var(--ch)); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 /* Every dot is the channel's exact colour. The hairline ring keeps a pale one
    (FNAF's yellow) visible and a dark one (Verse's navy) against the dark. */
-.row .meta .chan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); display: block;
+.row .meta .chan i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); display: block;
   box-shadow: 0 0 0 1px var(--ring); }
-.row .when { grid-row: span 2; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.row .when .d { font-family: var(--display); font-size: 14.5px; font-weight: 600; letter-spacing: -0.022em; }
-.row .when .z { color: var(--ink3); font-size: 11.5px; }
-.row .when .derived { color: var(--ink3); font-size: 11.5px; }
+.row .meta .lnk {
+  padding: 1px 8px; border-radius: 6px; background: var(--sunk); color: var(--ink2); font-weight: 600;
+  font-size: 11.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row:hover .meta .lnk { background: var(--raised); }
+.row .meta .lnk.frameio { background: rgba(91,108,240,.2); color: #B5BEF7; }
+.row .meta .lnk:hover { color: var(--ink); }
+.row .due {
+  grid-column: 2; grid-row: 1 / span 2; display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 6px 11px; border-radius: 10px; background: var(--sunk); color: var(--ink2);
+  font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.row:hover .due { background: var(--raised); }
+.row .due b { color: var(--ink); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.row .due .tm { color: var(--ink3); }
+.row .due em { font-style: normal; font-weight: 700; }
+.row .due.late { background: rgba(242,104,94,.13); color: #F6B1AB; }
+.row .due.late b, .row .due.late em { color: #FF8F86; }
+.row .due.late .tm { color: #D99D98; }
+.row .due.soon { background: rgba(238,154,85,.13); color: #F4C9A4; }
+.row .due.soon b, .row .due.soon em { color: #F8B377; }
+.row .due.soon .tm { color: #D9AE8B; }
+.row .due.none { color: var(--ink3); background: transparent; font-size: 12px; }
+.row .acts { grid-column: 3; grid-row: 1 / span 2; }
+.row .tick button { width: 28px; height: 28px; font-size: 12px; }
 .airs.soon { color: var(--warn); font-weight: 650; }
-.row .when .over { color: var(--late); font-size: 11.5px; font-weight: 700; }
 .pill { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 11px;
   background: var(--sunk); color: var(--ink2); font-weight: 600; }
 .empty {
@@ -596,9 +613,6 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .login button:hover { filter: brightness(1.06); }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
-.row .when { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
-.row .when > .stack { display: block; }
-.row .when .stack { text-align: right; }
 .acts { display: flex; gap: 6px; align-items: center; flex: none; }
 .tick { display: flex; }
 .tick button {
@@ -610,7 +624,8 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .tick button.on { background: #26805A; border-color: #26805A; color: #fff; }
 .row.cleared .title, .row.cleared .title .code { color: var(--ink3); }
 .row.cleared .title a { text-decoration: line-through; text-decoration-color: #6E6E78; }
-.row.cleared .meta, .row.cleared .meta .chan, .row.cleared .meta .airs, .row.cleared .meta .count { color: var(--ink3); }
+.row.cleared .meta, .row.cleared .meta .chan, .row.cleared .meta .airs, .row.cleared .meta .count, .row.cleared .meta .code { color: var(--ink3); }
+.row.cleared .due, .row.cleared .due b, .row.cleared .due .tm { color: var(--ink3); }
 .tick.remove button { font-size: 16px; }
 .tick.remove button:hover { border-color: var(--late); color: var(--late); }
 .tick.restore button:hover { border-color: #8D9BF2; color: #8D9BF2; }
@@ -727,17 +742,15 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   .chartscroll svg { width: 620px; max-width: none; }
   .legend { gap: 12px; font-size: 11.5px; }
 
-  /* One column: the title gets the whole width, the deadline sits under it. */
-  .rows { padding: 8px; border-radius: 20px; }
-  .row { grid-template-columns: 1fr; gap: 6px; padding: 13px 14px 14px; border-radius: 16px; }
-  .row .title { font-size: 15px; gap: 8px; }
-  .row .title .code { font-size: 12px; }
-  .row .meta { padding-left: 18px; gap: 8px; font-size: 12px; }
-  .row .when {
-    grid-row: auto; text-align: left; padding-left: 18px; display: flex;
-    gap: 5px 10px; flex-wrap: wrap; align-items: baseline; white-space: normal;
-  }
-  .row .when .d { font-size: 13.5px; }
+  /* Title and buttons on top, whose-and-when under, the deadline pill last. */
+  .rows { padding: 6px; border-radius: 20px; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; padding: 11px 10px 12px 12px; }
+  .row .title { grid-row: 1; }
+  .row .title a { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .row .acts { grid-column: 2; grid-row: 1; }
+  .row .meta { grid-column: 1 / -1; grid-row: 2; }
+  .row .due { grid-column: 1 / -1; grid-row: 3; justify-self: start; margin: 2px 0 0 19px; padding: 4px 9px; font-size: 12px; }
+  .row { gap: 3px 10px; padding: 10px 10px 11px 12px; }
 
   .group > .head { margin: 16px 0 10px; padding: 0 6px; }
   .chanlist a { padding: 9px 14px; font-size: 13px; }
@@ -1130,13 +1143,18 @@ function displayTitle(r: StoredRecord): string {
   return r.note ?? "(untitled)";
 }
 
-/** Title · Channel · Needs VO · Deadline — the spine every record shares. */
+/**
+ * A task as one compact row: what it is on top, whose it is and when it airs
+ * underneath, and a single deadline pill on the right. Stage, word count and
+ * the second time zone live on the record's own page (and in the pill's
+ * tooltip) — on a list they were only taking up room.
+ */
 function row(r: StoredRecord): string {
   const c = colourOf(r.category);
   const title = displayTitle(r);
-  const code = r.code ? `<span class="code">${esc(r.code)}</span>` : "";
 
   const meta: string[] = [];
+  if (r.code) meta.push(`<span class="code">${esc(r.code)}</span>`);
   if (r.channel) {
     meta.push(
       `<a class="chan" style="--ch:${channelColour(r.channel)};--ink:${channelInk(channelColour(r.channel))}" href="/channel/${encodeURIComponent(r.channel)}"><i></i>${esc(r.channel)}</a>`,
@@ -1144,31 +1162,54 @@ function row(r: StoredRecord): string {
   } else {
     meta.push(`<span class="pill">${esc(LABELS[r.category] ?? "unsorted")}</span>`);
   }
-  if (r.stage) meta.push(esc(r.stage));
-  if (r.version) meta.push(`v${r.version}`);
-  if (r.wordCount) meta.push(`${r.wordCount.toLocaleString()} words`);
-  if (r.airDate) meta.push(airs(r));
+  if (r.airDate && !r.batchNo) meta.push(airs(r));
   if (r.batchTarget && r.batchTarget > 1) {
     meta.push(`<span class="count">${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget} uploaded</span>`);
   }
+  for (const l of r.links) {
+    const label = l.kind === "frameio" ? `Frame.io${r.version ? ` v${r.version}` : ""}` : l.label || l.kind;
+    meta.push(
+      `<a class="lnk ${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.label || l.url)}">${esc(label)}</a>`,
+    );
+  }
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
 
-  const links = r.links.length
-    ? `<div class="links">${r.links
-        .map(
-          (l) =>
-            `<a class="${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(
-              l.kind === "frameio" ? `Frame.io${r.version ? ` v${r.version}` : ""}` : l.label || l.kind,
-            )}</a>`,
-        )
-        .join("")}</div>`
-    : "";
-
   return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" style="--c:${c}">
-    <div class="title"><span class="swatch"></span>${code}<a href="/r/${r.id}">${esc(title)}</a>${pinControl(r)}</div>
-    <div class="meta">${meta.join("<span>·</span>")}${links}</div>
-    <div class="when">${when(r)}${actions(r)}</div>
+    <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(title)}">${esc(title)}</a>${pinControl(r)}</div>
+    <div class="meta">${meta.join("")}</div>
+    ${duePill(r)}
+    ${actions(r)}
   </div>`;
+}
+
+/**
+ * The deadline as one pill: "VO 9/17/2026 · 11:59 PM", red with how late it
+ * is once it has passed, amber inside a day. The tooltip carries the rest —
+ * the IST time, and whether the VO time was worked out from the air date.
+ */
+function duePill(r: StoredRecord): string {
+  const at = r.voDue ?? r.deadline ?? r.scriptDue;
+  if (!at) return `<span class="due none">no deadline</span>`;
+  const label = r.voDue ? "VO" : r.deadline ? "Due" : "Script";
+  const ms = at.getTime() - Date.now();
+  const open = r.status === "open";
+  const state = !open ? "" : ms < 0 ? " late" : ms < 86_400_000 ? " soon" : "";
+  const span = (n: number) => {
+    const h = Math.round(Math.abs(n) / 3_600_000);
+    return h < 1 ? "<1h" : h < 24 ? `${h}h` : `${Math.round(h / 24)}d`;
+  };
+  const tail = !open ? "" : ms < 0 ? `<em>${span(ms)} late</em>` : ms < 86_400_000 ? `<em>in ${span(ms)}</em>` : "";
+  const [date, time] = renderIn(at, ORG_TZ, "ET").split(" @ ");
+  const tip = [
+    `${label} ${renderIn(at, ORG_TZ, "ET")}`,
+    renderIn(at, TEAM_TZ, "IST"),
+    r.voDue && r.voSource === "calculated" ? `set ${VO_BUFFER_DAYS} days before air` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return `<span class="due${state}" title="${esc(tip)}"><b>${label}</b>${esc(date ?? "")}<span class="tm">${esc(
+    (time ?? "").replace(/ ET$/, ""),
+  )}</span>${tail}</span>`;
 }
 
 /**
@@ -1232,19 +1273,6 @@ function airs(r: StoredRecord): string {
   )}</span>`;
 }
 
-function when(r: StoredRecord): string {
-  const at = r.voDue ?? r.deadline ?? r.scriptDue;
-  if (!at) return `<div class="stack"><span class="z">—</span></div>`;
-
-  const label = r.voDue ? "VO" : r.deadline ? "due" : "script";
-  const over = r.status === "open" && at.getTime() < Date.now();
-  return `<div class="stack">
-    <div class="d">${esc(renderIn(at, ORG_TZ, "ET"))}</div>
-    <div class="z">${esc(label)} · ${esc(renderIn(at, TEAM_TZ, "IST"))}</div>
-    ${over ? `<div class="over">past its time</div>` : ""}
-    ${r.voDue && r.voSource === "calculated" ? `<div class="derived">VO set ${VO_BUFFER_DAYS} days before air</div>` : ""}
-  </div>`;
-}
 
 function rows(list: StoredRecord[], emptyText: string): string {
   if (!list.length) return `<div class="empty">${esc(emptyText)}</div>`;

@@ -41,6 +41,11 @@ Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
 
+**Tasks** are two tight lines each: the title, then its code, channel, air
+countdown and links, with one deadline pill on the right — "VO 9/24/2026 ·
+11:59 PM", red with how late it is once past, amber inside a day. Hover the
+pill for the IST time. Stage and word count are on the record's own page.
+
 **Work due by day** — a headline count, then a column per day.
 
 ![The chart](docs/chart.png)
@@ -136,6 +141,26 @@ brief, the links, a **Clear this** button, and a link back to the original
 Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
+
+## Frame.io links, read without the API
+
+When a message carries a Frame.io link, the bot opens it the way a link
+preview does — no API, no key — follows an f.io short link to where it goes,
+and reads the asset's name from the page (its preview tags, or the file names
+in it). From a name like `VIDEO-012_Walter_White_v3.mp4` it fills in whatever
+the message left out: code VIDEO-012, version 3, title "Walter White", and the
+channel when the name has one. The link is labelled with the file name, and
+the note says what was read. A private link (login wall), an expired one or a
+password-protected one is noted as such. What the message itself says always
+wins over the file name.
+
+Try a link yourself, from anywhere with internet:
+
+```bash
+npm run frameio -- https://f.io/7bu6f54B
+```
+
+`FRAMEIO_LOOKUP=off` turns the lookup off.
 
 ## Recurring — the daily batches
 

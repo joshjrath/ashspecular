@@ -22,6 +22,7 @@ import { parseAssignment, parseReview } from "../src/parse/structured.js";
 import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
+import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
 let pass = 0;
@@ -475,6 +476,53 @@ const batchDay = renderDay(shellFix, "2026-09-28", "posting", [{ date: "2026-09-
 t("a batch card is its channel, no number", /class="t"[^>]*>(<i[^>]*><\/i>)?Specular FNAF Bits</.test(batchDay), true);
 t("no batch numbers anywhere on it", /batch \d|SFB-\d/.test(batchDay), false);
 t("in a list a batch carries its air date", renderList(shellFix, "Queue", "", [batchRec]).includes("Specular FNAF Bits · 9/28/2026"), true);
+
+// ── reading a Frame.io link, no API ───────────────────────────────────────
+section("Frame.io links — what the page itself says");
+t("file name → code, version, title", factsFromName("VIDEO-012_Walter_White_Build_Compound_V_v3_FINAL.mp4"),
+  { code: "VIDEO-012", version: 3, title: "Walter White Build Compound V", channel: null, category: null });
+t("underscored code and padded version", [factsFromName("VIDEO_008 deadpool jjk V03.mov").code, factsFromName("VIDEO_008 deadpool jjk V03.mov").version], ["VIDEO-008", 3]);
+t("channel in the name, and out of the title", factsFromName("Specular FNAF - Gojo Ending v2.mov"),
+  { code: null, version: 2, title: "Gojo Ending", channel: "Specular FNAF", category: "stories" });
+t("an unknown prefix is not a code", factsFromName("MP4-2024 sunset.mp4").code, null);
+t("a name that is only export words has no title", factsFromName("Export 1080p.mp4").title, null);
+
+const legacy = `<html><head><title>Frame.io</title>
+  <meta property="og:title" content="VIDEO-012_Walter_White_v3.mp4 | Frame.io">
+  <meta property="og:description" content="Shared with you on Frame.io"></head><body></body></html>`;
+t("preview tags give the name", readFramePage(legacy, "https://app.frame.io/reviews/abc/def").name, "VIDEO-012_Walter_White_v3.mp4");
+t("the path gives the kind of link", readFramePage(legacy, "https://app.frame.io/reviews/abc/def").linkType, "review link");
+const nextPage = `<html><head><title>Frame.io</title></head><body><script id="__NEXT_DATA__">
+  {"props":{"asset":{"name":"Gojo_FNAF_Ending_V2.mov","type":"video"},"logo":"logo.png"}}</script></body></html>`;
+t("with no preview tags, file names in the page", readFramePage(nextPage, "https://next.frame.io/share/x/view/y").name, "Gojo_FNAF_Ending_V2.mov");
+t("the page's own images aren't taken for the video", readFramePage(nextPage, "https://next.frame.io/share/x").files, ["Gojo_FNAF_Ending_V2.mov"]);
+t("a login wall reads as private", readFramePage("<title>Log in | Frame.io</title>", "https://accounts.frame.io/welcome").status, "private");
+t("an expired link says so", readFramePage("<title>Frame.io</title><p>This review link has expired.</p>", "https://app.frame.io/reviews/x").status, "expired");
+
+const fakeFetch = (pages: Record<string, { status: number; location?: string; body?: string }>) =>
+  (async (url: string) => {
+    const p = pages[url] ?? { status: 404 };
+    return new Response(p.body ?? "", { status: p.status, headers: p.location ? { location: p.location } : {} });
+  }) as unknown as typeof fetch;
+const followed = await inspectFrameLink("https://f.io/7bu6f54B", fakeFetch({
+  "https://f.io/7bu6f54B": { status: 301, location: "https://app.frame.io/reviews/tok/asset" },
+  "https://app.frame.io/reviews/tok/asset": { status: 200, body: legacy },
+}));
+t("follows the short link to the review", [followed?.finalUrl, followed?.name], ["https://app.frame.io/reviews/tok/asset", "VIDEO-012_Walter_White_v3.mp4"]);
+const offsite = await inspectFrameLink("https://f.io/zz", fakeFetch({ "https://f.io/zz": { status: 302, location: "https://evil.example/x" } }));
+t("never follows a redirect off Frame.io", [offsite?.status, offsite?.name], ["unreadable", null]);
+t("a 403 is a private link", (await inspectFrameLink("https://f.io/p", fakeFetch({ "https://f.io/p": { status: 403 } })))?.status, "private");
+t("not Frame.io is not opened", await inspectFrameLink("https://youtube.com/watch?v=1", fakeFetch({})), null);
+
+const bareLink = parseReview("https://f.io/7bu6f54B", new Date("2026-09-25T12:00:00Z"))!;
+const merged = mergeFrame(bareLink, "https://f.io/7bu6f54B", followed!);
+t("a bareLink link gets its title, code and version from the file",
+  [merged.title, merged.code, merged.version], ["Walter White", "VIDEO-012", 3]);
+t("the link is labelled with the file name", merged.links[0]!.label, "VIDEO-012_Walter_White_v3.mp4");
+t("the which-project prompt is gone once the link names it", /which project/.test(merged.note ?? ""), false);
+t("confidence rises when the name carries a code", merged.confidence >= 0.85, true);
+const said = parseReview("Walter White v4 is up https://f.io/7bu6f54B", new Date("2026-09-25T12:00:00Z"))!;
+t("what the message says wins over the file name", mergeFrame(said, "https://f.io/7bu6f54B", followed!).version, 4);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

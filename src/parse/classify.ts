@@ -7,6 +7,7 @@ import { extractUrls, looksLikeBareRevision, classifyUrl } from "./rules.js";
 import { matchChannel } from "../catalog.js";
 import { parsePattern } from "./structured.js";
 import { readLabelledTimes } from "./when.js";
+import { enrichWithFrame } from "./frameio.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
@@ -69,7 +70,20 @@ export interface ClassifyResult {
   usage?: { input: number; output: number; cacheRead: number };
 }
 
+/**
+ * Read a message, then open any Frame.io link in it for what the message left
+ * out — the video's name, code, version and channel, from the file name the
+ * shared page carries. No API: it reads the page the way a link preview does.
+ */
 export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
+  const result = await classifyText(input);
+  if (result.extraction.links.some((l) => l.kind === "frameio")) {
+    result.extraction = await enrichWithFrame(result.extraction);
+  }
+  return result;
+}
+
+async function classifyText(input: ClassifyInput): Promise<ClassifyResult> {
   const raw = renderRaw(input);
 
   // The studio's own assignment post is rigidly templated, so it is read by
