@@ -19,9 +19,12 @@ import {
 } from "../src/parse/derive.js";
 import type { Extraction } from "../src/parse/schema.js";
 import { parseAssignment, parseReview } from "../src/parse/structured.js";
-import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
+import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderScriptBoard, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
+import { readFileSync } from "node:fs";
+import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
+import { config } from "../src/config.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, usDate } from "../src/parse/derive.js";
 
@@ -536,6 +539,24 @@ t("default columns: Gaming, Stories, Bits side by side", visibleCols(dashWith())
 t("the number ticked is the number of columns", /data-n="2" style="--n:2"/.test(dashWith(["stories", "reading"])), true);
 t("columns keep the studio's order", visibleCols(dashWith(["movies", "gaming"])), ["gaming", "movies"]);
 t("nothing ticked shows no columns, and says how to pick", [visibleCols(dashWith([])).length, /class="empty nocols">/.test(dashWith([]))], [0, true]);
+
+section("Scripts — the scriptwriter's board, as data");
+// A report produced by his own code (scriptcheck) from its sample threads.
+const hisReport = JSON.parse(readFileSync(new URL("./fixtures/scriptcheck-report.json", import.meta.url), "utf8"));
+const scriptRows = readReport(hisReport);
+t("every script in his report is read", scriptRows.map((r) => [r.code, r.status]),
+  [["VIDEO-003", "OVERDUE"], ["VIDEO-002", "SUBMITTED_LATE"], ["VIDEO-001", "SUBMITTED"]]);
+t("air date and deadline come through", [scriptRows[0]!.airDate, scriptRows[0]!.deadline?.toISOString()], ["2026-09-25", "2026-09-20T03:59:00.000Z"]);
+t("a delivered script carries its doc link", scriptRows[2]!.delivered.length > 0, true);
+t("junk in the report is skipped, not thrown", readReport({ assignments: [null, 3, { status: "OVERDUE" }] }), []);
+const board = renderScriptBoard(shellFix, "https://scripts.example", { rows: scriptRows, generatedAt: new Date(), error: null });
+t("grouped by where each script stands", [...board.matchAll(/class="name">([^<]+)</g)].map((m) => m[1]), ["Overdue", "Delivered late", "Delivered"]);
+t("the Scripts tab's own scripts compile", [...board.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+const cfg = config as { scriptsUrl: string; scriptsToken: string };
+cfg.scriptsUrl = "https://scripts.example"; cfg.scriptsToken = "";
+const locked = await fetchScriptReport((async () => new Response("Not found", { status: 404 })) as unknown as typeof fetch);
+t("a password-protected board says which password to set", /SCRIPTS_TOKEN/.test(locked.error ?? ""), true);
+cfg.scriptsUrl = ""; cfg.scriptsToken = "";
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

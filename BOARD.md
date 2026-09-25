@@ -156,18 +156,23 @@ A row the parser wasn't sure about is flagged **needs a look**.
 
 ## Scripts — the scriptwriter's board, inside this one
 
-Set `SCRIPTS_URL` on Railway to his board's address and a **Scripts** tab
-appears in the rail, showing his board live inside this one. Unset, there is
-no tab.
+His board is **scriptcheck** (`joshjrath/Scriptwritingchecker`), on the same
+Railway project. It publishes everything it knows at `/report.json`, and with
+its *view-only* password it hands out a read-only copy — the briefs left out.
+This board reads that on the server, so the **Scripts** tab is a page of this
+board: every script grouped by where it stands (overdue, due today, due soon,
+no deadline, pending, delivered late, delivered), with its code, air date,
+deadline, the script doc he delivered and the Discord thread. Cached a minute.
 
-Whether his site can be shown inside another is its choice. The board asks it
-first: if it says no (`X-Frame-Options`, or a CSP `frame-ancestors` that
-doesn't list this board), the tab shows a button that opens it in its own tab
-instead of an empty box. If his site asks you to sign in and the sign-in
-doesn't stick inside the frame, use **Open in a new tab** — some browsers
-block logins inside another site. To allow the frame on his side, his app
-needs `frame-ancestors https://<this board's address>` in its CSP (or no
-`X-Frame-Options: DENY/SAMEORIGIN`).
+Two variables on this board's Railway service:
+
+| Variable | Value |
+|---|---|
+| `SCRIPTS_URL` | his board's public address, e.g. `https://scriptcheck-production.up.railway.app` |
+| `SCRIPTS_TOKEN` | his board's view-only password — the value of `SCRIPTCHECK_VIEW_TOKEN` on his service. If he has none yet, he adds one (any long random string) and redeploys. |
+
+Without `SCRIPTS_TOKEN`, the tab falls back to showing his page itself in a
+frame, when his site allows that, or a button to open it in its own tab.
 
 ## Frame.io links, read without the API
 

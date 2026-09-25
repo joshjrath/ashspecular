@@ -41,6 +41,7 @@ import {
   instantIn,
   shiftDate,
 } from "../parse/derive.js";
+import { fetchScriptReport } from "./scriptcheck.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
@@ -55,6 +56,7 @@ import {
   renderLogin,
   renderRecurring,
   renderScripts,
+  renderScriptBoard,
   renderWeek,
   renderRecord,
 } from "./page.js";
@@ -415,6 +417,12 @@ export async function startWeb(): Promise<void> {
   app.get("/scripts", async (_req, reply) => {
     const s = await shell("scripts");
     if (!config.scriptsUrl) return reply.redirect("/");
+    // With his view-only password, read his data and show it natively. Without
+    // one, fall back to showing his page itself, where his site allows it.
+    if (config.scriptsToken) {
+      const report = await fetchScriptReport();
+      return reply.type("text/html").send(renderScriptBoard(s, config.scriptsUrl, report));
+    }
     const { ok, why } = await canFrame(config.scriptsUrl);
     return reply.type("text/html").send(renderScripts(s, config.scriptsUrl, ok, why));
   });

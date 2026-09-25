@@ -34,6 +34,8 @@ export const config = {
 
   /** Another board to show under a Scripts tab — the scriptwriter's. Unset hides the tab. */
   scriptsUrl: opt("SCRIPTS_URL").replace(/\/+$/, ""),
+  /** His board's view-only password (his SCRIPTCHECK_VIEW_TOKEN), to read its data. */
+  scriptsToken: opt("SCRIPTS_TOKEN"),
 
   port: Number(opt("PORT", "8080")),
   publicUrl: opt("PUBLIC_URL").replace(/\/+$/, ""),

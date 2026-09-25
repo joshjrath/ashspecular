@@ -1,0 +1,151 @@
+{
+ "generated_at": "2026-09-20T19:30:00+00:00",
+ "fetched_at": "",
+ "timezone": "America/New_York",
+ "due_soon_hours": 48.0,
+ "banner": "",
+ "roles": [
+  "SCRIPT"
+ ],
+ "logo_url": "",
+ "board_title": "Script Board",
+ "live": true,
+ "can_edit": false,
+ "assignments": [
+  {
+   "thread_id": "1008",
+   "thread_name": "09-25-26 | VIDEO-003 | How I'd Survive A Zombie Outbreak",
+   "channel": "secondary-assignments-workflow",
+   "guild": "Specular Industries",
+   "jump_url": "https://discord.com/channels/900/1008",
+   "slate_date": "2026-09-25T00:00:00+00:00",
+   "slot": "VIDEO-003",
+   "title": "How I'd Survive A Zombie Outbreak",
+   "project": "UTDR",
+   "role": "SCRIPT",
+   "assignee_text": "<@111111111111111111>",
+   "assigned_at": "2026-09-11T15:00:00+00:00",
+   "deadline": "2026-09-20T03:59:00+00:00",
+   "deadline_raw": "9/19/2026 @ 11:59 PM ET",
+   "deadline_tz": "ET",
+   "word_count": 3500,
+   "tags": [
+    "Delivered"
+   ],
+   "archived": false,
+   "status": "OVERDUE",
+   "submissions": [],
+   "replies_after_delivery": 0,
+   "warnings": [
+    "Thread is tagged as delivered but no submission link from me is in it."
+   ],
+   "confidence": "HIGH",
+   "evidence": {
+    "assignee": "user ID in the SCRIPT section",
+    "deadline": "9/19/2026 @ 11:59 PM ET",
+    "deadline_source": "the SCRIPT section",
+    "word_count": "3500"
+   },
+   "overridden": [],
+   "duplicate_of": "",
+   "needs_review": false,
+   "status_label": "OVERDUE"
+  },
+  {
+   "thread_id": "1005",
+   "thread_name": "09-21-26 | VIDEO-002 | How Do Spider-Man's Webs Work?",
+   "channel": "secondary-assignments-workflow",
+   "guild": "Specular Industries",
+   "jump_url": "https://discord.com/channels/900/1005",
+   "slate_date": "2026-09-21T00:00:00+00:00",
+   "slot": "VIDEO-002",
+   "title": "How Do Spider-Man's Webs Work?",
+   "project": "UTDR",
+   "role": "SCRIPT",
+   "assignee_text": "<@111111111111111111>",
+   "assigned_at": "2026-09-08T15:00:00+00:00",
+   "deadline": "2026-09-16T03:59:00+00:00",
+   "deadline_raw": "9/15/2026 @ 11:59 PM ET",
+   "deadline_tz": "ET",
+   "word_count": 4000,
+   "tags": [
+    "Delivered"
+   ],
+   "archived": false,
+   "status": "SUBMITTED_LATE",
+   "submissions": [
+    {
+     "message_id": "2105",
+     "posted_at": "2026-09-16T18:30:00+00:00",
+     "links": [
+      "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit?usp=sharing"
+     ],
+     "jump_url": "https://discord.com/channels/900/1005/2105"
+    }
+   ],
+   "replies_after_delivery": 1,
+   "warnings": [
+    "1 reply(ies) after my delivery - check for revision requests."
+   ],
+   "confidence": "HIGH",
+   "evidence": {
+    "assignee": "user ID in the SCRIPT section",
+    "deadline": "9/15/2026 @ 11:59 PM ET",
+    "deadline_source": "the SCRIPT section",
+    "word_count": "4000"
+   },
+   "overridden": [],
+   "duplicate_of": "",
+   "needs_review": false,
+   "status_label": "DELIVERED (LATE)"
+  },
+  {
+   "thread_id": "1004",
+   "thread_name": "09-22-26 | VIDEO-001 | How Does Goku Actually Train?",
+   "channel": "secondary-assignments-workflow",
+   "guild": "Specular Industries",
+   "jump_url": "https://discord.com/channels/900/1004",
+   "slate_date": "2026-09-22T00:00:00+00:00",
+   "slot": "VIDEO-001",
+   "title": "How Does Goku Actually Train?",
+   "project": "UTDR",
+   "role": "SCRIPT",
+   "assignee_text": "<@111111111111111111>",
+   "assigned_at": "2026-09-10T15:00:00+00:00",
+   "deadline": "2026-09-18T03:59:00+00:00",
+   "deadline_raw": "9/17/2026 @ 11:59 PM ET",
+   "deadline_tz": "ET",
+   "word_count": 5000,
+   "tags": [
+    "Delivered"
+   ],
+   "archived": true,
+   "status": "SUBMITTED",
+   "submissions": [
+    {
+     "message_id": "2104",
+     "posted_at": "2026-09-17T20:12:00+00:00",
+     "links": [
+      "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit?usp=sharing"
+     ],
+     "jump_url": "https://discord.com/channels/900/1004/2104"
+    }
+   ],
+   "replies_after_delivery": 1,
+   "warnings": [
+    "1 reply(ies) after my delivery - check for revision requests."
+   ],
+   "confidence": "HIGH",
+   "evidence": {
+    "assignee": "user ID in the SCRIPT section",
+    "deadline": "9/17/2026 @ 11:59 PM ET",
+    "deadline_source": "the SCRIPT section",
+    "word_count": "5000"
+   },
+   "overridden": [],
+   "duplicate_of": "",
+   "needs_review": false,
+   "status_label": "DELIVERED"
+  }
+ ]
+}
