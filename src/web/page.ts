@@ -103,6 +103,11 @@ aside .live {
   margin-top: 28px; padding: 13px 14px; border-radius: 18px; background: #222225;
   font-size: 12px; color: #9A9AA3; display: flex; align-items: center; gap: 9px;
 }
+aside .removed-link {
+  display: block; margin-top: 10px; padding: 8px 14px; border-radius: 14px;
+  font-size: 12px; color: #6A6A73;
+}
+aside .removed-link:hover, aside .removed-link.on { color: #fff; background: #222225; }
 aside .live .pulse {
   width: 7px; height: 7px; border-radius: 50%; background: #35D399; flex: none;
   box-shadow: 0 0 0 3px rgba(53,211,153,.16);
@@ -338,8 +343,9 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
 .row .when { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
-.row .when > div { display: block; }
+.row .when > .stack { display: block; }
 .row .when .stack { text-align: right; }
+.acts { display: flex; gap: 6px; align-items: center; flex: none; }
 .tick { display: flex; }
 .tick button {
   width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--line);
@@ -350,6 +356,9 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .tick button.on { background: var(--gm); border-color: var(--gm); color: #fff; }
 .row.cleared .title { text-decoration: line-through; text-decoration-color: #C9C9CF; opacity: .55; }
 .row.cleared .meta { opacity: .55; }
+.tick.remove button { font-size: 16px; }
+.tick.remove button:hover { border-color: var(--late); color: var(--late); }
+.tick.restore button:hover { border-color: var(--lf); color: var(--lf); }
 
 /* ── recurring ─────────────────────────────────────────────────────────── */
 .batches { display: flex; flex-direction: column; gap: 8px; }
@@ -486,6 +495,8 @@ export interface Shell {
   counts: Record<string, number>;
   nav: { reviews: number; queue: number; recurring: number; calendar: number };
   lastIntake: Date | null;
+  /** How many records are removed; the rail links to them when there are any. */
+  removed?: number;
   /** Kept so the box still shows what was searched for. */
   query?: string;
 }
@@ -538,6 +549,11 @@ function sidebar(s: Shell): string {
     <h3>Categories</h3>
     <div class="cats">${cats}</div>
     <div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>
+    ${
+      s.removed
+        ? `<a class="removed-link${s.active === "removed" ? " on" : ""}" href="/removed">Removed · ${s.removed}</a>`
+        : ""
+    }
   </div></aside>`;
 }
 
@@ -606,19 +622,34 @@ function row(r: StoredRecord): string {
         .join("")}</div>`
     : "";
 
-  // Clearing is one tap from wherever you are looking, not two pages away.
-  const tick = `<form class="tick" method="post" action="/r/${r.id}/${
-    r.status === "done" ? "open" : "done"
-  }">
-    <button aria-label="${r.status === "done" ? "Reopen" : "Clear"}"
-      title="${r.status === "done" ? "Reopen" : "Clear"}"
-      class="${r.status === "done" ? "on" : ""}">✓</button>
-  </form>`;
-
   return `<div class="row${r.status === "done" ? " cleared" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span>${code}<a href="/r/${r.id}">${esc(title)}</a></div>
     <div class="meta">${meta.join("<span>·</span>")}${links}</div>
-    <div class="when">${when(r)}${tick}</div>
+    <div class="when">${when(r)}${actions(r)}</div>
+  </div>`;
+}
+
+/**
+ * The buttons at the end of a row, one tap each from wherever you are looking.
+ *
+ * ✓ clears, and counts toward "cleared this week". × removes, and counts
+ * toward nothing — it is for things that were never real work, like a
+ * duplicate or a message filed by mistake. A removed row gets a single ↺ to
+ * put it back.
+ */
+function actions(r: StoredRecord): string {
+  const button = (action: string, label: string, glyph: string, cls = "") =>
+    `<form class="tick${cls ? ` ${cls}` : ""}" method="post" action="/r/${r.id}/${action}">
+      <button aria-label="${label}" title="${label}"${
+        cls === "on" ? ' class="on"' : ""
+      }>${glyph}</button>
+    </form>`;
+
+  if (r.status === "removed") return `<div class="acts">${button("open", "Restore", "↺", "restore")}</div>`;
+
+  return `<div class="acts">
+    ${r.status === "done" ? button("open", "Reopen", "✓", "on") : button("done", "Clear", "✓")}
+    ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}
   </div>`;
 }
 
@@ -931,7 +962,7 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
     displayTitle(r),
     shell,
     `<section>
-      <h2>${esc(r.kind)}${r.status === "done" ? " · cleared" : ""}</h2>
+      <h2>${esc(r.kind)}${r.status === "done" ? " · cleared" : r.status === "removed" ? " · removed" : ""}</h2>
       <h1 style="font-size:34px;font-weight:800;letter-spacing:-0.04em;margin:0 0 12px;line-height:1.02">${esc(displayTitle(r))}</h1>
       ${r.note && r.title ? `<p style="color:var(--dim);margin:-8px 0 14px;font-size:13.5px">${esc(r.note)}</p>` : ""}
       <div class="rows">${table}</div>
@@ -941,8 +972,17 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
     ${r.warnings.length ? `<section><h2>Warnings</h2><div class="empty warn">${esc(r.warnings.join(" · "))}</div></section>` : ""}
     <section>
       <form class="inline" method="post" action="/r/${r.id}/${r.status === "open" ? "done" : "open"}">
-        <button class="clear" style="--c:${c}">${r.status === "open" ? "Clear this" : "Reopen"}</button>
+        <button class="clear" style="--c:${c}">${
+          r.status === "open" ? "Clear this" : r.status === "removed" ? "Restore" : "Reopen"
+        }</button>
       </form>
+      ${
+        r.status === "open"
+          ? `<form class="inline" method="post" action="/r/${r.id}/remove" style="margin-left:8px">
+               <button class="clear secondary" title="Take it off the board without counting it as cleared">Remove</button>
+             </form>`
+          : ""
+      }
       ${
         r.parsedBy !== "recurring" && r.raw.trim()
           ? `<form class="inline" method="post" action="/r/${r.id}/reread" style="margin-left:8px">
@@ -1146,15 +1186,19 @@ function shiftDay(date: string, by: number): string {
 /** The Recurring page: today's batches per channel, and working ahead. */
 export function renderRecurring(
   shell: Shell,
-  today: { date: string; rows: Array<{ channel: string; total: number; done: number }> },
-  ahead: { date: string; rows: Array<{ channel: string; total: number; done: number }> },
+  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
+  ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
   list: StoredRecord[],
 ): string {
   const c = colourOf("bits");
 
-  const line = (r: { channel: string; total: number; done: number }, date?: string) => {
+  const line = (
+    r: { channel: string; total: number; done: number; removed?: number },
+    date?: string,
+  ) => {
     const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
-    const state = r.total === 0 ? "not open" : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
+    const state =
+      r.total === 0 ? (r.removed ? "removed" : "not open") : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
     const clearAll =
       date && r.total > r.done
         ? `<form class="tick" method="post" action="/recurring/clear">

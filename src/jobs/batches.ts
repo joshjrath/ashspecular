@@ -94,12 +94,15 @@ export function tomorrow(): string {
 
 /** What a day's batches currently look like, for the Recurring page. */
 export async function batchStatus(date: string): Promise<
-  Array<{ channel: string; total: number; done: number }>
+  Array<{ channel: string; total: number; done: number; removed: number }>
 > {
-  const { rows } = await pool.query<{ channel: string; total: string; done: string }>(
+  // A removed batch leaves the count entirely, so a channel whose only batch
+  // was removed reads "removed" rather than "0/1" waiting to be done.
+  const { rows } = await pool.query<{ channel: string; total: string; done: string; removed: string }>(
     `SELECT channel,
-            COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE status = 'done') AS done
+            COUNT(*) FILTER (WHERE status <> 'removed') AS total,
+            COUNT(*) FILTER (WHERE status = 'done') AS done,
+            COUNT(*) FILTER (WHERE status = 'removed') AS removed
      FROM records
      WHERE batch_no IS NOT NULL AND air_date = $1
      GROUP BY channel`,
@@ -112,6 +115,7 @@ export async function batchStatus(date: string): Promise<
       channel: c.name,
       total: Number(row?.total ?? 0),
       done: Number(row?.done ?? 0),
+      removed: Number(row?.removed ?? 0),
     };
   });
 }

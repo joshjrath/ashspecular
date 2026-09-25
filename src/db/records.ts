@@ -14,9 +14,16 @@ export interface Source {
   parsedBy: string;
 }
 
+export type Status = "open" | "done" | "removed";
+
 export interface StoredRecord extends DerivedRecord {
   id: number;
-  status: "open" | "done";
+  /**
+   * open → on the board. done → cleared, counted in "cleared this week".
+   * removed → taken off without being counted: kept rather than deleted so it
+   * can be restored, and so the 6 AM opener doesn't recreate a removed batch.
+   */
+  status: Status;
   parsedBy: string;
   sourceUrl: string | null;
   sourceAuthor: string | null;
@@ -106,7 +113,7 @@ export async function updateFiling(
   );
 }
 
-export async function setStatus(id: number, status: "open" | "done"): Promise<void> {
+export async function setStatus(id: number, status: Status): Promise<void> {
   await pool.query(
     `UPDATE records SET status = $2, done_at = CASE WHEN $2 = 'done' THEN now() END,
        updated_at = now() WHERE id = $1`,
@@ -167,7 +174,7 @@ function hydrate(r: Row): StoredRecord {
     note: r.note,
     confidence: r.confidence,
     warnings: r.warnings ?? [],
-    status: r.status as "open" | "done",
+    status: r.status as Status,
     parsedBy: r.parsed_by,
     sourceUrl: r.source_url,
     sourceAuthor: r.source_author,
@@ -214,7 +221,8 @@ export async function listReviews(limit = 50): Promise<StoredRecord[]> {
 /** One channel's everything — what you get by clicking a channel name. */
 export async function listByChannel(channel: string, limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE channel = $1 ORDER BY status ASC, created_at DESC LIMIT $2`,
+    `${SELECT} WHERE channel = $1 AND status <> 'removed'
+     ORDER BY status DESC, created_at DESC LIMIT $2`,
     [channel, limit],
   );
   return rows.map(hydrate);
@@ -355,7 +363,7 @@ export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
 /** One day's batches, newest number first. Bounded by construction. */
 export async function listBatchesOn(date: string): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE batch_no IS NOT NULL AND air_date = $1
+    `${SELECT} WHERE batch_no IS NOT NULL AND air_date = $1 AND status <> 'removed'
      ORDER BY channel ASC, batch_no ASC`,
     [date],
   );
@@ -373,7 +381,7 @@ export async function search(query: string, limit = 60): Promise<StoredRecord[]>
   const { rows } = await pool.query<Row>(
     `${SELECT} WHERE title ILIKE $1 OR code ILIKE $1 OR channel ILIKE $1
        OR brief ILIKE $1 OR note ILIKE $1 OR raw_content ILIKE $1
-     ORDER BY status ASC, created_at DESC LIMIT $2`,
+     ORDER BY (status = 'removed') ASC, (status = 'done') ASC, created_at DESC LIMIT $2`,
     [q, limit],
   );
   return rows.map(hydrate);
@@ -387,6 +395,22 @@ export async function clearBatches(channel: string, date: string): Promise<numbe
     [channel, date],
   );
   return rowCount ?? 0;
+}
+
+/** What has been removed, newest first — where Restore lives. */
+export async function listRemoved(limit = 100): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'removed' ORDER BY updated_at DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map(hydrate);
+}
+
+export async function removedCount(): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `SELECT COUNT(*) AS n FROM records WHERE status = 'removed'`,
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 /** When the bot last filed anything — the "live" indicator's truth. */
@@ -440,7 +464,7 @@ export async function calendarRange(
        version, links, brief, note, status, parsed_by, confidence, warnings,
        source_url, source_author, raw_content, created_at
      FROM records
-     WHERE ${day} BETWEEN $1 AND $2
+     WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed'
      -- Bits sort last within a day: 35 batches would otherwise bury the one
      -- video that is actually airing.
      ORDER BY 1 ASC, (category = 'bits') ASC, category ASC, created_at ASC

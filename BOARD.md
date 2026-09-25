@@ -41,8 +41,16 @@ that whole day, and the arrows to move a month or a day at a time.
 **Search** sits at the top of the rail on every page — titles, codes, channels,
 briefs, and the original message text.
 
-**The tick on every row** clears it where you are looking, without opening it
-first, and puts you back on the same page.
+**Two buttons on every row**, one tap each, and you stay on the same page:
+
+- **✓ Clear** — the work is done. Counts toward "cleared this week".
+- **× Remove** — takes it off the board without counting it. For duplicates,
+  messages filed by mistake, a batch that isn't happening. It doesn't touch
+  "cleared this week".
+
+Removed records aren't deleted. They go to **Removed** at the bottom of the
+rail, where ↺ puts any of them back. That matters for bits: a removed batch
+stays removed, where a deleted one would be reopened by the next morning run.
 
 **Re-read**, on any record's page, reads the original message again with the
 parser as it is now. When the parser gets better, older records don't have to

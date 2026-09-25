@@ -20,6 +20,8 @@ import {
   openByCategory,
   setStatus,
   stats,
+  listRemoved,
+  removedCount,
   clearBatches,
   refile,
   type CalendarMode,
@@ -50,12 +52,13 @@ const PUBLIC = new Set(["/login", "/healthz"]);
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
     lastIntake(),
     monthEntries(monthOf()),
+    removedCount(),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
@@ -68,6 +71,7 @@ async function shell(active: string): Promise<Shell> {
       calendar: month.length,
     },
     lastIntake: at,
+    removed,
   };
 }
 
@@ -196,6 +200,13 @@ export async function startWeb(): Promise<void> {
   // The old address keeps working for anything that already links to it.
   app.get("/reviews", async (_req, reply) => reply.redirect("/revisions"));
 
+  app.get("/removed", async (_req, reply) => {
+    const [s, list] = await Promise.all([shell("removed"), listRemoved()]);
+    return reply
+      .type("text/html")
+      .send(renderList(s, "Removed", "Nothing removed. Anything you take off the board lands here, to restore.", list));
+  });
+
   app.get("/revisions", async (_req, reply) => {
     const [s, list] = await Promise.all([shell("reviews"), listReviews(100)]);
     return reply
@@ -280,8 +291,11 @@ export async function startWeb(): Promise<void> {
 
   app.post<{ Params: { id: string; action: string } }>("/r/:id/:action", async (request, reply) => {
     const { id, action } = request.params;
-    if (action !== "done" && action !== "open") return reply.code(400).send("no");
-    await setStatus(Number(id), action);
+    const status = action === "remove" ? "removed" : action;
+    if (status !== "done" && status !== "open" && status !== "removed") {
+      return reply.code(400).send("no");
+    }
+    await setStatus(Number(id), status);
     // Back where you pressed it, so clearing a list does not bounce you away.
     return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
   });
