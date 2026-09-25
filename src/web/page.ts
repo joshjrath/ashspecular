@@ -825,6 +825,7 @@ header.page a.clear { align-self: center; }
 .usub { color: var(--dim); font-size: 13px; margin: -12px 4px 16px; }
 .checknow { margin: 0; align-self: center; }
 .utiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.utiles.after { margin-top: 14px; }
 .utile { background: var(--card); border-radius: var(--r); padding: 20px 22px; }
 .utile .n { font-family: var(--display); font-size: 40px; font-weight: 800; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
 .utile .l { color: var(--ink3); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 10px; }
@@ -3025,7 +3026,7 @@ function shortsPanel(
           .join("")}</ul></div>`
     : "";
 
-  return `<div class="utiles">${tiles}</div>${spreadChart}${outliers}${healthTable}${slotPanel}`;
+  return `<div class="utiles after">${tiles}</div>${spreadChart}${outliers}${healthTable}${slotPanel}`;
 }
 
 // ── uploads: ideas ────────────────────────────────────────────────────────
