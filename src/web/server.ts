@@ -95,7 +95,7 @@ import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
-import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
+import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, RAIL_ITEMS, SORTS, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -1459,14 +1459,22 @@ export async function startWeb(): Promise<void> {
   // dashboard's date box, or make it a working day again.
   app.post<{ Params: { date: string }; Body: { on?: string } }>("/days-off/:date", async (request, reply) => {
     const date = safeDate(request.params.date);
-    if (date) await setDayOff(date, request.body?.on !== "0");
+    if (date) await markDayOff(date, request.body?.on !== "0");
     return reply.redirect(backTo(request.headers.referer, "/calendar"));
   });
   app.post<{ Body: { date?: string } }>("/days-off", async (request, reply) => {
     const date = safeDate(request.body?.date);
-    if (date) await setDayOff(date, true);
+    if (date) await markDayOff(date, true);
     return reply.redirect(backTo(request.headers.referer, "/"));
   });
+
+  /** A day off has no daily batches: they go when it's marked, and come back when it's a working day again. */
+  async function markDayOff(date: string, on: boolean): Promise<void> {
+    await setDayOff(date, on);
+    if (on) await clearBatchesOn(date);
+    else await reopenBatchesOn(date);
+    gapCache = null;
+  }
 
   // Settings: the sidebar's items, the dashboard's lists, the days off.
   app.get<{ Querystring: { saved?: string; colours?: string } }>("/settings", async (request, reply) => {

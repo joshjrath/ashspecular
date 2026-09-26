@@ -255,9 +255,14 @@ they were. The strip lists each day off coming up with what it moved and to
 when; the bell has a **Day off** kind for each deadline it moved; the morning
 digest says when one is this week; late, due today, the chart, the calendar,
 the nudge and Google Calendar (an all-day *🌙 Day off*) all go by the moved
-deadline. Only today and later can be marked. Daily batches keep their own
-deadlines: each one is its own day's work. Air dates don't move either —
-posting isn't work.
+deadline. Only today and later can be marked. Air dates don't move — posting
+isn't work.
+
+A day off has **no daily batches**. Marking one removes that day's batches,
+except any you've already started (uploads ticked, or cleared), which stay as
+they are. The morning run and *Open* on the Recurring page skip it, and the
+Recurring page shows it as a *day off*. Make it a working day again and its
+batches come back, if the day was already open.
 
 Dates read M/D/YYYY everywhere, and every air date carries a live countdown:
 "airs 9/28/2026 · in 3 days", turning amber inside three days.

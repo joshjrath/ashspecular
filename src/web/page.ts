@@ -1554,6 +1554,7 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .daychip i { display: block; height: 4px; border-radius: 999px; background: #3A3A42; overflow: hidden; margin-top: 2px; }
 .daychip i em { display: block; height: 100%; background: var(--ok); }
 .daychip small { font-size: 10.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daychip.dayoff small { color: #7FD0EE; }
 .daychip.none { background: transparent; box-shadow: inset 0 0 0 1px #34343B; }
 .daychip.none.on { box-shadow: inset 0 0 0 2px var(--yellow); }
 .daychip.part small { color: var(--warn); }
@@ -5278,6 +5279,10 @@ export function renderRecurring(
   // batch someone removed on purpose, which must stay removed.
   const missing = ahead.rows.filter((r) => r.total === 0 && r.removed === 0).length;
   const channelCount = ahead.rows.length;
+  // A day off has no batches.
+  const offDays = new Set(shell.daysOff ?? []);
+  const offNote = (date: string, rows_: unknown[]) =>
+    offDays.has(date) && !rows_.length ? `<div class="empty">🌙 A day off — no batches.</div>` : "";
   const firstAhead = strip[0]?.date ?? ahead.date;
   const shift = (d: string, by: number) => {
     const x = new Date(`${d}T12:00:00Z`);
@@ -5291,15 +5296,16 @@ export function renderRecurring(
     .map((d) => {
       const at = new Date(`${d.date}T12:00:00Z`);
       const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(at);
-      const state = d.channels === 0 ? "none" : d.channels < channelCount ? "part" : "full";
+      const isOff = offDays.has(d.date) && d.channels === 0;
+      const state = isOff ? "none dayoff" : d.channels === 0 ? "none" : d.channels < channelCount ? "part" : "full";
       const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
       return `<a class="daychip ${state}${d.date === ahead.date ? " on" : ""}" href="/recurring?day=${d.date}"
           title="${esc(usDate(d.date))}: ${
-            d.channels === 0 ? "not open" : `${d.channels}/${channelCount} channels open · ${d.done}/${d.total} uploads done`
+            isOff ? "a day off — no batches" : d.channels === 0 ? "not open" : `${d.channels}/${channelCount} channels open · ${d.done}/${d.total} uploads done`
           }">
         <b>${esc(wd)}</b><span>${esc(usDate(d.date).replace(/\/\d{4}$/, ""))}</span>
         <i><em style="width:${pct}%"></em></i>
-        <small>${d.channels === 0 ? "not open" : d.channels < channelCount ? `${d.channels}/${channelCount} open` : `${d.done}/${d.total}`}</small>
+        <small>${isOff ? "day off" : d.channels === 0 ? "not open" : d.channels < channelCount ? `${d.channels}/${channelCount} open` : `${d.done}/${d.total}`}</small>
       </a>`;
     })
     .join("");
@@ -5335,7 +5341,7 @@ export function renderRecurring(
     `${pageHeader("Recurring")}
     <div class="panel" style="margin-bottom:14px">
       <h2>Today · ${esc(pretty(today.date))}</h2>
-      ${sections(today.rows, today.date)}
+      ${offNote(today.date, today.rows)}${sections(today.rows, today.date)}
     </div>
 
     <div class="panel ahead" style="margin-bottom:14px">
@@ -5366,7 +5372,7 @@ export function renderRecurring(
       <div class="aheadday">
         <h3>${esc(pretty(ahead.date))}</h3>
         ${
-          missing
+          missing && !offDays.has(ahead.date)
             ? `<form method="post" action="/recurring/ahead" class="openday">
                  <input type="hidden" name="day" value="${ahead.date}">
                  <button class="clear">${
@@ -5377,7 +5383,9 @@ export function renderRecurring(
         }
       </div>
       ${
-        missing === channelCount
+        missing === channelCount && offDays.has(ahead.date)
+          ? `<div class="empty">🌙 A day off — no batches. Make it a working day again on the calendar and they open.</div>`
+          : missing === channelCount
           ? `<p class="hint">Nothing open for this day yet. It opens by itself that morning — or open it now to work ahead.</p>`
           : `${sections(ahead.rows, ahead.date)}
              <p class="hint">Clear anything you get ahead on and it stays cleared — the morning run finds

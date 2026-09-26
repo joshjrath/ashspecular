@@ -51,10 +51,13 @@ export async function openBatchesFor(
 ): Promise<OpenResult> {
   let opened = 0;
   let alreadyThere = 0;
+  const off = await daysOff();
 
   for (const channel of recurringChannels().filter(only)) {
     // With no date given, each channel opens its own today.
     const day = date ?? batchDay(channel);
+    // No batches on a day off: nobody's working it.
+    if (off.has(day)) continue;
     const perDay = channel.recurring?.perDay ?? 1;
     const dueAt = channel.recurring?.dueAt ?? DEADLINE_TIME;
     const deadline = instantIn(day, dueAt, ORG_TZ);
@@ -90,6 +93,38 @@ export async function openBatchesFor(
   }
 
   return { date: date ?? shortsDay(), opened, alreadyThere };
+}
+
+async function daysOff(): Promise<Set<string>> {
+  const { rows } = await pool.query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM days_off`);
+  return new Set(rows.map((r) => r.day));
+}
+
+/**
+ * A day just marked off: its batches go, unless someone's already started on
+ * one (a batch with uploads ticked, or cleared, stays exactly as it is).
+ */
+export async function clearBatchesOn(day: string): Promise<number> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open' AND COALESCE(batch_done, 0) = 0`,
+    [day],
+  );
+  return rowCount ?? 0;
+}
+
+/**
+ * A day off made a working day again: its batches come back, if the day is
+ * one that was already open (today, or ahead of it up to the furthest day
+ * opened) — a day further out opens with the rest when its time comes.
+ */
+export async function reopenBatchesOn(day: string): Promise<number> {
+  if (day < shiftDate(shortsDay(), -1)) return 0;
+  const { rows } = await pool.query<{ last: string | null }>(
+    `SELECT to_char(MAX(air_date), 'YYYY-MM-DD') AS last FROM records WHERE batch_no IS NOT NULL`,
+  );
+  const last = rows[0]?.last ?? shortsDay();
+  if (day > last && day > shortsDay()) return 0;
+  return (await openBatchesFor(day)).opened;
 }
 
 /** The furthest ahead one press may open: a quarter of a year. */

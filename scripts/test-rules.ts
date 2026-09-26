@@ -1410,6 +1410,13 @@ t("a scored revision's card shows its score; every revision card has ★ Summari
 const revPageSum = renderRecord(shellFix, revRec, { review: { recordId: 40, channel: "Specular Anime", video: "x", title: "x", version: 3, versions: 3, comments: revSum.comments, source: "pasted", summary: revSum.text, summaryBy: revSum.by, ownSummary: null, ownScore: null, autoScore: revSum.breakdown.auto, score: revSum.breakdown.score, breakdown: revSum.breakdown, summarizedAt: new Date() } });
 t("a revision's page has its Summary: score, why, and the notes", [revPageSum.includes('id="summary"'), revPageSum.includes('class="scoreball"'), revPageSum.includes("How big:"), revPageSum.includes("Summarize again")], [true, true, true, true]);
 
+section("Days off have no daily batches");
+const offRec = renderRecurring({ ...shellFix, daysOff: ["2026-09-28"] } as typeof shellFix, { date: "2026-09-28", rows: [] },
+  { date: "2026-09-28", rows: [{ channel: "Specular Studios Bits", total: 0, done: 0, removed: 0 }] }, [],
+  [{ date: "2026-09-28", channels: 0, total: 0, done: 0 }, { date: "2026-09-29", channels: 0, total: 0, done: 0 }]);
+t("today, a day off says so instead of listing batches", offRec.includes("A day off — no batches."), true);
+t("…its day in the strip reads 'day off', and it can't be opened", [/daychip none dayoff[^>]*>[\s\S]*?day off<\/small>/.test(offRec), offRec.includes('value="2026-09-28"><button class="clear">Open this day')], [true, false]);
+
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
 );

@@ -29,6 +29,7 @@ export const RELEASES: Release[] = [
       { text: "Rolling the dice is instant now, and whatever you add from them is brought forward in the cards and rerolls for two weeks.", href: "/story-lab#dice" },
       { text: "Nothing assigned: a channel expected to post in the next 8 days with no video on that day shows on the dashboard, beside Calendar, in the bell and as a dashed slot on the calendar.", href: "/" },
       { text: "An Uploaded button on every card: it clears the video and turns it green on the calendar.", href: "/calendar" },
+      { text: "A day off has no daily batches: marking one removes that day's untouched batches, and making it a working day again brings them back.", href: "/recurring" },
     ],
   },
   {
