@@ -41,10 +41,14 @@ Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
 
+Categories are always listed **Stories first** (then Gaming, Reading, Bits,
+Movies): the sidebar, the dashboard columns and channel list, the calendar
+toggles, the Uploads switch, the calendar feed and the Discord menus.
+
 **Open work** sits in columns, one per category, side by side. The
 **Columns** menu top right is a checklist of the five categories with their
 counts — tick three and you get three columns, tick five and you get five; it
-takes effect at once and the dashboard remembers it. Gaming, Stories and Bits
+takes effect at once and the dashboard remembers it. Stories, Gaming and Bits
 until you choose. Each column shows its ten most pressing, pinned first, with
 "See all" for the rest; in a narrow column each task stacks itself so nothing
 is cut off. Anything with no category yet always shows, full width, below.
@@ -167,7 +171,7 @@ changes to suit it:
 
 **Bits and Reading days run 3 AM to 3 AM Eastern.** A Short posted at
 1:30 AM counts toward the day before, and until 3 AM the Uploads heatmap and
-the Recurring page are still on the day being finished. Gaming, Stories and
+the Recurring page are still on the day being finished. Stories, Gaming and
 Movies turn over at midnight. (`SHORTS_DAY_STARTS_HOUR` in
 `src/parse/derive.ts`.)
 

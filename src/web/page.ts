@@ -1905,7 +1905,7 @@ function group(id: string, list: StoredRecord[], sub = ""): string {
 }
 
 /** The dashboard's columns until you pick your own. */
-export const DEFAULT_DASH_COLS = ["gaming", "stories", "bits"];
+export const DEFAULT_DASH_COLS = ["stories", "gaming", "bits"];
 
 export function renderDashboard(
   shell: Shell,

@@ -293,7 +293,8 @@ t("and its version", namedShort.version, 2);
 // ── the master channel list ───────────────────────────────────────────────
 section("master channel list");
 
-t("five categories, in the studio's order", CATEGORIES.map((c) => c.id), ["gaming", "stories", "reading", "bits", "movies"]);
+t("five categories, Stories first", CATEGORIES.map((c) => c.id), ["stories", "gaming", "reading", "bits", "movies"]);
+t("channels are listed Stories first too", [...new Set(CHANNELS.map((c) => c.category))], ["stories", "gaming", "reading", "bits", "movies"]);
 t("30 channels", CHANNELS.length, 30);
 t("every bits channel opens daily", CHANNELS.filter((c) => c.category === "bits").every((c) => c.recurring), true);
 t("roblox finds its channel", matchChannel("roblox doors ep 4 is up")?.name, "Specular Roblox");
@@ -410,7 +411,7 @@ const avatar: Record<string, string> = {
 };
 t("Stories channels wear their avatar colours exactly",
   Object.entries(avatar).filter(([n, hex]) => CHANNELS.find((c) => c.name === n)?.color !== hex).map(([n]) => n), []);
-t("category colours are unchanged", CATEGORIES.map((c) => c.color), ["#35986A", "#4A5CD4", "#CE7118", "#AC63C8", "#A63F66"]);
+t("category colours are unchanged", Object.fromEntries(CATEGORIES.map((c) => [c.id, c.color])), { stories: "#4A5CD4", gaming: "#35986A", reading: "#CE7118", bits: "#AC63C8", movies: "#A63F66" });
 
 // ── sorting lists ─────────────────────────────────────────────────────────
 section("sorting");
@@ -550,9 +551,9 @@ const dashWith = (cols?: string[]) => renderDashboard({ ...shellFix, active: "da
   byDay: [], grouped: new Map([["stories", [plainRec]]]), channels: {}, cols,
 });
 const visibleCols = (html: string) => [...html.matchAll(/class="catcol" data-cat="([a-z]+)"[^>]*?(hidden)?>/g)].filter((m) => !m[2]).map((m) => m[1]);
-t("default columns: Gaming, Stories, Bits side by side", visibleCols(dashWith()), ["gaming", "stories", "bits"]);
+t("default columns: Stories, Gaming, Bits side by side", visibleCols(dashWith()), ["stories", "gaming", "bits"]);
 t("the number ticked is the number of columns", /data-n="2" style="--n:2"/.test(dashWith(["stories", "reading"])), true);
-t("columns keep the studio's order", visibleCols(dashWith(["movies", "gaming"])), ["gaming", "movies"]);
+t("columns keep the studio's order", visibleCols(dashWith(["movies", "gaming", "stories"])), ["stories", "gaming", "movies"]);
 t("nothing ticked shows no columns, and says how to pick", [visibleCols(dashWith([])).length, /class="empty nocols">/.test(dashWith([]))], [0, true]);
 
 section("Scripts — the scriptwriter's board, as data");

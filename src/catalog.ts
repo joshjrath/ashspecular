@@ -23,20 +23,21 @@ export interface Category {
 }
 
 /** In the studio's own order, from the master channel list. */
+/** In the studio's order — Stories first, everywhere they're listed. */
 export const CATEGORIES: Category[] = [
-  {
-    id: "gaming",
-    label: "Gaming",
-    color: "#35986A",
-    codePrefix: "GAME",
-    hint: "Gameplay series on Specular Minecraft and Specular Roblox — episodic, numbered.",
-  },
   {
     id: "stories",
     label: "Stories",
     color: "#4A5CD4",
     codePrefix: "VIDEO",
     hint: "Long-form story videos across the Stories channels. The studio's assignment posts (air date, script stage, word count, an @ tag) are stories; the @ tag names the channel.",
+  },
+  {
+    id: "gaming",
+    label: "Gaming",
+    color: "#35986A",
+    codePrefix: "GAME",
+    hint: "Gameplay series on Specular Minecraft and Specular Roblox — episodic, numbered.",
   },
   {
     id: "reading",
@@ -102,10 +103,6 @@ export interface Channel {
  * costs more than an unset one, which is one dropdown away.
  */
 export const CHANNELS: Channel[] = [
-  // ── Gaming ──────────────────────────────────────────────────────────────
-  { id: "minecraft", name: "Specular Minecraft", color: "#A35E16", category: "gaming", aliases: ["minecraft", "smp"] },
-  { id: "roblox", name: "Specular Roblox", color: "#047E67", category: "gaming", aliases: ["roblox"] },
-
   // ── Stories ─────────────────────────────────────────────────────────────
   { id: "studios", name: "Specular Studios", color: "#D21B20", category: "stories", aliases: ["studios", "specular studio"] },
   { id: "anime", name: "Specular Anime", color: "#360D7B", category: "stories" },
@@ -121,6 +118,10 @@ export const CHANNELS: Channel[] = [
   { id: "battles", name: "Specular Battles", color: "#A20E82", category: "stories" },
   { id: "survives", name: "Specular Survives", color: "#885AAA", category: "stories" },
   { id: "documentaries", name: "Specular Documentaries", color: "#1BD058", category: "stories", aliases: ["specular docs"] },
+
+  // ── Gaming ──────────────────────────────────────────────────────────────
+  { id: "minecraft", name: "Specular Minecraft", color: "#A35E16", category: "gaming", aliases: ["minecraft", "smp"] },
+  { id: "roblox", name: "Specular Roblox", color: "#047E67", category: "gaming", aliases: ["roblox"] },
 
   // ── Reading (each opens its day's batch automatically, like bits) ───────
   { id: "dc", name: "Specular DC", color: "#B75015", category: "reading", aliases: ["dc"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
