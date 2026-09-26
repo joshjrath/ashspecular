@@ -14,7 +14,7 @@ import { CATEGORIES } from "../catalog.js";
 import { config } from "../config.js";
 import { pool } from "../db/pool.js";
 import { listBatchesOn, type StoredRecord } from "../db/records.js";
-import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, renderIn } from "../parse/derive.js";
+import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, renderIn, shiftDate } from "../parse/derive.js";
 
 const COLOUR = Number.parseInt(
   (CATEGORIES.find((c) => c.id === "stories")?.color ?? "#4A5CD4").slice(1),
@@ -27,6 +27,8 @@ export interface Digest {
   late: StoredRecord[];
   dueToday: StoredRecord[];
   batches: { total: number; done: number; late: number };
+  /** Days off in the week ahead (today included), and the deadlines each moved. */
+  daysOff?: Array<{ day: string; moved: StoredRecord[] }>;
 }
 
 const DUE = "COALESCE(vo_due, deadline, script_due)";
@@ -77,7 +79,16 @@ export async function buildDigest(date = dateIn(ORG_TZ)): Promise<Digest> {
     ).length,
   };
 
-  return { date, priorities, late, dueToday, batches };
+  // Days off this week: say so, and what they brought forward.
+  const { listDaysOff, listOffShifted } = await import("../db/records.js");
+  const [offDays, shifted] = await Promise.all([listDaysOff(), listOffShifted()]);
+  const week = offDays.filter((d) => d >= date && d <= shiftDate(date, 7));
+  const daysOff = week.map((day) => ({
+    day,
+    moved: shifted.map((x) => x.record).filter((r) => r.offFrom && dateIn(ORG_TZ, r.offFrom) === day),
+  }));
+
+  return { date, priorities, late, dueToday, batches, daysOff };
 }
 
 function line(r: StoredRecord): string {
@@ -101,6 +112,25 @@ export function renderDigestEmbed(d: Digest): EmbedBuilder {
     .setTitle(`Today · ${pretty}`)
     .setColor(COLOUR)
     .setFooter({ text: `${ORG_TZ} · second zone ${TEAM_TZ}` });
+
+  if (d.daysOff?.length) {
+    const short = (day: string) =>
+      new Intl.DateTimeFormat("en-US", { weekday: "short", month: "numeric", day: "numeric", year: "numeric", timeZone: "UTC" })
+        .format(new Date(`${day}T12:00:00Z`));
+    embed.addFields({
+      name: "🌙 Days off",
+      value: d.daysOff
+        .map(({ day, moved }) => {
+          const head = day === d.date ? "**Today is a day off.**" : `**${short(day)}** is a day off.`;
+          if (!moved.length) return head;
+          const due = moved[0]!.voDue ?? moved[0]!.deadline ?? moved[0]!.scriptDue;
+          return `${head} ${moved.length} deadline${moved.length === 1 ? "" : "s"} due the working day before${
+            due ? ` (${renderIn(due, ORG_TZ, "ET")})` : ""
+          }: ${moved.slice(0, 4).map((r) => r.code ?? r.title ?? "untitled").join(", ")}${moved.length > 4 ? ` and ${moved.length - 4} more` : ""}.`;
+        })
+        .join("\n"),
+    });
+  }
 
   embed.addFields({
     name: `Voiceover — the next ${d.priorities.length || config.digestCount}`,

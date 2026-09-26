@@ -41,7 +41,7 @@ as many as you like; the newest pin comes first. Press the tag to unpin.
 Both are on the Discord card too (*Pause*, *No script*), for when it's
 already known at intake, and on every record's own page.
 
-**The bell** — top right of the dashboard. Five kinds, each with its own icon
+**The bell** — top right of the dashboard. Six kinds, each with its own icon
 and colour:
 
 | | Kind | When it shows |
@@ -51,6 +51,7 @@ and colour:
 | ◷ amber | **Due soon** | open work is due within 24 hours |
 | ▭ green | **Airing** | a video airs today or tomorrow |
 | + purple | **New** | an assignment was filed in the last 3 days |
+| ☾ cyan | **Day off** | a day off brought a deadline forward (until that day passes) |
 
 A filter row picks one kind at a time (remembered in your browser), with a
 count on each. The red badge counts what arrived since you last opened it.
@@ -149,6 +150,22 @@ above it.
 
 Every record's page also has an **air date box** — for a phone, where dragging
 is awkward, or for a date weeks out.
+
+**Days off.** A day off is a day no work can be done, so anything due on it is
+due at the same time on the last working day before it (two days off in a row
+go back two days). Mark one with the moon on any day of the calendar — it
+shows when you point at the day, and on the day and week views — or with the
+date box in the **Days off** strip under the dashboard's tiles. The day turns
+striped, and every deadline on it shows where it now falls, with a *Day off
+9/28 · due Sun 9/27* tag on its card. Nothing stored changes: press the moon
+(or × in the strip) and the day is a working day again, deadlines back as
+they were. The strip lists each day off coming up with what it moved and to
+when; the bell has a **Day off** kind for each deadline it moved; the morning
+digest says when one is this week; late, due today, the chart, the calendar,
+the nudge and Google Calendar (an all-day *🌙 Day off*) all go by the moved
+deadline. Only today and later can be marked. Daily batches keep their own
+deadlines: each one is its own day's work. Air dates don't move either —
+posting isn't work.
 
 Dates read M/D/YYYY everywhere, and every air date carries a live countdown:
 "airs 9/28/2026 · in 3 days", turning amber inside three days.
@@ -414,7 +431,8 @@ last 60 days rather than only the feed's latest fifteen.
 link to this board's calendar. Paste it into Google Calendar → *Other
 calendars* → *From URL*, and Google keeps it in step on its own: every air
 date as an all-day event, every deadline at its time with a two-hour
-reminder, cleared work kept with a ✓. Switches in the panel leave out air
+reminder, cleared work kept with a ✓, days off as all-day *🌙 Day off*
+events. Switches in the panel leave out air
 dates or deadlines, or add the daily batches (off by default). Google checks
 subscribed calendars every few hours, so a change here reaches it within
 that. Apple Calendar can subscribe with the same link.
@@ -529,7 +547,8 @@ a smear.
 
 At 08:00 ET the bot posts one message: the four long-form videos whose
 voiceover is closest, anything late, anything due today, and how the bits
-stand. It picks by voiceover deadline, because that is what the day is built
+stand. When a day off falls in the week ahead it leads with that, and what it
+brought forward. It picks by voiceover deadline, because that is what the day is built
 around. Bits get one summary line rather than seven rows.
 
 ```

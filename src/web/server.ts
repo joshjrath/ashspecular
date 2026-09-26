@@ -37,6 +37,9 @@ import {
   channelSchedule,
   snapshotMoves,
   restoreMoves,
+  listDaysOff,
+  setDayOff,
+  listOffShifted,
   type MoveSnapshot,
   type CalendarMode,
   type StoredRecord,
@@ -49,6 +52,7 @@ import {
   derive,
   instantIn,
   shiftDate,
+  usDate,
 } from "../parse/derive.js";
 import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
@@ -97,7 +101,7 @@ const PUBLIC = new Set(["/login", "/healthz"]);
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
@@ -107,6 +111,7 @@ async function shell(active: string): Promise<Shell> {
     openBatchCount(shortsDay()),
     behindCount().catch(() => null),
     pausedCount(),
+    listDaysOff(),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
@@ -122,6 +127,7 @@ async function shell(active: string): Promise<Shell> {
     lastIntake: at,
     removed,
     paused,
+    daysOff,
     scripts: Boolean(config.scriptsUrl || config.scriptsUrlRaw),
   };
 }
@@ -202,12 +208,15 @@ export async function startWeb(): Promise<void> {
     if (!hasDatabase || !checkFeedKey(request.query.key)) return reply.code(404).send("Not found");
     const opts = parseFeedOptions(request.query);
     const today = dateIn(ORG_TZ);
-    const list = await feedRecords(shiftDate(today, -60), shiftDate(today, 365), opts.batches);
+    const [list, daysOff] = await Promise.all([
+      feedRecords(shiftDate(today, -60), shiftDate(today, 365), opts.batches),
+      listDaysOff(),
+    ]);
     return reply
       .header("Content-Type", "text/calendar; charset=utf-8")
       .header("Content-Disposition", 'inline; filename="specular.ics"')
       .header("Cache-Control", "no-cache")
-      .send(buildIcs(list, list, opts, baseUrlOf(request)));
+      .send(buildIcs(list, list, opts, baseUrlOf(request), new Date(), daysOff.filter((d) => d >= shiftDate(today, -60))));
   });
   app.get("/login", async (_req, reply) => reply.type("text/html").send(renderLogin()));
 
@@ -221,13 +230,14 @@ export async function startWeb(): Promise<void> {
   app.get("/", async (request, reply) => {
     if (!hasDatabase) return reply.type("text/html").send(renderEmptyState());
 
-    const [s, counters, byDay, grouped, channels, notices] = await Promise.all([
+    const [s, counters, byDay, grouped, channels, notices, shifted] = await Promise.all([
       shell("dashboard"),
       stats(ORG_TZ),
       dueByDay(ORG_TZ, 14),
       openByCategory(),
       channelCounts(),
       listNotices(ORG_TZ),
+      listOffShifted(),
     ]);
 
     return reply
@@ -235,7 +245,7 @@ export async function startWeb(): Promise<void> {
       .send(
         renderDashboard(s, {
           stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request),
-          cols: dashColumns(request),
+          cols: dashColumns(request), shifted: shifted.map((x) => x.record),
         }),
       );
   });
@@ -917,11 +927,31 @@ export async function startWeb(): Promise<void> {
       const date = safeDate(request.body?.date);
       const record = await getRecord(id);
       if (!record || !date) return reply.code(400).send({ ok: false });
-      const moved = await moveWithRest(record, date, safeMode(request.body?.mode), request.body?.only === "1");
+      const mode = safeMode(request.body?.mode);
+      const moved = await moveWithRest(record, date, mode, request.body?.only === "1");
       if (!moved.ok) return reply.code(400).send({ ok: false });
-      return reply.send({ ok: true, moved: moved.plan.moves.length, days: moved.plan.days, text: moved.text, undo: moved.undo });
+      // A deadline dropped on a day off lands on the working day before; say so.
+      const off = mode === "deadlines" && (await listDaysOff()).includes(date)
+        ? `${usDate(date)} is a day off, so it's due the working day before. `
+        : "";
+      return reply.send({
+        ok: true, moved: moved.plan.moves.length, days: moved.plan.days, text: off + moved.text, undo: moved.undo,
+      });
     },
   );
+
+  // Days off: mark one from the calendar (the moon on a day) or the
+  // dashboard's date box, or make it a working day again.
+  app.post<{ Params: { date: string }; Body: { on?: string } }>("/days-off/:date", async (request, reply) => {
+    const date = safeDate(request.params.date);
+    if (date) await setDayOff(date, request.body?.on !== "0");
+    return reply.redirect(backTo(request.headers.referer, "/calendar"));
+  });
+  app.post<{ Body: { date?: string } }>("/days-off", async (request, reply) => {
+    const date = safeDate(request.body?.date);
+    if (date) await setDayOff(date, true);
+    return reply.redirect(backTo(request.headers.referer, "/"));
+  });
 
   // Put a move back: the dragged video and everything that went with it.
   app.post<{ Body: { token?: string } }>("/moves/undo", async (request, reply) => {

@@ -488,7 +488,7 @@ t("no separate pinned section", pages.dashboard.includes("group pinned"), false)
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
 t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
-t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 6);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 7);
 t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
 t("bell: each kind has its own icon colour",
   [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
@@ -937,6 +937,46 @@ t("the record's date box offers to move the rest, ticked", /class="restbox"><inp
 t("…and after a move, an Undo for it", recPage.includes('action="/moves/undo"') && recPage.includes('value="tok"'), true);
 t("…with the note escaped", recPage.includes("Also moved <3> later"), false);
 t("no later videos, no box", renderRecord(shellFix, plainRec, { later: 0 }).includes(`class="restbox"`), false);
+
+// ── days off ──────────────────────────────────────────────────────────────
+section("Days off");
+const todayET = dateIn(ORG_TZ);
+const offDay = shiftDate(todayET, 3);
+const dayBeforeOff = shiftDate(offDay, -1);
+const offShell = { ...shellFix, daysOff: [offDay] };
+const at2359 = (d: string) => instantIn(d, "23:59", ORG_TZ)!;
+const shiftedRec = { ...plainRec, id: 13, code: "VIDEO-040", voDue: at2359(dayBeforeOff), offFrom: at2359(offDay) } as typeof plainRec;
+const md = (d: string) => usDate(d).replace(/\/\d{4}$/, "");
+const wd = (d: string) => new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+const offRow = renderList(offShell, "Queue", "", [shiftedRec]);
+t("a deadline a day off moved says so on its card", offRow.includes(`Day off ${md(offDay)} · due ${wd(dayBeforeOff)} ${md(dayBeforeOff)}`), true);
+t("…and the pill's tooltip keeps the time it was set for", offRow.includes(", a day off"), true);
+t("no day off, no tag", renderList(offShell, "Queue", "", [plainRec]).includes('class="off-tag"'), false);
+const offCal = renderCalendar(offShell, offDay.slice(0, 7), "deadlines", [], [], []);
+t("the calendar stripes a day off", new RegExp(`class="cell[^"]* off" data-date="${offDay}"`).test(offCal), true);
+t("…and its moon makes it a working day again", new RegExp(`action="/days-off/${offDay}">\\s*<input type="hidden" name="on" value="0">`).test(offCal), true);
+const plainFuture = shiftDate(todayET, 1);
+if (plainFuture.slice(0, 7) === offDay.slice(0, 7))
+  t("any other day from today on can be marked off", new RegExp(`action="/days-off/${plainFuture}">\\s*<input type="hidden" name="on" value="1">`).test(offCal), true);
+const pastCal = renderCalendar(offShell, shiftDate(todayET, -40).slice(0, 7), "deadlines", [], [], []);
+t("a day already past can't be marked off", /name="on" value="1"/.test(pastCal.slice(0, pastCal.indexOf(`data-date="${todayET}"`) > 0 ? pastCal.indexOf(`data-date="${todayET}"`) : undefined)), false);
+const offDash = renderDashboard({ ...offShell, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [], grouped: new Map([["stories", [shiftedRec]]]), channels: {}, shifted: [shiftedRec],
+  notices: [{ kind: "dayoff", at: new Date(), record: shiftedRec }], seen: 0,
+});
+t("the dashboard lists the day off and what it moved", offDash.includes(`1 deadline now due ${wd(dayBeforeOff)} ${usDate(dayBeforeOff)} — VIDEO-040`), true);
+t("…with a box to add another", offDash.includes('action="/days-off"'), true);
+t("the bell rings for it", offDash.includes(`Day off ${usDate(offDay)} · now due`), true);
+t("…in its own colour", (offDash.match(/data-f="dayoff"/g) ?? []).length, 1);
+t("no days off: the strip says how they work", renderDashboard({ ...shellFix, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never, byDay: [], grouped: new Map(), channels: {},
+}).includes("None coming up. A deadline on a day off is due the working day before."), true);
+const offDayView = renderDay(offShell, offDay, "deadlines", [{ date: offDay, list: [] }]);
+t("the day view shows it too", /class="daycol[^"]* off"/.test(offDayView) && offDayView.includes("Day off — nothing can be due."), true);
+const offIcs = buildIcs([], [], parseFeedOptions({}), "https://board.example", new Date("2026-09-26T12:00:00Z"), ["2026-09-28"]);
+t("the Google Calendar feed carries days off as all-day events", offIcs.includes("DTSTART;VALUE=DATE:20260928") && offIcs.includes("SUMMARY:🌙 Day off"), true);
+t("the dashboard's scripts still compile", [...offDash.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

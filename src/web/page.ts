@@ -397,6 +397,49 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cal .num:hover { background: rgba(255,255,255,.08); color: var(--ink); }
 .cal .cell.today .num { color: #101012; }
 .cal .num .tag { font-family: var(--ui); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+/* A day off: striped, with its moon always showing; other days show theirs on hover. */
+.cal .cell { position: relative; }
+.cal .cell.off { background: repeating-linear-gradient(135deg, rgba(42,169,216,.13) 0 9px, rgba(42,169,216,.04) 9px 18px), var(--sunk); }
+.cal .cell.today.off { background: repeating-linear-gradient(135deg, rgba(0,0,0,.08) 0 9px, transparent 9px 18px), var(--salmon); }
+.offbtn { margin: 0; }
+.cal .offbtn { position: absolute; top: 9px; right: 9px; }
+.offbtn button { display: inline-flex; align-items: center; gap: 5px; height: 26px; min-width: 26px; padding: 0 6px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--ink3); cursor: pointer;
+  font: 700 10.5px/1 var(--ui); letter-spacing: .06em; text-transform: uppercase; opacity: 0; transition: opacity .12s ease; }
+.offbtn button svg { width: 14px; height: 14px; flex: none; }
+.cal .cell:hover .offbtn button, .daycol:hover .offbtn button, .offbtn button:focus-visible { opacity: 1; }
+.offbtn button:hover { background: rgba(42,169,216,.18); color: #9FDDF4; }
+.offbtn.on button { opacity: 1; background: rgba(42,169,216,.2); color: #9FDDF4; padding: 0 9px 0 7px; }
+.cal .cell.today .offbtn button { color: #3A2A28; }
+.cal .cell.today .offbtn.on button { background: rgba(0,0,0,.12); color: #101012; }
+@media (hover: none) { .offbtn button { opacity: .6; } }
+.daycol.off { background: repeating-linear-gradient(135deg, rgba(42,169,216,.1) 0 9px, transparent 9px 18px), var(--card); }
+.daycol.today .offbtn button { color: #3A2A28; }
+.off-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 6px;
+  background: rgba(42,169,216,.16); color: #A8E0F5; font-weight: 700; font-size: 11px; white-space: nowrap; }
+.off-tag svg { width: 11px; height: 11px; }
+.offstrip { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin: 0 0 14px;
+  padding: 10px 12px 10px 16px; border-radius: 18px; background: var(--card); color: var(--ink); font-size: 13px; }
+.offstrip.today { box-shadow: inset 0 0 0 1.5px rgba(42,169,216,.55); }
+.offstrip .lbl { display: inline-flex; align-items: center; gap: 7px; font-family: var(--display); font-weight: 700;
+  font-size: 15px; color: #9FDDF4; }
+.offstrip .lbl svg { width: 16px; height: 16px; }
+.offstrip .none { color: var(--ink3); }
+.offstrip ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; flex: 1; min-width: 0; }
+.offday { display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 12px; border-radius: 12px;
+  background: rgba(42,169,216,.1); min-width: 0; }
+.offday.now { background: rgba(42,169,216,.22); }
+.offday b { white-space: nowrap; }
+.offday span { color: var(--ink2); min-width: 0; }
+.offday form, .offadd { margin: 0; }
+.offday .x { width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: var(--ink3);
+  cursor: pointer; font-size: 16px; line-height: 1; }
+.offday .x:hover { background: rgba(255,255,255,.1); color: #fff; }
+.offadd { display: flex; gap: 6px; margin-left: auto; }
+.offadd input { height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--sunk);
+  color: var(--ink); font: inherit; color-scheme: dark; }
+.offadd button { height: 32px; padding: 0 14px; border: 0; border-radius: 10px; background: #2AA9D8; color: #06141A;
+  font: inherit; font-weight: 800; cursor: pointer; }
 .cal .chip {
   display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 10px;
   background: var(--raised); font-size: 12.5px; color: var(--ink2); min-width: 0; font-weight: 600;
@@ -1305,6 +1348,8 @@ export interface Shell {
   query?: string;
   /** Set when SCRIPTS_URL is, so the rail shows a Scripts tab. */
   scripts?: boolean;
+  /** Every day marked off, YYYY-MM-DD. */
+  daysOff?: string[];
 }
 
 function layout(title: string, shell: Shell | null, body: string): string {
@@ -1449,6 +1494,10 @@ const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; ico
     kind: "new", label: "New", colour: "#A35BC4",
     icon: `<path d="M5 3.5h6.5L15 7v9.5H5z"/><path d="M10 9.5v4.5M7.8 11.8h4.4"/>`,
   },
+  {
+    kind: "dayoff", label: "Day off", colour: "#2AA9D8",
+    icon: `<path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/>`,
+  },
 ];
 
 const noticeIcon = (kind: NoticeKind) => {
@@ -1477,6 +1526,10 @@ function bell(notices: Notice[], seen: number): string {
       }
       case "airing": return `Airs ${esc(relativeDay(r.airDate!))} · ${esc(usDate(r.airDate!))}`;
       case "new": return `New ${esc(r.stage ?? "assignment")}${r.code ? ` · ${esc(r.code)}` : ""}`;
+      case "dayoff": {
+        const due = r.voDue ?? r.deadline ?? r.scriptDue;
+        return `Day off ${esc(usDate(dayOf(r.offFrom ?? n.at)))} · now due ${due ? esc(renderIn(due, ORG_TZ, "ET")) : "the day before"}`;
+      }
     }
   };
   const items = notices
@@ -1597,7 +1650,7 @@ function bell(notices: Notice[], seen: number): string {
           try { since = Number(localStorage.getItem("alertedTo")) || Date.now(); } catch (x) {}
           var now = Date.now(), fresh = data.items.filter(function (n) { return n.at > since && n.at <= now; });
           fresh.slice(0, 5).forEach(function (n) {
-            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment" };
+            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment", dayoff: "Day off — due earlier" };
             var note = new Notification(heads[n.kind] || "Specular", {
               body: n.title + (n.channel ? " — " + n.channel : ""), tag: n.kind + ":" + n.id,
             });
@@ -1669,6 +1722,7 @@ function row(r: StoredRecord): string {
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
   if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
   if (r.pausedAt) meta.unshift(`<span class="paused-tag" title="Paused ${esc(usDate(dayOf(r.pausedAt)))}">Paused</span>`);
+  if (r.offFrom && r.status === "open" && !r.pausedAt) meta.unshift(offTag(r));
 
   return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(displayTitle(r))}">${
@@ -1677,6 +1731,76 @@ function row(r: StoredRecord): string {
     <div class="meta">${meta.join("")}</div>
     ${duePill(r)}
     ${actions(r)}
+  </div>`;
+}
+
+const MOON_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/></svg>`;
+
+const weekdayOf = (day: string) =>
+  new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+
+/** "Day off 9/28 · due Sun 9/27": a deadline a day off brought forward. */
+function offTag(r: StoredRecord): string {
+  const at = r.voDue ?? r.deadline ?? r.scriptDue;
+  if (!r.offFrom || !at) return "";
+  const was = dayOf(r.offFrom);
+  const now = dayOf(at);
+  return `<span class="off-tag" title="${esc(`Due ${renderIn(r.offFrom, ORG_TZ, "ET")}, a day off — so it's due the working day before`)}">${MOON_ICON}Day off ${esc(usDate(was).replace(/\/\d{4}$/, ""))} · due ${esc(weekdayOf(now))} ${esc(usDate(now).replace(/\/\d{4}$/, ""))}</span>`;
+}
+
+/**
+ * The switch on a calendar day: mark it off, or make it a working day again.
+ * Only today and later can be marked; a past day off can still be cleared.
+ */
+function offToggle(day: string, off: boolean): string {
+  if (!off && day < dateIn(ORG_TZ)) return "";
+  const label = off
+    ? `${usDate(day)} is a day off — make it a working day again`
+    : `Mark ${usDate(day)} as a day off: nothing can be due that day`;
+  return `<form class="offbtn${off ? " on" : ""}" method="post" action="/days-off/${day}">
+    <input type="hidden" name="on" value="${off ? "0" : "1"}">
+    <button aria-label="${esc(label)}" title="${esc(label)}">${MOON_ICON}${off ? "<span>Day off</span>" : ""}</button>
+  </form>`;
+}
+
+/**
+ * The dashboard's days off: each one coming up, what it moved and to when,
+ * and a date box to add another.
+ */
+function daysOffStrip(days: string[], shifted: StoredRecord[]): string {
+  const today = dateIn(ORG_TZ);
+  const ahead = days.filter((d) => d >= today).slice(0, 8);
+  const byDay = new Map<string, StoredRecord[]>();
+  for (const r of shifted) {
+    if (!r.offFrom) continue;
+    const d = dayOf(r.offFrom);
+    byDay.set(d, [...(byDay.get(d) ?? []), r]);
+  }
+  const items = ahead
+    .map((d) => {
+      const list = byDay.get(d) ?? [];
+      const first = list[0];
+      const to = first ? first.voDue ?? first.deadline ?? first.scriptDue : null;
+      const names = list.slice(0, 3).map((r) => r.code ?? displayTitle(r)).join(", ") + (list.length > 3 ? ` +${list.length - 3}` : "");
+      return `<li class="offday${d === today ? " now" : ""}">
+        <b>${d === today ? "Today" : esc(weekdayOf(d))} ${esc(usDate(d))}</b>
+        <span>${
+          list.length && to
+            ? `${list.length} deadline${list.length === 1 ? "" : "s"} now due ${esc(weekdayOf(dayOf(to)))} ${esc(usDate(dayOf(to)))} — ${esc(names)}`
+            : "nothing was due"
+        }</span>
+        <form method="post" action="/days-off/${d}"><input type="hidden" name="on" value="0">
+          <button class="x" aria-label="Make ${esc(usDate(d))} a working day again" title="Make it a working day again">×</button></form>
+      </li>`;
+    })
+    .join("");
+  return `<div class="offstrip${ahead[0] === today ? " today" : ""}">
+    <span class="lbl">${MOON_ICON}Days off</span>
+    ${items ? `<ul>${items}</ul>` : `<span class="none">None coming up. A deadline on a day off is due the working day before.</span>`}
+    <form class="offadd" method="post" action="/days-off">
+      <input type="date" name="date" min="${today}" required aria-label="A day off">
+      <button>Add</button>
+    </form>
   </div>`;
 }
 
@@ -1705,6 +1829,7 @@ function duePill(r: StoredRecord): string {
     `${label} ${renderIn(at, ORG_TZ, "ET")}`,
     renderIn(at, TEAM_TZ, "IST"),
     r.voDue && r.voSource === "calculated" ? `set ${VO_BUFFER_DAYS} days before air` : "",
+    r.offFrom ? `was ${renderIn(r.offFrom, ORG_TZ, "ET")}, a day off` : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -1984,6 +2109,8 @@ export function renderDashboard(
     seen?: number;
     /** Which categories show as columns, from the dash_cols cookie. */
     cols?: string[];
+    /** Open work a day off brought forward. */
+    shifted?: StoredRecord[];
   },
 ): string {
   const tiles = [
@@ -2051,6 +2178,7 @@ export function renderDashboard(
     shell,
     `${pageHeader("Dashboard", bell(data.notices ?? [], data.seen ?? 0))}
     <div class="stats">${tiles}</div>
+    ${daysOffStrip(shell.daysOff ?? [], data.shifted ?? [])}
 
     <div class="split">
       <div class="panel">
@@ -2509,22 +2637,26 @@ function dayColumn(
   mode: CalendarMode,
   q: string,
   cls: string,
+  off = false,
 ): string {
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(
     new Date(`${d}T12:00:00Z`),
   );
-  return `<section class="daycol${cls}" data-date="${d}" data-pretty="${esc(`${weekday} ${usDate(d)}`)}">
+  return `<section class="daycol${cls}${off ? " off" : ""}" data-date="${d}" data-pretty="${esc(`${weekday} ${usDate(d)}`)}">
     <header>
       <a class="dname" href="/day/${d}${q}" title="Open ${esc(weekday)} in the day view">
         <span class="wk">${esc(weekday)}</span>
         <span class="dt">${esc(usDate(d))}</span>
       </a>
       <span class="rel">${esc(relativeDay(d))}</span>
+      ${offToggle(d, off)}
       <span class="cnt">${list.length}</span>
     </header>
     <div class="daybody">${
       list.map((r) => dayCard(r, mode)).join("") ||
-      `<div class="dayempty">Nothing ${mode === "posting" ? "airing" : "due"}.</div>`
+      `<div class="dayempty">${
+        off && mode === "deadlines" ? "Day off — nothing can be due." : `Nothing ${mode === "posting" ? "airing" : "due"}.`
+      }</div>`
     }</div>
   </section>`;
 }
@@ -2539,8 +2671,8 @@ const MOVED_JS = `
       var KEY = "board-moved";
       function rememberMove(res) {
         return res.json().then(function (j) {
-          if (j && j.undo) {
-            try { sessionStorage.setItem(KEY, JSON.stringify({ text: j.text, token: j.undo })); } catch (e) {}
+          if (j && j.text) {
+            try { sessionStorage.setItem(KEY, JSON.stringify({ text: j.text, token: j.undo || "" })); } catch (e) {}
           }
         }, function () {});
       }
@@ -2559,7 +2691,7 @@ const MOVED_JS = `
       (function () {
         var info = null;
         try { info = JSON.parse(sessionStorage.getItem(KEY) || "null"); sessionStorage.removeItem(KEY); } catch (e) {}
-        if (!info || !info.token) return;
+        if (!info || !info.text) return;
         var toast = document.createElement("div");
         toast.className = "mtoast";
         toast.setAttribute("role", "status");
@@ -2592,8 +2724,9 @@ const MOVED_JS = `
         close.setAttribute("aria-label", "Dismiss");
         close.textContent = "×";
         close.addEventListener("click", function () { toast.remove(); });
+        if (!info.token) hint.remove();
         toast.appendChild(text);
-        toast.appendChild(undo);
+        if (info.token) toast.appendChild(undo);
         toast.appendChild(close);
         document.body.appendChild(toast);
       })();`;
@@ -2729,6 +2862,7 @@ export function renderCalendar(
   const today = dateIn(ORG_TZ);
   const thisMonth = ym;
   const grid = calendarGrid(ym);
+  const offDays = new Set(shell.daysOff ?? []);
 
   const cells = grid
     .map((day) => {
@@ -2756,10 +2890,12 @@ export function renderCalendar(
           ? `<a class="more" href="/day/${day}${q}">+${list.length - CHIPS_PER_CELL} more</a>`
           : "";
 
-      return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}" data-date="${day}">
+      const off = offDays.has(day);
+      return `<div class="cell${outside ? " outside" : ""}${isToday ? " today" : ""}${off ? " off" : ""}" data-date="${day}">
         <a class="num" href="/day/${day}${q}">${num}${
           isToday ? `<span class="tag">today</span>` : ""
         }</a>
+        ${offToggle(day, off)}
         ${chips}${more}
       </div>`;
     })
@@ -3786,12 +3922,13 @@ export function renderDay(
 ): string {
   const q = calQuery(mode, st);
   const today = dateIn(ORG_TZ);
+  const off = new Set(shell.daysOff ?? []);
   const first = days[0]?.date ?? date;
   const last = days[days.length - 1]?.date ?? date;
 
   const columns = days
     .map(({ date: d, list }) =>
-      dayColumn(d, list, mode, q, `${d === today ? " today" : ""}${d === date ? " focus" : ""}`),
+      dayColumn(d, list, mode, q, `${d === today ? " today" : ""}${d === date ? " focus" : ""}`, off.has(d)),
     )
     .join("");
 
@@ -3909,6 +4046,7 @@ export function renderWeek(
 ): string {
   const q = calQuery(mode, st);
   const today = dateIn(ORG_TZ);
+  const off = new Set(shell.daysOff ?? []);
   const end = shiftDay(start, 6);
   const anchor = today >= start && today <= end ? today : start;
 
@@ -3936,7 +4074,7 @@ export function renderWeek(
       } — the channel's later videos follow; Shift-drop moves just the one.</span>
     </div>
     <div class="weekgrid">${days
-      .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : ""))
+      .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : "", off.has(d)))
       .join("")}</div>
     ${columnDragScript(mode)}`,
   );
@@ -3955,6 +4093,8 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
   if (r.batchTarget && r.batchTarget > 1) {
     bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget}`);
   }
+
+  if (r.offFrom && r.status === "open" && mode === "deadlines") bits.push(offTag(r));
 
   return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
       style="--c:${colourOf(r.category)}">

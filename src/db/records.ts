@@ -41,6 +41,12 @@ export interface StoredRecord extends DerivedRecord {
   pausedAt: Date | null;
   /** When it was marked "no script" — the VO is waiting on a script; null when it isn't. */
   noScriptAt: Date | null;
+  /**
+   * The deadline as it was set, when a day off brought it forward. The
+   * deadline fields themselves (voDue, deadline, scriptDue) are always the
+   * ones that stand — a day off already taken into account.
+   */
+  offFrom: Date | null;
   createdAt: Date;
 }
 
@@ -225,6 +231,50 @@ export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
   }
 }
 
+// ── days off ──────────────────────────────────────────────────────────────
+
+/** Every day marked off, as YYYY-MM-DD, earliest first. A handful a year. */
+export async function listDaysOff(): Promise<string[]> {
+  const { rows } = await pool.query<{ day: string }>(
+    `SELECT to_char(day, 'YYYY-MM-DD') AS day FROM days_off ORDER BY day`,
+  );
+  return rows.map((r) => r.day);
+}
+
+/**
+ * Mark a day off, or make it a working day again. Deadlines on it move to the
+ * working day before (or back) wherever they're read; nothing stored changes.
+ */
+export async function setDayOff(day: string, on: boolean): Promise<void> {
+  if (on) await pool.query(`INSERT INTO days_off (day) VALUES ($1::date) ON CONFLICT (day) DO NOTHING`, [day]);
+  else await pool.query(`DELETE FROM days_off WHERE day = $1::date`, [day]);
+  // A deadline that moved may be late now, or no longer late: either way it
+  // gets a fresh nudge if it goes past its time.
+  await pool.query(
+    `DELETE FROM nudges n USING records r
+     WHERE n.record_id = r.id AND r.status = 'open' AND r.batch_no IS NULL
+       AND (${SET_DUE} AT TIME ZONE '${ORG_TZ}')::date = $1::date`,
+    [day],
+  );
+}
+
+/**
+ * Open work whose deadline a day off brought forward, and when that became
+ * so (the day was marked, or the work filed, whichever was later). Only while
+ * the day off is still ahead or today.
+ */
+export async function listOffShifted(limit = 60): Promise<Array<{ record: StoredRecord; at: Date }>> {
+  const { rows } = await pool.query<Row & { marked_at: Date }>(
+    `SELECT x.*, GREATEST(d.created_at, x.created_at) AS marked_at
+     FROM (${SELECT} WHERE status = 'open' AND batch_no IS NULL AND paused_at IS NULL
+             AND (${SET_DUE} AT TIME ZONE '${ORG_TZ}')::date >= (now() AT TIME ZONE '${ORG_TZ}')::date) x
+     JOIN days_off d ON d.day = (x.off_from AT TIME ZONE '${ORG_TZ}')::date
+     ORDER BY x.off_from ASC LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({ record: hydrate(r), at: r.marked_at }));
+}
+
 /**
  * Pause a video, or resume it. Paused, it has no deadline anywhere — it leaves
  * late, due, the calendar, the columns and the bell — and waits on the Paused
@@ -333,6 +383,7 @@ interface Row {
   pinned_at: Date | null;
   paused_at: Date | null;
   no_script_at: Date | null;
+  off_from?: Date | null;
   created_at: Date;
 }
 
@@ -370,14 +421,38 @@ function hydrate(r: Row): StoredRecord {
     pinnedAt: r.pinned_at ?? null,
     pausedAt: r.paused_at ?? null,
     noScriptAt: r.no_script_at ?? null,
+    offFrom: r.off_from ?? null,
     createdAt: r.created_at,
   };
 }
 
-const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
-  air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
+/**
+ * A deadline as it stands: one that falls on a day off is due at the same
+ * time on the last working day before it (off_adjusted, migration 020).
+ * Recurring batches keep theirs — each is its own day's work.
+ */
+const standing = (col: string) => `CASE WHEN batch_no IS NULL THEN off_adjusted(${col}) ELSE ${col} END`;
+
+/** The deadline as set: the voiceover time, then any other deadline, then the script's. */
+const SET_DUE = "COALESCE(vo_due, deadline, script_due)";
+
+/**
+ * The effective deadline for a row: the voiceover time if there is one, then
+ * any other stated deadline, then the script deadline, with days off taken
+ * into account. One expression, used everywhere, so the bar chart and the
+ * counts can never disagree.
+ */
+const DUE = `(${standing(SET_DUE)})`;
+
+/** Every column a record is read with; its deadlines as they stand. */
+const COLUMNS = `id, kind, category, channel, code, title, tag, stage,
+  air_date, ${standing("script_due")} AS script_due, ${standing("vo_due")} AS vo_due, vo_source,
+  ${standing("deadline")} AS deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, created_at FROM records`;
+  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at,
+  CASE WHEN ${DUE} IS DISTINCT FROM ${SET_DUE} THEN ${SET_DUE} END AS off_from, created_at`;
+
+const SELECT = `SELECT ${COLUMNS} FROM records`;
 
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
@@ -451,12 +526,6 @@ export async function channelCounts(): Promise<Record<string, number>> {
 
 // ── the dashboard's numbers ───────────────────────────────────────────────
 
-/**
- * The effective deadline for a row: the voiceover time if there is one, then
- * any other stated deadline, then the script deadline. One expression, used
- * everywhere, so the bar chart and the counts can never disagree.
- */
-const DUE = "COALESCE(vo_due, deadline, script_due)";
 
 /**
  * Open work that is live today. A recurring batch opened ahead for a later day
@@ -642,12 +711,13 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
  *   upcoming  work is due within the next 24 hours  — when it came into that window
  *   airing    a video airs today or tomorrow        — the start of the day before
  *   new       an assignment was filed (last 3 days) — when it was filed
+ *   dayoff    a day off brought a deadline forward  — when the day was marked
  *
  * Each carries the moment it happened, so "unread" is simply anything after
  * the last time the bell was opened. Recurring batches are left out: they
  * fall due every evening and would drown the rest.
  */
-export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new";
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff";
 export interface Notice {
   kind: NoticeKind;
   at: Date;
@@ -658,7 +728,7 @@ export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
   const q = (where: string, order: string) =>
     pool.query<Row>(`${SELECT} WHERE ${where} ORDER BY ${order} LIMIT 30`).then((r) => r.rows.map(hydrate));
   const open = "status = 'open' AND batch_no IS NULL AND paused_at IS NULL";
-  const [revisions, overdue, upcoming, airing, fresh] = await Promise.all([
+  const [revisions, overdue, upcoming, airing, fresh, shifted] = await Promise.all([
     q("kind = 'review' AND status = 'open' AND paused_at IS NULL", "created_at DESC"),
     q(`${open} AND ${DUE} < now()`, `${DUE} DESC`),
     q(`${open} AND ${DUE} >= now() AND ${DUE} < now() + interval '24 hours'`, `${DUE} ASC`),
@@ -670,6 +740,7 @@ export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
       )
       .then((r) => r.rows.map(hydrate)),
     q("kind = 'assignment' AND status <> 'removed' AND created_at > now() - interval '3 days'", "created_at DESC"),
+    listOffShifted(30),
   ]);
   const due = (r: StoredRecord) => (r.voDue ?? r.deadline ?? r.scriptDue)!;
   const dayBefore = (air: string) => {
@@ -683,6 +754,7 @@ export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
     ...upcoming.map((record) => ({ kind: "upcoming" as const, at: new Date(due(record).getTime() - 86_400_000), record })),
     ...airing.map((record) => ({ kind: "airing" as const, at: dayBefore(record.airDate!), record })),
     ...fresh.map((record) => ({ kind: "new" as const, at: record.createdAt, record })),
+    ...shifted.map(({ record, at }) => ({ kind: "dayoff" as const, at, record })),
   ];
   return notices.sort((x, y) => y.at.getTime() - x.at.getTime()).slice(0, limit);
 }
@@ -748,10 +820,7 @@ export async function calendarRange(
   const params: unknown[] = mode === "posting" ? [from, to] : [from, to, zone];
 
   const { rows } = await pool.query<Row & { day: string }>(
-    `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
-       air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
-       version, links, brief, note, status, parsed_by, confidence, warnings,
-       source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, created_at
+    `SELECT ${day} AS day, ${COLUMNS}
      FROM records
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed' AND paused_at IS NULL
      -- Recurring batches sort last within a day: a dozen of them would

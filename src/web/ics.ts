@@ -100,6 +100,7 @@ export function buildIcs(
   opts: FeedOptions,
   baseUrl: string,
   now = new Date(),
+  daysOff: string[] = [],
 ): string {
   const keep = (r: StoredRecord) =>
     r.status !== "removed" && (opts.batches || !r.batchNo) && (!opts.only.length || opts.only.includes(r.category));
@@ -157,6 +158,21 @@ export function buildIcs(
           : []),
       ], r);
     }
+  }
+  // Days off, as all-day events, so the calendar shows why a deadline sits a day early.
+  for (const d of daysOff) {
+    out.push(
+      "BEGIN:VEVENT",
+      `UID:off-${d}@specular-board`,
+      `DTSTAMP:${stamp(now)}`,
+      `DTSTART;VALUE=DATE:${day(d)}`,
+      `DTEND;VALUE=DATE:${nextDay(d)}`,
+      `SUMMARY:${text("🌙 Day off")}`,
+      `DESCRIPTION:${text("No work that day: anything due on it is due the working day before.")}`,
+      "STATUS:CONFIRMED",
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    );
   }
   out.push("END:VCALENDAR");
   return out.map(fold).join("\r\n") + "\r\n";

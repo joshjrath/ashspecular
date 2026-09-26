@@ -26,13 +26,13 @@ interface LateRow {
 export async function unNudged(): Promise<LateRow[]> {
   const { rows } = await pool.query<LateRow>(
     `SELECT r.id, r.code, r.title, r.channel,
-            COALESCE(r.vo_due, r.deadline, r.script_due) AS due
+            off_adjusted(COALESCE(r.vo_due, r.deadline, r.script_due)) AS due
      FROM records r
      LEFT JOIN nudges n ON n.record_id = r.id
      WHERE r.status = 'open' AND r.paused_at IS NULL
        AND r.batch_no IS NULL
        AND n.record_id IS NULL
-       AND COALESCE(r.vo_due, r.deadline, r.script_due) < now()
+       AND off_adjusted(COALESCE(r.vo_due, r.deadline, r.script_due)) < now()
      ORDER BY due ASC
      LIMIT 10`,
   );
