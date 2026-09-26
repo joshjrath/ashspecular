@@ -1076,6 +1076,66 @@ header.page a.clear { align-self: center; }
 .catswitch a:hover { background: #26262A; color: #fff; }
 .catswitch a.on { background: var(--c); color: var(--on); }
 .catswitch a.on i { background: var(--on); }
+.catswitch a i.round { border-radius: 50%; }
+.chswitch a.back { background: transparent; color: var(--ink2); padding-left: 6px; }
+.chswitch a.back:hover { color: #fff; background: var(--rail); }
+.usub .cdot { margin-right: 6px; }
+.usub a { color: var(--ink2); text-decoration: underline; text-decoration-color: var(--ink3); }
+.hint-inline { color: var(--ink3); }
+a.chlink { color: inherit; }
+a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3); }
+.uplanes svg a.lane-a { cursor: pointer; }
+.uplanes svg a.lane-a:hover .lname { fill: #fff; text-decoration: underline; }
+.outliers .utiles { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 12px 0 18px; }
+.outliers .utile { background: var(--sunk); padding: 16px 18px; }
+.outliers .utile .n { font-size: 30px; }
+.ocols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 22px; }
+.ocols h3 { font-size: 13px; margin: 0 0 8px; color: var(--ink2); display: flex; gap: 6px; align-items: baseline; }
+.ocols h3 span { color: var(--ink3); font-family: var(--ui); font-size: 11px; }
+.obar { display: grid; grid-template-columns: 82px minmax(0, 1fr) 32px; gap: 10px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.obar .ol { color: var(--ink2); white-space: nowrap; }
+.obar .ot { height: 12px; border-radius: 6px; background: var(--sunk); overflow: hidden; }
+.obar .ot i { display: block; height: 100%; border-radius: 6px; background: #6E6E78; min-width: 2px; }
+.obar.down .ot i { background: #FF7A70; } .obar.soft .ot i { background: #B08A8A; } .obar.mid .ot i { background: #8A8A96; }
+.obar.good .ot i { background: #8FE3B6; } .obar.up .ot i { background: #F8E27A; }
+.obar b { text-align: right; font-variant-numeric: tabular-nums; }
+.odays { display: flex; flex-direction: column; gap: 4px; }
+.odays span { display: grid; grid-template-columns: 100px 56px 1fr; gap: 8px; font-size: 12.5px; align-items: baseline; }
+.odays span.up b + * { color: #8FE3B6; } .odays span.down b + * { color: #FF9C94; }
+.odays small { color: var(--ink3); }
+.everyvid .uphead .evfilter { margin-left: 0; }
+.evlist { display: flex; flex-direction: column; margin-top: 6px; }
+.evrow { display: grid; grid-template-columns: 58px minmax(0, 1fr) 150px 88px 110px; gap: 12px; align-items: center;
+  padding: 8px 8px; border-top: 1px solid #26262C; font-size: 13px; }
+.evrow:hover { background: var(--sunk); border-radius: 10px; }
+.evrow[hidden] { display: none; }
+.evm { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink3); }
+.evm.up { color: #8FE3B6; } .evm.down { color: #FF9C94; }
+.evt { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evd { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.evv { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.evv small { color: var(--ink3); font-weight: 500; }
+.evtier { font-size: 12px; color: var(--ink2); white-space: nowrap; }
+.evrow.up .evtier { color: #F8E27A; } .evrow.down .evtier { color: #FF9C94; }
+.evmore { margin-top: 12px; }
+.everyvid .tabs button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px; }
+.everyvid .tabs button.on { background: var(--yellow); color: #101012; }
+.chlab .isugg a { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; background: var(--sunk); border-radius: 12px; }
+.chlab .isugg a:hover { background: #26262C; }
+.chlab .isugg b { font-family: var(--display); font-size: 15px; letter-spacing: -0.02em; }
+.chlab .lf { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #B5BEF7; }
+.chlab .why { color: var(--ink3); font-size: 12px; line-height: 1.5; }
+@media (max-width: 760px) {
+  .outliers .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .evrow { grid-template-columns: 50px minmax(0, 1fr) auto; row-gap: 2px; }
+  .evrow .evt { grid-column: 2 / 4; }
+  .evrow .evd { grid-column: 2; grid-row: 2; }
+  .evrow .evv { grid-column: 3; grid-row: 2; }
+  .evrow .evm { grid-row: span 2; }
+  .evrow .evtier { display: none; }
+  .chswitch { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .chswitch a { flex: none; }
+}
 .lg-cell { width: 12px; height: 12px; border-radius: 3px; margin-right: -2px; }
 .uplanes svg .hc { fill: var(--ink2); font: 700 10.5px var(--ui); pointer-events: none; }
 .uplanes svg .hc.dark { fill: #0B0B0D; }
@@ -3291,6 +3351,8 @@ function dailyView(
   typical: Map<string, { views: number; basis: string } | null>,
   category: CategoryId,
   now: Date,
+  /** Where the range tabs point: the category, or one channel's own page. */
+  base = `/uploads?cat=${category}&amp;`,
 ): string {
   // The Bits/Reading day: until 3 AM, "today" is still the day being finished.
   const today = shortsDay(now);
@@ -3304,9 +3366,12 @@ function dailyView(
   const hits = live.filter((d) => d.hit30 !== null);
   const hit30 = hits.length ? Math.round((hits.reduce((n, d) => n + d.hit30!, 0) / hits.length) * 100) : null;
   const perDay7 = live.reduce((n, d) => n + (d.avg7 ?? 0), 0);
+  const single = channels.length === 1 ? live[0] : undefined;
   const tiles = [
     { n: `${todayDone}/${todayTarget}`, l: "Shorts up today", cls: todayDone >= todayTarget && todayTarget ? "t-ok" : "" },
-    { n: `${onTargetToday}/${live.length}`, l: "channels on target today", cls: "" },
+    single
+      ? { n: String(single.streak), l: "days in a row on target", cls: single.streak >= 3 ? "t-ok" : "" }
+      : { n: `${onTargetToday}/${live.length}`, l: "channels on target today", cls: "" },
     { n: hit30 === null ? "—" : `${hit30}%`, l: "days on target · 30 days", cls: "" },
     { n: perDay7.toFixed(1), l: `a day · last 7 · target ${todayTarget}`, cls: "" },
   ]
@@ -3334,8 +3399,8 @@ function dailyView(
       const y = TOP + r * ROW;
       const d = byName.get(name);
       const link = linkOf.get(name);
-      const label = `<circle cx="12" cy="${y + ROW / 2}" r="5" fill="${channelColour(name)}" class="ring"/>
-        <text x="24" y="${y + ROW / 2 + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text>`;
+      const label = `<a href="${chanHref(name)}" class="lane-a"><circle cx="12" cy="${y + ROW / 2}" r="5" fill="${channelColour(name)}" class="ring"/>
+        <text x="24" y="${y + ROW / 2 + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text><title>${esc(name)} on its own</title></a>`;
       if (!link?.youtubeId || !d) {
         return `${label}<text x="${LABEL + 8}" y="${y + ROW / 2 + 4}" class="nolink">${
           link?.error ? `Couldn't read: ${esc(link.error)}` : "No link yet — add it below"
@@ -3361,7 +3426,7 @@ function dailyView(
     .join("");
 
   const ranges = [14, 30, 60]
-    .map((r) => `<a class="tab${range === r ? " on" : ""}" href="/uploads?cat=${category}&amp;range=${r}">${r} days</a>`)
+    .map((r) => `<a class="tab${range === r ? " on" : ""}" href="${base}range=${r}">${r} days</a>`)
     .join("");
 
   const heatmap = `<div class="panel uplanes">
@@ -3386,7 +3451,7 @@ function dailyView(
       const t = typical.get(name);
       const met = d && d.today >= d.perDay;
       return `<tr>
-        <td><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</td>
+        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</a></td>
         <td>${ok && d ? `<span class="pace ${met ? "ok" : d.today ? "due" : "late"}">${met ? "✓" : d.today ? "◷" : "!"} ${d.today} of ${d.perDay}</span>` : "—"}</td>
         <td class="num">${d ? d.streak : "—"}</td>
         <td class="num">${d?.avg7 != null ? d.avg7.toFixed(1) : "—"}</td>
@@ -3397,7 +3462,7 @@ function dailyView(
     })
     .join("");
   const table = `<div class="panel">
-    <h2>By channel</h2>
+    <h2>${channels.length === 1 ? "Pace" : "By channel"}</h2>
     <div class="utable-wrap"><table class="utable">
       <thead><tr><th>Channel</th><th>Today</th><th class="num" title="Days in a row on target">Streak</th>
         <th class="num">A day · 7d</th><th class="num">On target · 30d</th><th>Last Short</th><th class="num">Typical views</th></tr></thead>
@@ -3709,6 +3774,232 @@ const PACE: Record<PaceState, { label: string; icon: string; cls: string }> = {
   none: { label: "No uploads yet", icon: "–", cls: "none" },
 };
 
+/** One channel on the Uploads page by itself. */
+export interface ChannelFocus {
+  channel: string;
+  /** Every upload the board has for it, newest first. */
+  all: Upload[];
+  /** Stories only: Story Lab ideas ranked by how well they fit this channel, and why. */
+  lab?: Array<{ idea: LabIdea; fit: string[] }>;
+}
+
+/** A channel's own Uploads page. */
+export function chanHref(name: string): string {
+  return `/uploads/channel/${CHANNELS.find((c) => c.name === name)?.id ?? ""}`;
+}
+
+/** How a video did: a Short by its tier against the channel's last sixty, a long-form video by its verdict. */
+function judged(u: Upload, perf: Map<string, Performance>, shorts: Map<string, ShortScore> | null) {
+  const s = shorts?.get(u.videoId);
+  if (s) return { multiple: s.multiple, kind: s.tier === "viral" || s.tier === "breakout" ? "up" : s.tier === "flop" ? "down" : s.tier === "soft" ? "soft" : "mid", badge: TIER[s.tier].icon ? `${TIER[s.tier].icon} ${TIER[s.tier].label}` : "", note: `top ${Math.max(1, 100 - s.percentile)}% · ${s.basis}` };
+  const p = perf.get(u.videoId);
+  if (p) return { multiple: p.multiple, kind: p.verdict === "breakout" ? "up" : p.verdict === "under" ? "down" : "mid", badge: p.verdict === "breakout" ? "🔥 Breakout" : p.verdict === "under" ? "📉 Under" : "", note: p.basis };
+  return null;
+}
+
+const medianOf = (xs: number[]) => {
+  const v = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(v.length / 2);
+  return v.length ? (v.length % 2 ? v[m]! : (v[m - 1]! + v[m]!) / 2) : null;
+};
+
+/**
+ * What stands out on one channel: its usual, how often it beats it, the
+ * spread of every scored video, the best and the weakest, whether it's
+ * trending up, and (long form) which days do best.
+ */
+function outlierPanel(
+  f: ChannelFocus,
+  perf: Map<string, Performance>,
+  shorts: Map<string, ShortScore> | null,
+  typical: { views: number; basis: string } | null,
+  now: Date,
+): string {
+  const scored = f.all
+    .map((u) => ({ u, j: judged(u, perf, shorts) }))
+    .filter((x): x is { u: Upload; j: NonNullable<ReturnType<typeof judged>> } => x.j !== null);
+  if (!scored.length) {
+    return `<div class="panel"><h2>Outliers</h2><p class="hint">Scores appear once the channel has three earlier videos to compare
+      with at the same age — straight away for older videos, within days for new ones as the view snapshots build up.</p></div>`;
+  }
+  const ms = scored.map((x) => x.j.multiple);
+  const up = scored.filter((x) => x.j.kind === "up");
+  const down = scored.filter((x) => x.j.kind === "down");
+  const beat = Math.round((ms.filter((m) => m >= 1).length / ms.length) * 100);
+  const newest = [...scored].sort((a, b) => b.u.publishedAt.getTime() - a.u.publishedAt.getTime());
+  const recent = medianOf(newest.slice(0, 10).map((x) => x.j.multiple));
+  const before = medianOf(newest.slice(10, 20).map((x) => x.j.multiple));
+  const trend = recent !== null && before !== null && newest.length >= 14 ? recent / before - 1 : null;
+  const tiles = [
+    { n: typical ? compactViews(Math.round(typical.views)) : "—", l: `typical views${typical ? ` · ${typical.basis}` : ""}`, cls: "" },
+    { n: `${beat}%`, l: `beat the channel's usual · ${ms.length} scored`, cls: beat >= 50 ? "t-ok" : "" },
+    { n: `${up.length}`, l: `${shorts ? "🚀🔥 viral or breakout" : "🔥 breakouts (≥2×)"} · ${Math.round((up.length / ms.length) * 100)}%`, cls: up.length ? "t-ok" : "" },
+    { n: `${down.length}`, l: `${shorts ? "📉 flops" : "📉 under (≤½)"} · ${Math.round((down.length / ms.length) * 100)}%`, cls: down.length ? "t-late" : "" },
+    {
+      n: trend === null ? "—" : `${trend >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(trend * 100))}%`,
+      l: trend === null ? "trend · needs 14 scored" : `last 10 vs the 10 before · ${formatMultiple(recent!)} now`,
+      cls: trend === null ? "" : trend >= 0.1 ? "t-ok" : trend <= -0.1 ? "t-late" : "",
+    },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+
+  // The spread: every scored video by how it did against the usual.
+  const bins = [
+    { l: "½× or less", test: (m: number) => m <= 0.5, cls: "down" },
+    { l: "½–0.8×", test: (m: number) => m > 0.5 && m < 0.8, cls: "soft" },
+    { l: "0.8–1.25×", test: (m: number) => m >= 0.8 && m < 1.25, cls: "mid" },
+    { l: "1.25–2×", test: (m: number) => m >= 1.25 && m < 2, cls: "good" },
+    { l: "2–4×", test: (m: number) => m >= 2 && m < 4, cls: "up" },
+    { l: "4× or more", test: (m: number) => m >= 4, cls: "up" },
+  ].map((b) => ({ ...b, n: ms.filter(b.test).length }));
+  const most = Math.max(1, ...bins.map((b) => b.n));
+  const spread = bins
+    .map((b) => `<div class="obar ${b.cls}"><span class="ol">${esc(b.l)}</span>
+      <span class="ot"><i style="width:${((b.n / most) * 100).toFixed(1)}%"></i></span><b>${b.n}</b></div>`)
+    .join("");
+
+  const line = ({ u, j }: (typeof scored)[number]) => `<li><a href="${esc(u.url)}" target="_blank" rel="noreferrer">
+      <span class="vm ${j.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(j.multiple))}</span>
+      <span class="vt">${esc(u.title)}</span>
+      <span class="vc">${esc(usDate(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${esc(compactViews(u.views))} views` : ""}</span></a></li>`;
+  const byMultiple = [...scored].sort((a, b) => b.j.multiple - a.j.multiple);
+
+  // Long form: which day of the week does best, where there's enough to say.
+  let days = "";
+  if (!shorts) {
+    const wd = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: ORG_TZ });
+    const byDay = new Map<string, number[]>();
+    for (const x of scored) {
+      const d = wd.format(x.u.publishedAt);
+      byDay.set(d, [...(byDay.get(d) ?? []), x.j.multiple]);
+    }
+    const rows = [...byDay]
+      .filter(([, list]) => list.length >= 2)
+      .map(([d, list]) => ({ d, n: list.length, med: medianOf(list)! }))
+      .sort((a, b) => b.med - a.med);
+    if (rows.length >= 2) {
+      days = `<div><h3>By day posted <span>ET</span></h3><div class="odays">${rows
+        .map((r) => `<span class="${r.med >= 1 ? "up" : "down"}"><b>${esc(r.d)}</b>${esc(formatMultiple(r.med))}<small>${r.n} videos</small></span>`)
+        .join("")}</div></div>`;
+    }
+  }
+
+  return `<div class="panel outliers">
+    <h2>Outliers <span class="sub">— every scored video against ${esc(f.channel)}'s own usual at the same age</span></h2>
+    <div class="utiles">${tiles}</div>
+    <div class="ocols">
+      <div><h3>The spread</h3>${spread}</div>
+      <div><h3>Best</h3><ul class="ivids">${byMultiple.slice(0, 4).map(line).join("")}</ul></div>
+      <div><h3>Weakest</h3><ul class="ivids">${byMultiple.slice(-4).reverse().map(line).join("")}</ul></div>
+      ${days}
+    </div>
+  </div>`;
+}
+
+/**
+ * Every video the board has for the channel — views, how it did against the
+ * usual, its tier — sortable and filterable, sixty at a time.
+ */
+function everyVideoPanel(f: ChannelFocus, perf: Map<string, Performance>, shorts: Map<string, ShortScore> | null, now: Date): string {
+  const SHOW = 60;
+  const rows = f.all
+    .map((u, i) => {
+      const j = judged(u, perf, shorts);
+      const age = relativeDay(dayOf(u.publishedAt));
+      return `<a class="evrow ${j?.kind ?? "none"}" href="${esc(u.url)}" target="_blank" rel="noreferrer"
+        data-t="${u.publishedAt.getTime()}" data-v="${u.views ?? -1}" data-m="${j ? j.multiple.toFixed(4) : -1}" data-k="${j?.kind ?? "none"}"${i >= SHOW ? " hidden" : ""}>
+        <span class="evm ${j ? (j.multiple >= 1 ? "up" : "down") : ""}" title="${esc(j ? `${formatMultiple(j.multiple)} the channel's usual · ${j.note}` : "Not scored yet")}">${j ? esc(formatMultiple(j.multiple)) : "—"}</span>
+        <span class="evt">${esc(u.title)}</span>
+        <span class="evd">${esc(usDate(dayOf(u.publishedAt)))} · ${esc(age)}</span>
+        <span class="evv">${u.views !== null ? `${esc(compactViews(u.views))}` : "—"}<small> views</small></span>
+        <span class="evtier">${j?.badge ? esc(j.badge) : ""}</span>
+      </a>`;
+    })
+    .join("");
+  void now;
+  const n = f.all.length;
+  return `<div class="panel everyvid" id="everyvid">
+    <div class="uphead">
+      <h2>Every video <span class="sub">${n} upload${n === 1 ? "" : "s"} · views as of the last read</span></h2>
+      <div class="tabs evsort" role="group" aria-label="Sort">
+        <button type="button" class="tab on" data-sort="t">Newest</button>
+        <button type="button" class="tab" data-sort="v">Most viewed</button>
+        <button type="button" class="tab" data-sort="m">Best vs usual</button>
+        <button type="button" class="tab" data-sort="w">Weakest</button>
+      </div>
+      <div class="tabs evfilter" role="group" aria-label="Show">
+        <button type="button" class="tab on" data-f="all">All</button>
+        <button type="button" class="tab" data-f="up">Outliers up</button>
+        <button type="button" class="tab" data-f="down">Outliers down</button>
+      </div>
+    </div>
+    <div class="evlist" id="evlist">${rows || `<p class="hint">No uploads read yet.</p>`}</div>
+    ${n > SHOW ? `<button type="button" class="clear secondary evmore" id="evmore">Show all ${n}</button>` : ""}
+    <script>
+    (function () {
+      var list = document.getElementById("evlist"), more = document.getElementById("evmore");
+      var rows = Array.prototype.slice.call(list.querySelectorAll(".evrow"));
+      var key = "t", only = "all", all = false, LIMIT = ${SHOW};
+      function num(el, k) { return Number(el.getAttribute("data-" + k)); }
+      function draw() {
+        var picked = rows.filter(function (r) { return only === "all" || r.getAttribute("data-k") === only; });
+        picked.sort(function (a, b) {
+          if (key === "w") {
+            var am = num(a, "m"), bm = num(b, "m");
+            if (am < 0) return 1;
+            if (bm < 0) return -1;
+            return am - bm;
+          }
+          return num(b, key) - num(a, key);
+        });
+        rows.forEach(function (r) { r.hidden = true; });
+        picked.forEach(function (r, i) { r.hidden = !all && i >= LIMIT; list.appendChild(r); });
+        if (more) more.hidden = all || picked.length <= LIMIT;
+      }
+      function pick(group, attr, set) {
+        document.querySelectorAll(group + " button").forEach(function (b) {
+          b.addEventListener("click", function () {
+            document.querySelectorAll(group + " button").forEach(function (x) { x.classList.toggle("on", x === b); });
+            set(b.getAttribute(attr));
+            draw();
+          });
+        });
+      }
+      pick(".evsort", "data-sort", function (v) { key = v; });
+      pick(".evfilter", "data-f", function (v) { only = v; });
+      if (more) more.addEventListener("click", function () { all = true; draw(); });
+    })();
+    </script>
+  </div>`;
+}
+
+/** Story Lab's ideas, the ones that fit this channel first, each opening its blueprint. */
+function channelLabPanel(f: ChannelFocus): string {
+  const items = (f.lab ?? [])
+    .map(({ idea, fit }) => {
+      const qs = new URLSearchParams({
+        format: idea.format,
+        ...(idea.hero ? { hero: idea.hero.id } : {}),
+        ...(idea.world ? { world: idea.world.id } : {}),
+        ...(idea.power ? { power: idea.power.id } : {}),
+        ...(idea.target ? { target: idea.target.id } : {}),
+      }).toString();
+      const why = [...fit, ...idea.reasons.slice(0, 1).map((r) => r.text)];
+      return `<li><a href="/story-lab?${esc(qs)}#blueprint">
+        <b>${esc(idea.title)}</b>
+        <span class="lf">${esc(FORMAT_BY_ID.get(idea.format)?.name ?? idea.format)}</span>
+        ${why.length ? `<span class="why">${why.map(esc).join(" · ")}</span>` : ""}
+      </a></li>`;
+    })
+    .join("");
+  return `<div class="panel ideas chlab">
+    <h2>What ${esc(f.channel)} could make next <span class="sub">— Story Lab's ideas that fit this channel's worlds, heroes and formats; none already public on any channel</span></h2>
+    ${items ? `<ul class="isugg">${items}</ul>` : `<p class="hint">Nothing fits yet — see <a href="/story-lab">Story Lab</a> for every idea.</p>`}
+    <p class="hint">Each opens its part-by-part blueprint in <a href="/story-lab">Story Lab</a>.</p>
+  </div>`;
+}
+
 /**
  * The Uploads tab: whether each Stories channel is keeping to one long-form
  * upload every four days. Tiles for the headline, a timeline lane per channel
@@ -3735,10 +4026,13 @@ export function renderUploads(
     shorts?: { scores: Map<string, ShortScore>; health: ChannelShortHealth[]; slots: SlotStat[] };
     /** Each Stories video's opening, from its script, by the video's link. */
     hooks?: Map<string, string>;
+    /** One channel on its own page: every upload it has, and Story Lab ideas that fit it. */
+    focus?: ChannelFocus;
   },
   now = new Date(),
 ): string {
   const category: CategoryId = data.category ?? "stories";
+  const focus = data.focus ?? null;
   const target = UPLOAD_TARGETS[category];
   // Targets are per channel: Stories every four days, Specular one a day,
   // others none. A channel with no target still shows every gap, none "late".
@@ -3827,8 +4121,8 @@ export function renderUploads(
       const c = cad.get(name);
       const link = linkOf.get(name);
       const colour = channelColour(name);
-      const label = `<g class="lane-l"><circle cx="12" cy="${y}" r="5" fill="${colour}" class="ring"/>
-        <text x="24" y="${y + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text></g>`;
+      const label = `<a href="${chanHref(name)}" class="lane-a"><g class="lane-l"><circle cx="12" cy="${y}" r="5" fill="${colour}" class="ring"/>
+        <text x="24" y="${y + 4}" class="lname">${esc(name.replace(/^Specular /, ""))}</text></g><title>${esc(name)} on its own</title></a>`;
       const track = `<line x1="${LABEL}" x2="${W - RIGHT}" y1="${y}" y2="${y}" class="track"/>`;
       if (!link?.youtubeId) {
         return `${label}${track}<text x="${LABEL + 8}" y="${y + 4}" class="nolink">${
@@ -3907,12 +4201,12 @@ export function renderUploads(
     .join("");
 
   const ranges = [30, 90, 180]
-    .map((r) => `<a class="tab${data.range === r ? " on" : ""}" href="${q(`&amp;range=${r}`)}">${r} days</a>`)
+    .map((r) => `<a class="tab${data.range === r ? " on" : ""}" href="${focus ? `${chanHref(focus.channel)}?range=${r}` : q(`&amp;range=${r}`)}">${r} days</a>`)
     .join("");
 
   const timeline = `<div class="panel uplanes">
     <div class="uphead">
-      <h2>${uniform ? `${cap(everyText(every))}, per channel` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}` : "Uploads per channel"}</h2>
+      <h2>${focus ? (hasTarget ? `${cap(everyText(every))} · every upload and the gaps between` : "Every upload and the gaps between") : uniform ? `${cap(everyText(every))}, per channel` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}` : "Uploads per channel"}</h2>
       <div class="ulegend" aria-label="Legend">
         <span><i class="lg-dot"></i>Upload</span>
         ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace${uniform ? ` (≤${every}d)` : ""}</span>
@@ -3938,7 +4232,7 @@ export function renderUploads(
       const st = link?.youtubeId && c ? PACE[c.state] : PACE.none;
       const ch = channelColour(name);
       return `<tr>
-        <td><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</td>
+        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</a></td>
         <td>${everyOf(name) !== null ? `<span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span>` : c?.daysSince != null ? `${c.daysSince}d ago` : "—"}</td>
         <td>${c?.lastDay ? `${esc(usDate(c.lastDay))} <small>${esc(relativeDay(c.lastDay))}</small>` : "—"}</td>
         <td>${c?.nextDue ? `${esc(usDate(c.nextDue))} <small>${esc(relativeDay(c.nextDue))}</small>` : "—"}</td>
@@ -3954,7 +4248,7 @@ export function renderUploads(
     })
     .join("");
   const table = `<div class="panel">
-    <h2>By channel</h2>
+    <h2>${focus ? "Pace" : "By channel"}</h2>
     <div class="utable-wrap"><table class="utable">
       <thead><tr><th>Channel</th><th>Status</th><th>Last upload</th><th>Next due</th>
         <th class="num" title="On-time uploads in a row">Streak</th><th class="num">30 days</th>
@@ -4013,7 +4307,7 @@ export function renderUploads(
         : "Without a YouTube API key, each channel starts from its latest 15 uploads — and builds from there. Set YOUTUBE_API_KEY to pull full history."
     }</p>
     <form method="post" action="/uploads/links" class="linkform">
-      <input type="hidden" name="_cat" value="${category}">
+      <input type="hidden" name="_cat" value="${category}">${focus ? `<input type="hidden" name="_ch" value="${esc(focus.channel)}">` : ""}
       ${data.channels
         .map((name) => {
           const l = linkOf.get(name);
@@ -4035,13 +4329,29 @@ export function renderUploads(
 
   const checked = data.links.map((l) => l.checkedAt?.getTime() ?? 0).reduce((a, b) => Math.max(a, b), 0);
 
-  return layout(
-    "Uploads",
-    shell,
-    `${pageHeader(
-      "Uploads",
-      `<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><button class="clear secondary">Read YouTube now</button></form>`,
-    )}
+  const focusLink = focus ? linkOf.get(focus.channel) : undefined;
+  const header = focus
+    ? `${pageHeader(
+        focus.channel,
+        `<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><input type="hidden" name="_ch" value="${esc(focus.channel)}"><button class="clear secondary">Read YouTube now</button></form>`,
+      )}
+      <nav class="catswitch chswitch" aria-label="${esc(catLabel)} channels">
+        <a class="back" href="/uploads?cat=${category}">← All ${esc(catLabel)}</a>
+        ${CHANNELS.filter((c) => c.category === category)
+          .map((c) => `<a class="${c.name === focus.channel ? "on" : ""}" style="--c:${c.color};--on:${
+            contrastRatio("#0B0B0D", c.color) >= contrastRatio("#FFFFFF", c.color) ? "#0B0B0D" : "#FFFFFF"
+          }" href="${chanHref(c.name)}"${c.name === focus.channel ? ' aria-current="page"' : ""}><i class="round"></i>${esc(c.name.replace(/^Specular /, ""))}</a>`)
+          .join("")}
+      </nav>
+      <div class="usub"><span class="cdot" style="--ch:${channelColour(focus.channel)}"></span>${esc(catLabel)} · ${esc(
+        everyOf(focus.channel) !== null ? everyText(everyOf(focus.channel)!) : target.kind === "daily" ? `${describeTarget(category)}` : "no target"
+      )}${focusLink?.youtubeId ? ` · <a href="https://www.youtube.com/channel/${esc(focusLink.youtubeId)}" target="_blank" rel="noreferrer">${esc(focusLink.title ?? "on YouTube")} ↗</a>` : ""}${
+        checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
+      }</div>`
+    : `${pageHeader(
+        "Uploads",
+        `<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><button class="clear secondary">Read YouTube now</button></form>`,
+      )}
     <nav class="catswitch" aria-label="Category">${UPLOAD_CATEGORIES.map(
       (c) => `<a class="${c.id === category ? "on" : ""}" style="--c:${c.color};--on:${
         contrastRatio("#0B0B0D", c.color) >= contrastRatio("#FFFFFF", c.color) ? "#0B0B0D" : "#FFFFFF"
@@ -4049,19 +4359,27 @@ export function renderUploads(
     ).join("")}</nav>
     <div class="usub">${esc(catLabel)} · ${esc(describeTarget(category))}${
       checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
-    }</div>
+    } · <span class="hint-inline">click a channel for its own page</span></div>`;
+
+  return layout(
+    focus ? focus.channel : "Uploads",
+    shell,
+    `${header}
     ${
       linked.length
         ? target.kind === "daily"
-          ? `${dailyView(data.channels, linkOf, data.daily ?? [], data.range, typical, category, now)}${
+          ? `${dailyView(data.channels, linkOf, data.daily ?? [], data.range, typical, category, now, focus ? `${chanHref(focus.channel)}?` : undefined)}${
               data.shorts ? shortsPanel(data.channels, data.uploads, data.shorts.scores, data.shorts.health, data.shorts.slots, now) : performers
             }`
-          : `<div class="utiles">${tiles}</div>${timeline}${performers}${table}`
+          : `<div class="utiles">${tiles}</div>${timeline}${focus ? "" : performers}${table}`
         : ""
     }
-    ${category === "stories" ? `<a class="labcta" href="/story-lab"><b>Story Lab</b><span>What to write next, with a part-by-part blueprint for each — learned from the Stories scripts →</span></a>` : ""}
+    ${focus && linked.length ? outlierPanel(focus, perf, data.shorts?.scores ?? null, typical.get(focus.channel) ?? null, now) : ""}
+    ${focus && linked.length ? everyVideoPanel(focus, perf, data.shorts?.scores ?? null, now) : ""}
+    ${focus?.lab ? channelLabPanel(focus) : ""}
+    ${category === "stories" && !focus ? `<a class="labcta" href="/story-lab"><b>Story Lab</b><span>What to write next, with a part-by-part blueprint for each — learned from the Stories scripts →</span></a>` : ""}
     ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.hooks) : ""}
-    ${latest ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
+    ${latest && !focus ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
     ${links}
     <script>
     // Hover any upload, gap, day or Short for what it is — on every chart.

@@ -42,7 +42,7 @@ import { formatOfTitle } from "../src/web/stories/formats.js";
 import { readTitle } from "../src/web/stories/lore.js";
 import { blueprint } from "../src/web/stories/blueprint.js";
 import { checkDraft } from "../src/web/stories/check.js";
-import { keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
+import { channelLab, keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
 import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
 import { renderStoryLab, renderPaused, renderSettings, RAIL_ITEMS } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
@@ -1049,6 +1049,40 @@ const colourPage = renderSettings({ ...shellFix, active: "settings" }, {
 t("Settings has a colour picker for every channel", (colourPage.match(/<input type="color" name="c_/g) ?? []).length, CHANNELS.length);
 t("…a hand-set one can be reset", colourPage.includes(`name="reset" value="${fnafBits.id}"`), true);
 t("…and a Shorts channel with no link says where to add it", colourPage.includes("no YouTube link yet"), true);
+
+// ── one channel on its own ────────────────────────────────────────────────
+section("Uploads — one channel on its own");
+const chName = "Specular FNAF";
+const chUps = Array.from({ length: 70 }, (_, i) => ({
+  videoId: `v${i}`, channel: chName, title: `FNAF video ${i}`, publishedAt: new Date(Date.UTC(2026, 8, 25) - i * 4 * 86_400_000),
+  url: `https://youtu.be/v${i}`, views: 10_000 + i * 100,
+}));
+const chPerf = new Map(chUps.slice(0, 30).map((u, i) => [u.videoId, { videoId: u.videoId, value: 1, baseline: 1, multiple: i === 0 ? 3 : i === 1 ? 0.4 : 1 + (i % 5) / 10, verdict: i === 0 ? "breakout" as const : i === 1 ? "under" as const : "normal" as const, basis: "at 7 days" }]));
+const chPage = renderUploads(shellFix, {
+  channels: [chName], links: [{ channel: chName, input: "@x", youtubeId: "UC0000000000000000000008", title: "Specular FNAF", error: null, checkedAt: new Date() }],
+  uploads: chUps, cadence: [cadenceFor(chName, chUps.map((u) => u.publishedAt), new Date("2026-09-26T12:00:00Z"), 4)],
+  range: 90, hasKey: false, perf: chPerf, typical: new Map([[chName, { views: 12_000, basis: "at 7 days" }]]), category: "stories",
+  focus: { channel: chName, all: chUps, lab: [] },
+}, new Date("2026-09-26T12:00:00Z"));
+t("the page is the channel's", chPage.includes("<h1>Specular FNAF</h1>"), true);
+t("…with the way back and every Stories channel to switch to", [chPage.includes('href="/uploads?cat=stories">← All Stories'), chPage.includes('href="/uploads/channel/studios"')], [true, true]);
+t("every video is listed, sixty showing", [(chPage.match(/class="evrow /g) ?? []).length, (chPage.match(/class="evrow [^"]*"[^>]*data-k="[a-z]+" hidden/g) ?? []).length], [70, 10]);
+t("…each with how it did against the usual", chPage.includes('data-m="3.0000" data-k="up"'), true);
+t("outliers: the usual, the best, the weakest", [chPage.includes("Outliers"), chPage.includes("11K") || chPage.includes("12K"), chPage.includes("The spread")], [true, true, true]);
+t("the range tabs stay on the channel", chPage.includes('href="/uploads/channel/fnaf?range=30"'), true);
+t("the page's scripts compile", [...chPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+const catPage = renderUploads(shellFix, {
+  channels: [chName], links: [{ channel: chName, input: "@x", youtubeId: "UC0000000000000000000008", title: "Specular FNAF", error: null, checkedAt: new Date() }],
+  uploads: chUps, cadence: [cadenceFor(chName, chUps.map((u) => u.publishedAt), new Date("2026-09-26T12:00:00Z"), 4)],
+  range: 90, hasKey: false, category: "stories",
+}, new Date("2026-09-26T12:00:00Z"));
+t("the category page links each channel to its own page", catPage.includes('href="/uploads/channel/fnaf"'), true);
+const fitted = channelLab("Specular FNAF", ["What If Gojo Was In FNAF?", "What If Deadpool Was In FNAF?", "Every FNAF Ending, Ranked", "Could Batman Survive FNAF?", "What If Goku Was In FNAF?"],
+  labIdeas([], new Date("2026-09-25"), 5000, [], [], false), 8);
+t("Story Lab ideas for a channel lead with its own world", fitted.slice(0, 3).every((x) => x.idea.world?.id === "fnaf"), true);
+t("…and say why", fitted[0]?.fit.some((f) => f.startsWith("FNAF is in")), true);
+const named = channelLab("Specular FNAF", ["What If Goku Joined The Avengers?", "Every Batman Villain, Ranked"], labIdeas([], new Date("2026-09-25"), 5000, [], [], false), 8);
+t("a channel named for a world leans to it before its titles do", named.some((x) => x.idea.world?.id === "fnaf" && x.fit.includes("the channel is named for FNAF")), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

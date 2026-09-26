@@ -61,7 +61,7 @@ import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { corpus, normsFor } from "./stories/corpus.js";
-import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
+import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
@@ -627,6 +627,79 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(shellHtml);
   });
 
+  /**
+   * One channel on its own: its pace, every video it has with how each did,
+   * what stands out, and what to make next — the ideas from its own videos,
+   * and for Stories, the Story Lab ideas that fit it.
+   */
+  app.get<{ Params: { id: string }; Querystring: { range?: string; idea?: string } }>(
+    "/uploads/channel/:id",
+    async (request, reply) => {
+      const ch = CHANNELS.find((c) => c.id === request.params.id);
+      if (!ch) return reply.redirect("/uploads");
+      const category = ch.category;
+      const target = UPLOAD_TARGETS[category];
+      const ranges = target.kind === "daily" ? [14, 30, 60] : [30, 90, 180];
+      const range = ranges.includes(Number(request.query.range)) ? Number(request.query.range) : ranges[1]!;
+      const now = new Date();
+      const name = ch.name;
+      const [s, links, everything, views] = await Promise.all([
+        shell("uploads"),
+        listChannelLinks(),
+        listUploads(new Date(0)),
+        // Long form: every video's curve. Shorts: four months — sixty to compare each with.
+        loadVideoViews(new Date(target.kind === "daily" ? now.getTime() - 120 * 86_400_000 : 0), [name]),
+      ]);
+      const mine = everything.filter((u) => u.channel === name);
+      const all = [...mine].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
+      const perf = scoreAll(views, now);
+      const shortScores = target.kind === "daily" ? scoreShorts(views, now) : null;
+      const typical = new Map([[name, target.kind === "daily" ? typicalShort(views, now) : typicalViews(views, now)] as const]);
+      const byId = new Map(mine.map((u) => [u.videoId, u]));
+      const multipleOf = (id: string) => shortScores?.get(id)?.multiple ?? perf.get(id)?.multiple ?? null;
+      const ideas = analyzeIdeas(
+        views
+          .map((v) => ({ title: byId.get(v.videoId)?.title ?? "", channel: v.channel, publishedAt: v.publishedAt, url: byId.get(v.videoId)?.url ?? "", multiple: multipleOf(v.videoId) }))
+          .filter((v) => v.title),
+        now,
+      );
+      const ideaTitle = (request.query.idea ?? "").trim().slice(0, 200);
+
+      // Stories: Story Lab's ideas, the ones that fit this channel first.
+      let lab: Array<{ idea: import("./stories/lab.js").LabIdea; fit: string[] }> | undefined;
+      if (category === "stories") {
+        const storiesNames = channelsIn("stories");
+        const storyViews = await loadVideoViews(new Date(0), storiesNames);
+        const storyPerf = scoreAll(storyViews, now);
+        const stories = everything.filter((u) => storiesNames.includes(u.channel));
+        const videos: LabVideo[] = stories.map((u) => ({ title: u.title, multiple: storyPerf.get(u.videoId)?.multiple ?? null, publishedAt: u.publishedAt }));
+        const published: PublicVideo[] = everything.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
+        lab = channelLab(name, mine.map((u) => u.title), labIdeas(videos, now, 5000, published, [], false));
+      }
+
+      return reply.type("text/html").send(
+        renderUploads(
+          s,
+          {
+            channels: [name], links, uploads: mine, cadence: [cadenceFor(name, mine.map((u) => u.publishedAt), now, everyFor(name) ?? 36_500)],
+            range, hasKey: Boolean(process.env.YOUTUBE_API_KEY?.trim()), perf, typical, category,
+            daily: target.kind === "daily" ? [dailyFor(name, mine.map((u) => u.publishedAt), perDayFor(name), now)] : undefined,
+            ideas, idea: ideaTitle ? { title: ideaTitle, check: checkIdea(ideaTitle, ideas) } : null, ideaChannel: name,
+            shorts: shortScores
+              ? {
+                  scores: shortScores,
+                  health: [channelHealth(name, views, shortScores, now)],
+                  slots: postingSlots(views.filter((v) => now.getTime() - v.publishedAt.getTime() < 30 * 86_400_000), shortScores),
+                }
+              : undefined,
+            focus: { channel: name, all, lab },
+          },
+          now,
+        ),
+      );
+    },
+  );
+
   // Story Lab: what to write next for Stories, and how to build it.
   type LabQuery = { format?: string; hero?: string; world?: string; power?: string; target?: string };
   const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
@@ -695,8 +768,10 @@ export async function startWeb(): Promise<void> {
     );
   });
 
-  const backToCategory = (cat: unknown) =>
-    `/uploads?cat=${UPLOAD_CATEGORIES.find((c) => c.id === cat)?.id ?? "stories"}`;
+  const backToCategory = (cat: unknown, ch?: unknown) => {
+    const one = CHANNELS.find((c) => c.name === ch);
+    return one ? `/uploads/channel/${one.id}` : `/uploads?cat=${UPLOAD_CATEGORIES.find((c) => c.id === cat)?.id ?? "stories"}`;
+  };
 
   app.post<{ Body: Record<string, string | undefined> }>("/uploads/links", async (request, reply) => {
     const body = request.body ?? {};
@@ -708,13 +783,13 @@ export async function startWeb(): Promise<void> {
     // A new Shorts link: its avatar's colour, straight away (and a removed one's goes).
     await sampleAvatars().catch((err) => console.error("[colours] sampling failed:", err));
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
-    return reply.redirect(backToCategory(body._cat));
+    return reply.redirect(backToCategory(body._cat, body._ch));
   });
 
   app.post<{ Body: Record<string, string | undefined> }>("/uploads/check", async (request, reply) => {
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
     await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
-    return reply.redirect(backToCategory(request.body?._cat));
+    return reply.redirect(backToCategory(request.body?._cat, request.body?._ch));
   });
 
 

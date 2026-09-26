@@ -19,7 +19,7 @@
  * The corpus supplies the proof that a structure works: a world with several
  * scripts already has a tested shape to follow.
  */
-import { formatOfTitle, type FormatId } from "./formats.js";
+import { FORMAT_BY_ID, formatOfTitle, type FormatId } from "./formats.js";
 import { HEROES, POWERS, WORLDS, readTitle, type Hero, type Power, type World } from "./lore.js";
 import { corpus, measure, type Script } from "./corpus.js";
 
@@ -175,7 +175,15 @@ export function indexPublic(published: PublicVideo[]): { pairs: Map<string, Publ
   return { pairs, words: published.map((v) => ({ words: wordsOf(v.title), video: v })) };
 }
 
-export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24, published: PublicVideo[] = [], held: PublicVideo[] = []): LabIdea[] {
+export function labIdeas(
+  videos: LabVideo[],
+  now: Date = new Date(),
+  limit = 24,
+  published: PublicVideo[] = [],
+  held: PublicVideo[] = [],
+  /** Spread the list across heroes, worlds, powers and formats; off, every idea best first (for a channel to pick from). */
+  spread = true,
+): LabIdea[] {
   const pub = indexPublic(published);
   const perf = perfStats(videos);
   const scripts = corpus();
@@ -302,6 +310,7 @@ export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24,
 
   // Best first, but a spread: no hero, world or power more than twice.
   out.sort((a, b) => b.score - a.score);
+  if (!spread) return out.slice(0, limit);
   const picked: LabIdea[] = [];
   const count = new Map<string, number>();
   for (const i of out) {
@@ -360,4 +369,53 @@ export function contrast(results: ScriptResult[]): Contrast[] | null {
     row("“Would / could” a thousand words", (m) => m.conditional, (n) => n.toFixed(0)),
     row("Parts ending on a forward hook", (m) => m.forwardClosers, (n) => `${Math.round(n * 100)}%`),
   ];
+}
+
+/**
+ * Story Lab's ideas for one channel. The ones that share a world, a hero or a
+ * format with what the channel already makes come first, each saying why; a
+ * channel with too few videos to read gets the overall best. No hero more
+ * than twice, so the list isn't one character.
+ */
+export function channelLab(channel: string, titles: string[], ideas: LabIdea[], limit = 8): Array<{ idea: LabIdea; fit: string[] }> {
+  // A channel named for a world (Specular FNAF) leans to it before its titles say so.
+  const namedFor = new Set(readTitle(channel.replace(/^Specular\s+/i, "")).worlds.map((w) => w.id));
+  const n = titles.length;
+  const worlds = new Map<string, number>();
+  const heroes = new Map<string, number>();
+  const formats = new Map<string, number>();
+  const bump = (m: Map<string, number>, id: string) => m.set(id, (m.get(id) ?? 0) + 1);
+  for (const t of titles) {
+    const r = readTitle(t);
+    for (const w of new Set(r.worlds.map((x) => x.id))) bump(worlds, w);
+    for (const h of new Set(r.heroes.map((x) => x.id))) bump(heroes, h);
+    bump(formats, formatOfTitle(t));
+  }
+  const share = (m: Map<string, number>, id: string | undefined) => (id && n ? (m.get(id) ?? 0) / n : 0);
+  const ranked = ideas.map((idea) => {
+    const named = Boolean(idea.world && namedFor.has(idea.world.id));
+    const w = Math.max(share(worlds, idea.world?.id), named ? 0.5 : 0);
+    const who = [idea.hero, idea.target].filter((h): h is Hero => Boolean(h)).sort((a, b) => share(heroes, b.id) - share(heroes, a.id))[0];
+    const h = share(heroes, who?.id);
+    const f = share(formats, idea.format);
+    const fit: string[] = [];
+    if (worlds.get(idea.world?.id ?? "")) fit.push(`${idea.world!.name} is in ${worlds.get(idea.world!.id)} of its ${n} videos`);
+    else if (named) fit.push(`the channel is named for ${idea.world!.name}`);
+    if (h > 0 && who) fit.push(`${who.name} is in ${heroes.get(who.id)} of them`);
+    if (f >= 0.25) fit.push(`${FORMAT_BY_ID.get(idea.format)?.name ?? idea.format} is ${Math.round(f * 100)}% of what it makes`);
+    const fitScore = 1.5 * w + h + 0.6 * f;
+    return { idea, fit, fitScore, rank: idea.score * (1 + 3 * fitScore) };
+  });
+  const fitting = ranked.filter((r) => r.fitScore > 0);
+  const pool = ((n >= 5 || namedFor.size) && fitting.length >= 3 ? fitting : ranked).sort((a, b) => b.rank - a.rank);
+  const out: Array<{ idea: LabIdea; fit: string[] }> = [];
+  const perHero = new Map<string, number>();
+  for (const r of pool) {
+    if (out.length >= limit) break;
+    const hid = r.idea.hero?.id ?? "";
+    if ((perHero.get(hid) ?? 0) >= 2) continue;
+    perHero.set(hid, (perHero.get(hid) ?? 0) + 1);
+    out.push({ idea: r.idea, fit: r.fit });
+  }
+  return out;
 }

@@ -237,6 +237,27 @@ changes to suit it:
 | **Gaming** | long form only | none yet — tracked | the same lanes, no late gaps |
 | **Bits, Reading** | **Shorts only** | each channel's daily number (the Recurring page's `units`) | a heatmap: a row per channel, a square per day, shaded by how much of that day's number went up |
 
+**Each channel on its own.** Click any channel's name — in the lanes, the
+heatmap or the table — for its own page (`/uploads/channel/…`), with every
+other channel in the category a click away along the top:
+
+- **Its pace**: the same tiles, lane or heatmap and table, for just this
+  channel, over 30/90/180 days (14/30/60 for Shorts).
+- **Outliers**: its typical views, how often it beats its own usual, how many
+  broke out and how many fell under, whether the last ten are up or down on
+  the ten before, the spread of every scored video (½× or less up to 4× or
+  more), its best and weakest, and — long form — which day of the week does
+  best.
+- **Every video** it has, newest first: how it did against the channel's
+  usual at the same age, its views and its tier (🚀 viral, 🔥 breakout, 🫤
+  soft, 📉 flop or under). Sort by newest, most viewed, best or weakest;
+  show only the outliers up or down. Sixty at a time, *Show all* for the rest.
+- **What to make next**: the ideas panel read from this channel's own videos,
+  and for a Stories channel, Story Lab's ideas that fit it — the worlds,
+  heroes and formats it already does (a channel named for a world, like
+  Specular FNAF, leans to it from the start), each saying why and opening
+  its blueprint, and none already public on any channel.
+
 **Bits and Reading days run 3 AM to 3 AM Eastern.** A Short posted at
 1:30 AM counts toward the day before, and until 3 AM the Uploads heatmap and
 the Recurring page are still on the day being finished. Stories, Gaming and
