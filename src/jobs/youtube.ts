@@ -252,7 +252,8 @@ export async function setChannelLink(channel: string, input: string): Promise<vo
   await pool.query(
     `INSERT INTO youtube_channels (channel, input) VALUES ($1, $2)
      ON CONFLICT (channel) DO UPDATE SET input = $2, youtube_id = NULL, title = NULL, error = NULL,
-       checked_at = NULL, backfilled_at = NULL, updated_at = now()`,
+       checked_at = NULL, backfilled_at = NULL, avatar_colour = NULL, avatar_url = NULL,
+       avatar_checked_at = NULL, avatar_error = NULL, updated_at = now()`,
     [channel, value],
   );
   if (rows.length) await pool.query("DELETE FROM uploads WHERE channel = $1", [channel]);

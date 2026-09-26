@@ -67,6 +67,7 @@ import { checkDraft } from "./stories/check.js";
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { colourSources, loadChannelColours, sampleAvatars, sampledChannels, setChannelColour } from "../jobs/avatars.js";
 import { FORMATS, type FormatId } from "./stories/formats.js";
 import { HEROES, WORLDS } from "./stories/lore.js";
 import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
@@ -202,7 +203,11 @@ export async function startWeb(): Promise<void> {
     process.exit(1);
   }
 
-  if (hasDatabase) await migrate();
+  if (hasDatabase) {
+    await migrate();
+    // The Shorts channels' avatar colours and any set by hand, before the first page.
+    await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
+  }
 
   const app = Fastify({ logger: false, trustProxy: true });
   await app.register(cookie);
@@ -700,6 +705,9 @@ export async function startWeb(): Promise<void> {
     }
     await syncUploads().catch((err) => console.error("[uploads] read failed:", err));
     await announceBreakouts().catch((err) => console.error("[uploads] breakout alert failed:", err));
+    // A new Shorts link: its avatar's colour, straight away (and a removed one's goes).
+    await sampleAvatars().catch((err) => console.error("[colours] sampling failed:", err));
+    await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
     return reply.redirect(backToCategory(body._cat));
   });
 
@@ -975,8 +983,9 @@ export async function startWeb(): Promise<void> {
   });
 
   // Settings: the sidebar's items, the dashboard's lists, the days off.
-  app.get<{ Querystring: { saved?: string } }>("/settings", async (request, reply) => {
-    const [s, shifted] = await Promise.all([shell("settings"), listOffShifted()]);
+  app.get<{ Querystring: { saved?: string; colours?: string } }>("/settings", async (request, reply) => {
+    const [s, shifted, sources] = await Promise.all([shell("settings"), listOffShifted(), colourSources()]);
+    const sampled = new Set(sampledChannels());
     return reply.type("text/html").send(
       renderSettings(s, {
         railHide: s.railHide ?? [],
@@ -985,8 +994,37 @@ export async function startWeb(): Promise<void> {
         shifted: shifted.map((x) => x.record),
         saved: request.query.saved === "1",
         scripts: Boolean(s.scripts),
+        colours: CHANNELS.map((c) => {
+          const src = sources.get(c.name);
+          return {
+            id: c.id, name: c.name, category: c.category, colour: c.color, source: src?.source ?? "catalog",
+            sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
+          };
+        }),
+        coloursSaved:
+          request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
       }),
     );
+  });
+
+  // Channel colours: set by hand, reset to the avatar's (or the catalog's),
+  // or read every Shorts avatar again now.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/colours", async (request, reply) => {
+    const body = request.body ?? {};
+    if (body.reset) {
+      const c = CHANNELS.find((ch) => ch.id === body.reset);
+      if (c) await setChannelColour(c.name, null);
+      return reply.redirect("/settings?colours=saved#colours");
+    }
+    if (body.sample) {
+      await sampleAvatars(fetch, true).catch((err) => console.error("[colours] sampling failed:", err));
+      return reply.redirect("/settings?colours=read#colours");
+    }
+    for (const c of CHANNELS) {
+      const v = body[`c_${c.id}`];
+      if (v && /^#[0-9a-f]{6}$/i.test(v) && v.toUpperCase() !== c.color.toUpperCase()) await setChannelColour(c.name, v);
+    }
+    return reply.redirect("/settings?colours=saved#colours");
   });
   app.post<{ Body: { show?: string | string[]; dash?: string | string[] } }>("/settings", async (request, reply) => {
     const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v : v ? [v] : []);
@@ -1062,6 +1100,8 @@ export async function startWeb(): Promise<void> {
         .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
         .then(() => announceBreakouts())
         .then((n) => n && console.log(`[uploads] announced ${n} breakout${n === 1 ? "" : "s"}`))
+        .then(() => sampleAvatars())
+        .then((a) => (a.sampled || a.failed) && console.log(`[colours] ${a.sampled} avatars sampled, ${a.failed} failed`))
         .catch((err) => console.error("[uploads] read failed:", err));
     cron.schedule("7 * * * *", () => void read("hourly"));
     setTimeout(() => void read("boot"), 20_000).unref();

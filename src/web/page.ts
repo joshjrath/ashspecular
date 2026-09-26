@@ -152,6 +152,23 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .setsave .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
 .settings .offstrip { margin: 12px 0 0; padding: 0; background: none; }
 .settings .offstrip .lbl { display: none; }
+.colgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 22px; margin: 12px 0 16px; }
+.colgrid fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.colgrid legend { display: flex; align-items: center; gap: 8px; padding: 0 6px 6px; color: var(--ink3); font-size: 11px;
+  font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.colgrid legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.colrow { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 6px;
+  border-radius: 10px; }
+.colrow:hover { background: var(--sunk); }
+.colrow input[type=color] { grid-row: span 2; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: none; cursor: pointer; }
+.colrow input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.colrow input[type=color]::-webkit-color-swatch { border: 1px solid rgba(255,255,255,.28); border-radius: 50%; }
+.colrow input[type=color]::-moz-color-swatch { border: 1px solid rgba(255,255,255,.28); border-radius: 50%; }
+.colrow .nm { font-weight: 700; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.colrow .src { color: var(--ink3); font-size: 12px; }
+.colrow .src a { color: #9FDDF4; }
+.linkbtn { border: 0; background: none; padding: 0; margin-left: 4px; color: #9FDDF4; font: inherit; cursor: pointer; text-decoration: underline; }
 aside .live .pulse {
   width: 7px; height: 7px; border-radius: 50%; background: #35D399; flex: none;
   box-shadow: 0 0 0 3px rgba(53,211,153,.16);
@@ -4710,9 +4727,24 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
  * Settings: what the sidebar shows, what the dashboard shows, and the days
  * off. Kept in this browser (cookies), like the dashboard's own choices.
  */
+export interface ColourRow {
+  id: string;
+  name: string;
+  category: string;
+  colour: string;
+  source: "hand" | "avatar" | "catalog";
+  /** Bits and Reading: the colour comes from the YouTube avatar. */
+  sampled: boolean;
+  linked: boolean;
+  error: string | null;
+}
+
 export function renderSettings(
   shell: Shell,
-  data: { railHide: string[]; dashHide: string[]; daysOff: string[]; shifted: StoredRecord[]; saved: boolean; scripts: boolean },
+  data: {
+    railHide: string[]; dashHide: string[]; daysOff: string[]; shifted: StoredRecord[]; saved: boolean; scripts: boolean;
+    colours?: ColourRow[]; coloursSaved?: string;
+  },
 ): string {
   const off = new Set(data.railHide);
   const dash = new Set(data.dashHide);
@@ -4752,8 +4784,53 @@ export function renderSettings(
     <section class="panel setgroup settings" style="margin-top:14px">
       <h2>Days off <span class="sub">— no work that day: anything due on it is due the working day before</span></h2>
       ${daysOffStrip(data.daysOff, data.shifted)}
-    </section>`,
+    </section>
+    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "") : ""}`,
   );
+}
+
+/**
+ * Every channel's colour, where it comes from, and a picker to set one by
+ * hand. Bits and Reading take theirs from their YouTube avatars.
+ */
+function colourSettings(rows: ColourRow[], saved: string): string {
+  const why = (r: ColourRow) =>
+    r.source === "hand"
+      ? `set by hand <button class="linkbtn" name="reset" value="${esc(r.id)}">Reset</button>`
+      : r.source === "avatar"
+        ? "from its YouTube avatar"
+        : r.sampled
+          ? r.error
+            ? `<span class="warn" title="${esc(r.error)}">avatar not read yet</span>`
+            : r.linked
+              ? "avatar not read yet"
+              : `no YouTube link yet — <a href="/uploads?cat=${esc(r.category)}">add it</a>`
+          : r.category === "stories"
+            ? "its avatar colour"
+            : "the board's own";
+  const groups = CATEGORIES.map((c) => {
+    const list = rows.filter((r) => r.category === c.id);
+    if (!list.length) return "";
+    return `<fieldset style="--c:${c.color}"><legend><i></i>${esc(c.label)}</legend>${list
+      .map(
+        (r) => `<label class="colrow">
+          <input type="color" name="c_${esc(r.id)}" value="${esc(r.colour.toLowerCase())}" aria-label="${esc(r.name)}'s colour">
+          <span class="nm">${esc(r.name)}</span>
+          <span class="src">${why(r)}</span>
+        </label>`,
+      )
+      .join("")}</fieldset>`;
+  }).join("");
+  return `<form class="panel setgroup settings colourset" id="colours" method="post" action="/settings/colours" style="margin-top:14px">
+    <h2>Channel colours <span class="sub">— Bits and Reading wear their YouTube avatars' colours, read on the server
+      and kept apart from every other channel's. Pick one to set it by hand.</span></h2>
+    <div class="colgrid">${groups}</div>
+    <div class="setsave">
+      <button class="clear">Save colours</button>
+      <button class="clear secondary" name="sample" value="1" title="Read every Bits and Reading avatar again now">Read the avatars again</button>
+      ${saved ? `<span class="saved" role="status">${esc(saved)}</span>` : ""}
+    </div>
+  </form>`;
 }
 
 /** Everything paused — out of the workflow with no deadline — and the way back. */

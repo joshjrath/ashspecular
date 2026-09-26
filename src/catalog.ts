@@ -159,6 +159,22 @@ export const CHANNELS: Channel[] = [
 ];
 
 export const CHANNEL_NAMES = CHANNELS.map((c) => c.name);
+
+/** Each channel's colour as written above, before any sampled or hand-set one. */
+const CATALOG_COLOURS = new Map(CHANNELS.map((c) => [c.name, c.color]));
+
+export function catalogColour(name: string): string {
+  return CATALOG_COLOURS.get(name) ?? "#8A8A93";
+}
+
+/**
+ * Wear these colours from now on (channel name → #RRGGBB): a Shorts channel's
+ * avatar colour, or one set by hand in Settings. Any channel not named goes
+ * back to its catalog colour.
+ */
+export function applyChannelColours(colours: Map<string, string>): void {
+  for (const c of CHANNELS) c.color = colours.get(c.name) ?? catalogColour(c.name);
+}
 export const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
 
 export function category(id: string): Category | undefined {

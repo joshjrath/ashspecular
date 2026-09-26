@@ -47,6 +47,9 @@ import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
 import { renderStoryLab, renderPaused, renderSettings, RAIL_ITEMS } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
 import { cascadeText, planCascade } from "../src/web/cascade.js";
+import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels } from "../src/jobs/avatars.js";
+import { applyChannelColours, catalogColour } from "../src/catalog.js";
+import jpegJs from "jpeg-js";
 import { renderRecord } from "../src/web/page.js";
 
 let pass = 0;
@@ -1005,6 +1008,47 @@ t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts
 t("…the dashboard's lists", [/value="channels">/.test(setPage), /value="unsorted" checked>/.test(setPage)], [true, true]);
 t("…the days off", setPage.includes('action="/days-off"'), true);
 t("…and says when it's saved", setPage.includes("Saved."), true);
+
+// ── Shorts channel colours from their avatars ─────────────────────────────
+section("Shorts channels wear their avatars' colours");
+const fakeAvatar = (ring: [number, number, number], middle: [number, number, number], size = 96) => {
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    const d = Math.hypot(x - (size - 1) / 2, y - (size - 1) / 2) / (size / 2);
+    const [r, g, b] = d > 0.55 ? ring : middle;
+    data.set([r, g, b, 255], (y * size + x) * 4);
+  }
+  return { width: size, height: size, data };
+};
+t("the background ring's colour, not the character's", avatarColour(fakeAvatar([208, 32, 32], [250, 250, 250])), "#D02020");
+t("a black or white background: the character's strong colour", avatarColour(fakeAvatar([12, 12, 12], [40, 90, 220])), "#285ADC");
+t("grey all over: no colour to take", avatarColour(fakeAvatar([128, 128, 128], [200, 200, 200])), null);
+const jpg = jpegJs.encode(fakeAvatar([46, 160, 90], [240, 220, 40], 176), 85).data;
+const fromJpeg = avatarColour(jpegJs.decode(jpg, { useTArray: true }));
+t("…read through a real JPEG, within a hair of it", fromJpeg !== null && deltaE(fromJpeg, "#2EA05A") < 3, true);
+t("the avatar asked for big enough to read", avatarAt("https://yt3.ggpht.com/abc123=s88-c-k-c0x00ffffff-no-rj"), "https://yt3.ggpht.com/abc123=s176-c-k-c0x00ffffff-no-rj");
+t("…even when the address has no size", avatarAt("https://yt3.googleusercontent.com/xyz"), "https://yt3.googleusercontent.com/xyz=s176-c-k-c0x00ffffff-no-rj");
+t("the avatar found on a channel page", avatarFromPage('<meta property="og:image" content="https://yt3.googleusercontent.com/a=s900-c-k?x=1&amp;y=2">'), "https://yt3.googleusercontent.com/a=s900-c-k?x=1&y=2");
+t("a colour like another channel's is nudged apart", deltaE(apart("#D21B20", ["#D21B20"]), "#D21B20") >= 10, true);
+t("…one already apart is left exactly as it is", apart("#1BD058", ["#D21B20", "#4A5CD4"]), "#1BD058");
+const crowd: string[] = [];
+for (let i = 0; i < 12; i += 1) crowd.push(apart("#E57712", crowd));
+t("twelve avatars the same orange still come out twelve different colours", new Set(crowd).size, 12);
+t("…each clear of the others", crowd.every((c, i) => crowd.every((o, j) => i === j || deltaE(c, o) >= 10)), true);
+t("only Bits and Reading are read from their avatars", sampledChannels().every((n) => ["bits", "reading"].includes(CHANNELS.find((c) => c.name === n)!.category)) && sampledChannels().length > 0, true);
+const fnafBits = CHANNELS.find((c) => c.id === "fnaf_bits") ?? CHANNELS.find((c) => c.category === "bits")!;
+applyChannelColours(new Map([[fnafBits.name, "#123456"]]));
+t("a new colour is worn everywhere at once", CHANNELS.find((c) => c.name === fnafBits.name)!.color, "#123456");
+applyChannelColours(new Map());
+t("…and without one it's back to the catalog's", CHANNELS.find((c) => c.name === fnafBits.name)!.color, catalogColour(fnafBits.name));
+const colourPage = renderSettings({ ...shellFix, active: "settings" }, {
+  railHide: [], dashHide: [], daysOff: [], shifted: [], saved: false, scripts: false,
+  colours: CHANNELS.map((c) => ({ id: c.id, name: c.name, category: c.category, colour: c.color,
+    source: c.id === fnafBits.id ? "hand" as const : "catalog" as const, sampled: sampledChannels().includes(c.name), linked: false, error: null })),
+});
+t("Settings has a colour picker for every channel", (colourPage.match(/<input type="color" name="c_/g) ?? []).length, CHANNELS.length);
+t("…a hand-set one can be reset", colourPage.includes(`name="reset" value="${fnafBits.id}"`), true);
+t("…and a Shorts channel with no link says where to add it", colourPage.includes("no YouTube link yet"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

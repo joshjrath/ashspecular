@@ -187,9 +187,21 @@ on the channel's name. Square is category, circle is channel.
 
 The Stories channels wear their YouTube avatar colours — sampled from the
 avatars, the background ring clear of the character — so Studios is #D21B20,
-FNAF #D2BD1B, Comics #1BC0D2. The other channels' colours were generated to sit
-apart from each other. Change any of them with `color` on the channel in
-`src/catalog.ts`.
+FNAF #D2BD1B, Comics #1BC0D2. **The Bits and Reading channels wear theirs too**,
+read by the board itself: once a channel's YouTube link is saved on Uploads,
+the server fetches its avatar (through the API with `YOUTUBE_API_KEY`, or from
+the channel's page without it), takes the commonest colour in the ring just
+inside the circle — or, when that ring is black, white or grey, the
+commonest strong colour in the avatar — and reads it again weekly. A sampled
+colour that would look like another channel's is moved just enough to stand
+apart (lighter or darker first, then a small turn round the colour wheel), so
+every channel stays unique. Gaming and Movies keep colours generated to sit
+apart.
+
+**Settings → Channel colours** shows every channel's colour and where it
+came from, with a picker to set any one by hand (a hand-set colour always
+wins; *Reset* goes back), and *Read the avatars again* to re-sample now.
+The catalog colours live on `color` in `src/catalog.ts`.
 
 Every dot shows the exact colour, with a hairline ring so a pale one stays
 visible on white and a dark one on the rail. A channel's *name* is written in
