@@ -352,6 +352,29 @@ export async function startWeb(): Promise<void> {
   }
 
   /**
+   * Which channels the calendar hides (catalog ids, and "nochannel" for work
+   * filed without one). An explicit ?chide= wins and is remembered, like the
+   * category toggles.
+   */
+  function hiddenChannels(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply): string[] {
+    const q = (request.query as { chide?: string }).chide;
+    const raw = q ?? request.cookies.cal_chide ?? "";
+    const known = new Set<string>([...CHANNELS.map((c) => c.id), "nochannel"]);
+    const hide = [...new Set(raw.split(",").filter((id) => known.has(id)))];
+    if (q !== undefined) {
+      reply.setCookie("cal_chide", hide.join(","), { path: "/", sameSite: "lax", httpOnly: true, maxAge: 60 * 60 * 24 * 365 });
+    }
+    return hide;
+  }
+
+  /** Whether a record passes the calendar's channel dropdown. */
+  const channelShown = (r: StoredRecord, chide: string[]) => {
+    if (!chide.length) return true;
+    const id = r.channel ? CHANNELS.find((c) => c.name === r.channel)?.id : "nochannel";
+    return !id || !chide.includes(id);
+  };
+
+  /**
    * Which statuses to hide — "done", "open", both or neither. Read from the
    * address only, never remembered, so every calendar opens showing both.
    */
@@ -367,9 +390,10 @@ export async function startWeb(): Promise<void> {
     mode: CalendarMode,
     hide: string[],
     st: StatusHide,
+    chide: string[] = [],
   ): Promise<Array<{ date: string; list: StoredRecord[] }>> {
     const entries = (await calendarRange(from, to, mode, ORG_TZ)).filter(
-      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open"),
+      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open") && channelShown(e.record, chide),
     );
     const days: Array<{ date: string; list: StoredRecord[] }> = [];
     for (let d = from; d <= to; d = shiftDate(d, 1)) days.push({ date: d, list: [] });
@@ -387,12 +411,15 @@ export async function startWeb(): Promise<void> {
     const ym = safeMonth(ymRaw);
     const mode = safeMode(modeRaw);
     const hide = hiddenCategories(request, reply);
+    const chide = hiddenChannels(request, reply);
     const st = hiddenStatuses(request);
     const [s, entries] = await Promise.all([shell("calendar"), monthEntries(ym, mode)]);
     const shown = entries.filter(
-      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open"),
+      (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open") && channelShown(e.record, chide),
     );
-    return reply.type("text/html").send(renderCalendar(s, ym, mode, shown, hide, st, `${baseUrlOf(request)}/calendar.ics?key=${feedKey()}`));
+    return reply
+      .type("text/html")
+      .send(renderCalendar(s, ym, mode, shown, hide, st, `${baseUrlOf(request)}/calendar.ics?key=${feedKey()}`, chide));
   }
 
   app.get<{ Params: { date: string }; Querystring: { mode?: string } }>(
@@ -405,9 +432,10 @@ export async function startWeb(): Promise<void> {
         return reply.code(404).type("text/html").send(renderList(s, "Not found", "That is not a date.", []));
       }
       const hide = hiddenCategories(request, reply);
+      const chide = hiddenChannels(request, reply);
       const st = hiddenStatuses(request);
-      const days = await dayBuckets(shiftDate(date, -DAY_SPAN), shiftDate(date, DAY_SPAN), mode, hide, st);
-      return reply.type("text/html").send(renderDay(s, date, mode, days, hide, st));
+      const days = await dayBuckets(shiftDate(date, -DAY_SPAN), shiftDate(date, DAY_SPAN), mode, hide, st, chide);
+      return reply.type("text/html").send(renderDay(s, date, mode, days, hide, st, chide));
     },
   );
 
@@ -424,9 +452,29 @@ export async function startWeb(): Promise<void> {
       }
       const start = weekStart(date);
       const hide = hiddenCategories(request, reply);
+      const chide = hiddenChannels(request, reply);
       const st = hiddenStatuses(request);
-      const days = await dayBuckets(start, shiftDate(start, 6), mode, hide, st);
-      return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st));
+      const days = await dayBuckets(start, shiftDate(start, 6), mode, hide, st, chide);
+      return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st, chide));
+    },
+  );
+
+  // Four days from any day (today when none is given), side by side.
+  app.get<{ Params: { date?: string }; Querystring: { mode?: string } }>(
+    "/4day/:date?",
+    async (request, reply) => {
+      const raw = request.params.date;
+      const start = raw ? safeDate(raw) : dateIn(ORG_TZ);
+      const mode = safeMode(request.query.mode);
+      const s = await shell("calendar");
+      if (!start) {
+        return reply.code(404).type("text/html").send(renderList(s, "Not found", "That is not a date.", []));
+      }
+      const hide = hiddenCategories(request, reply);
+      const chide = hiddenChannels(request, reply);
+      const st = hiddenStatuses(request);
+      const days = await dayBuckets(start, shiftDate(start, 3), mode, hide, st, chide);
+      return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st, chide, 4));
     },
   );
 

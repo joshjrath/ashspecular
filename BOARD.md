@@ -151,9 +151,14 @@ plots the day the work is due.
 - **Complete / Incomplete** toggles sit beside the categories. Both are on
   whenever you open the calendar; switching one off follows you from month to
   week to day until you leave.
-- **Month · Week · Day** switch views, each on the same stretch of time. The
-  week runs Sunday to Saturday, a column a day with every item as a card you
-  can drag, pin, ✓ or ×.
+- **Day · 4 days · Week · Month** switch views, each on the same stretch of
+  time. The week runs Sunday to Saturday; **4 days** starts on the day you're
+  on and steps four days at a time. Both are a column a day with every item as
+  a card you can drag, pin, ✓ or ×.
+- **Channels ▾** picks exactly which channels show, on every view: tick or
+  untick any channel (grouped by category), **All**, **None**, or **only** to
+  keep one category. **No channel** covers work filed without one. Press
+  **Show** or just close the menu; the calendar remembers the choice.
 - A cell shows five items; the rest are a click away.
 - Click a chip for that record, a date for the **day view**.
 

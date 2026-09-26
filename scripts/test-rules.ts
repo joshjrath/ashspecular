@@ -1184,6 +1184,20 @@ t("…switchable like Unsorted and Channels", dashRev.includes('data-part="revis
 const revPage = renderRevisions(shellFix, [revRec], [plainRec]);
 t("the Revisions page lists revisions, then other Frame.io work", [revPage.indexOf("/r/40\"") < revPage.indexOf("Other work with a Frame.io link"), revPage.includes("/r/8\"")], [true, true]);
 
+section("Calendar — Day · 4 days · Week · Month, and a channel dropdown");
+const tabOrder = (html: string) => [...html.matchAll(/class="tab(?: on)?"[^>]*href="\/(day|4day|week|calendar)\//g)].map((m) => m[1]);
+t("views run Day, 4 days, Week, Month", tabOrder(pages.week).slice(0, 4), ["day", "4day", "week", "calendar"]);
+const fourDays = [0, 1, 2, 3].map((n) => ({ date: shiftDate("2026-09-28", n), list: n === 0 ? [pinnedRec] : [] }));
+const four = renderWeek(shellFix, "2026-09-28", "posting", fourDays, [], [], [], 4);
+t("4 days: four columns from the day picked", [(four.match(/class="daycol/g) ?? []).length, four.includes("weekgrid span4")], [4, true]);
+t("4 days: its tab is the one lit", /class="tab on"[^>]*href="\/4day\//.test(four), true);
+t("4 days: steps four days at a time", [four.includes('href="/4day/2026-10-02'), four.includes('href="/4day/2026-09-24')], [true, true]);
+const picked = renderWeek(shellFix, "2026-09-27", "posting", days, [], [], ["comics", "nochannel"]);
+t("every calendar view has the channel dropdown", [pages.calendar, pages.day, pages.week, four].map((h) => h.includes('id="chanpick"')), [true, true, true, true]);
+t("…a hidden channel is unticked, the rest ticked", [/value="nochannel"(?! checked)/.test(picked), /value="nochannel" checked/.test(pages.week)], [true, true]);
+const fourScripts = [...four.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+t("4 days: inline scripts compile", fourScripts.filter((src) => { try { new Function(src); return false; } catch { return true; } }).length, 0);
+
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
 );

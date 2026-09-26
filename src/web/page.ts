@@ -631,6 +631,33 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 
 /* ── week ──────────────────────────────────────────────────────────────── */
 .weekgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.weekgrid.span4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.chanpick { position: relative; }
+.chanpick summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-radius: 999px; background: var(--rail); color: #D8D8DE; font-size: 13px; font-weight: 600; }
+.chanpick summary::-webkit-details-marker { display: none; }
+.chanpick summary::after { content: "▾"; color: var(--ink3); font-size: 11px; }
+.chanpick summary b { background: var(--yellow); color: #101012; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; }
+.chanpick[open] summary { background: #26262A; color: #fff; }
+.chanmenu { position: absolute; left: 0; top: calc(100% + 8px); z-index: 30; width: min(640px, calc(100vw - 32px)); max-height: min(560px, 70vh);
+  overflow: auto; padding: 10px 12px 12px; background: var(--card); border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 0 1px #2E2E35; }
+.chanbtns { display: flex; gap: 6px; position: sticky; top: -10px; background: var(--card); padding: 4px 0 8px; z-index: 1; }
+.chanbtns button, .chcat button { border: 0; border-radius: 999px; background: var(--sunk); color: var(--ink2); font: inherit;
+  font-size: 12px; font-weight: 700; padding: 6px 12px; cursor: pointer; }
+.chanbtns button:hover, .chcat button:hover { color: #fff; background: #2E2E35; }
+.chanbtns .go { margin-left: auto; background: var(--yellow); color: #101012; }
+.chanbtns .go:hover { background: #FFF38A; color: #101012; }
+.chgroups { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
+.chgroup { min-width: 0; }
+.chcat { display: flex; align-items: center; gap: 7px; padding: 6px 4px 4px; color: var(--ink3); font-size: 11px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; }
+.chcat i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+.chcat button { margin-left: auto; padding: 2px 8px; font-size: 10.5px; letter-spacing: 0; text-transform: none; }
+.chgroup label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  color: var(--ink); cursor: pointer; }
+.chgroup label:hover { background: var(--sunk); }
+.chgroup input { width: 15px; height: 15px; margin: 0; accent-color: var(--yellow); flex: none; }
 .weekgrid .daycol {
   height: auto; min-height: max(460px, calc(100vh - 290px)); padding: 10px; border-radius: 20px;
 }
@@ -658,6 +685,7 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 
 @media (min-width: 761px) and (max-width: 1100px) {
   .weekgrid { grid-template-columns: repeat(7, minmax(220px, 1fr)); overflow-x: auto; padding-bottom: 12px; }
+  .weekgrid.span4 { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
 }
 
 /* ── pins ──────────────────────────────────────────────────────────────── */
@@ -1482,8 +1510,9 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   header.page { position: relative; }
   .bellwrap { position: absolute; top: 4px; right: 4px; }
   .notices { position: fixed; left: 10px; right: 10px; top: 70px; width: auto; }
-  .weekgrid { grid-template-columns: minmax(0, 1fr); }
+  .weekgrid, .weekgrid.span4 { grid-template-columns: minmax(0, 1fr); }
   .weekgrid .daycol { min-height: 0; }
+  .chanmenu { position: fixed; left: 16px; right: 16px; top: 120px; width: auto; }
   .weekgrid .daycol .rel { display: inline; margin-left: auto; }
   .weekgrid .daycol .cnt { margin-left: 0; }
   .calbar .tabs.views { margin-left: 0; }
@@ -2949,14 +2978,94 @@ function statusToggles(st: StatusHide, href: (st: string) => string, attrs = "")
 }
 
 /** Month · Week · Day, each opening on the same stretch of time. */
-function viewTabs(active: "month" | "week" | "day", date: string, q: string, attrs = ""): string {
+function viewTabs(active: "month" | "week" | "4day" | "day", date: string, q: string, attrs = ""): string {
   const tab = (key: typeof active, href: string, label: string) =>
     `<a class="tab${active === key ? " on" : ""}" ${attrs} href="${href}${q}">${label}</a>`;
-  return `<div class="tabs views">${tab("month", `/calendar/${date.slice(0, 7)}`, "Month")}${tab(
+  return `<div class="tabs views">${tab("day", `/day/${date}`, "Day")}${tab("4day", `/4day/${date}`, "4 days")}${tab(
     "week",
     `/week/${date}`,
     "Week",
-  )}${tab("day", `/day/${date}`, "Day")}</div>`;
+  )}${tab("month", `/calendar/${date.slice(0, 7)}`, "Month")}</div>`;
+}
+
+/**
+ * The channel dropdown on every calendar view: tick or untick any channel
+ * (grouped by category, with All, None and "only this category"), then Show.
+ * What's unticked is remembered, like the category toggles.
+ */
+function channelPicker(chide: string[]): string {
+  const off = new Set(chide);
+  const total = CHANNELS.length + 1;
+  const shown = total - CHANNELS.filter((c) => off.has(c.id)).length - (off.has("nochannel") ? 1 : 0);
+  const groups = CATEGORIES.map((cat) => {
+    const list = CHANNELS.filter((c) => c.category === cat.id);
+    return `<div class="chgroup" style="--c:${cat.color}">
+      <div class="chcat"><i></i>${esc(cat.label)}<button type="button" data-only="${cat.id}">only</button></div>
+      ${list
+        .map((c) => `<label><input type="checkbox" value="${c.id}" data-cat="${cat.id}"${off.has(c.id) ? "" : " checked"}>
+          <span class="cdot" style="--ch:${c.color}"></span>${esc(c.name.replace(/^Specular /, "") || c.name)}</label>`)
+        .join("")}
+    </div>`;
+  }).join("");
+  return `<details class="chanpick" id="chanpick">
+    <summary>Channels <b id="chancount">${shown === total ? "all" : `${shown}/${total}`}</b></summary>
+    <div class="chanmenu">
+      <div class="chanbtns">
+        <button type="button" data-set="all">All</button>
+        <button type="button" data-set="none">None</button>
+        <button type="button" class="go" id="chango">Show</button>
+      </div>
+      <div class="chgroups">${groups}
+        <div class="chgroup"><label><input type="checkbox" value="nochannel"${off.has("nochannel") ? "" : " checked"}>No channel</label></div>
+      </div>
+    </div>
+    <script>
+    (function () {
+      var pick = document.getElementById("chanpick"), count = document.getElementById("chancount");
+      var boxes = Array.prototype.slice.call(pick.querySelectorAll("input[type=checkbox]"));
+      var start = JSON.stringify(hidden());
+      function hidden() { return boxes.filter(function (b) { return !b.checked; }).map(function (b) { return b.value; }); }
+      function tally() {
+        var n = boxes.length - hidden().length;
+        count.textContent = n === boxes.length ? "all" : n + "/" + boxes.length;
+      }
+      function go() {
+        var off = hidden();
+        if (JSON.stringify(off) === start) { pick.open = false; return; }
+        var u = new URL(location.href);
+        u.searchParams.set("chide", off.join(","));
+        location.href = u.toString();
+      }
+      boxes.forEach(function (b) { b.addEventListener("change", tally); });
+      pick.querySelectorAll("[data-set]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var on = btn.getAttribute("data-set") === "all";
+          boxes.forEach(function (b) { b.checked = on; });
+          tally();
+        });
+      });
+      pick.querySelectorAll("[data-only]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var cat = btn.getAttribute("data-only");
+          boxes.forEach(function (b) { b.checked = b.getAttribute("data-cat") === cat; });
+          tally();
+        });
+      });
+      document.getElementById("chango").addEventListener("click", go);
+      // Closing the menu shows what's ticked, the same as pressing Show.
+      // Keep the menu on screen: pull it left when it would run off the right edge.
+      var menu = pick.querySelector(".chanmenu");
+      pick.addEventListener("toggle", function () {
+        if (!pick.open) { go(); return; }
+        if (getComputedStyle(menu).position !== "absolute") return;
+        menu.style.left = "0px";
+        var over = menu.getBoundingClientRect().right - (document.documentElement.clientWidth - 16);
+        if (over > 0) menu.style.left = -over + "px";
+      });
+      document.addEventListener("click", function (e) { if (pick.open && !pick.contains(e.target)) pick.open = false; });
+    })();
+    </script>
+  </details>`;
 }
 
 /** The Sunday a week starts on — the month grid starts on Sunday too. */
@@ -3186,6 +3295,7 @@ export function renderCalendar(
   hide: string[] = [],
   st: StatusHide = [],
   feedUrl = "",
+  chide: string[] = [],
 ): string {
   const q = calQuery(mode, st);
   const byDay = new Map<string, CalendarEntry[]>();
@@ -3259,7 +3369,7 @@ export function renderCalendar(
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
       ${feedUrl ? subscribePanel(feedUrl) : ""}
     </div>
-    <div class="cattoggles">${toggles}${showAll}${statuses}
+    <div class="cattoggles">${toggles}${showAll}${statuses}${channelPicker(chide)}
       <span class="draghint">Drag anything to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
       } — the channel's later videos follow. Shift-drop moves just the one.</span>
@@ -4513,6 +4623,7 @@ export function renderDay(
   days: Array<{ date: string; list: StoredRecord[] }>,
   hide: string[] = [],
   st: StatusHide = [],
+  chide: string[] = [],
 ): string {
   const q = calQuery(mode, st);
   const today = dateIn(ORG_TZ);
@@ -4549,7 +4660,7 @@ export function renderDay(
       ${viewTabs("day", date, q, "data-dayhref")}
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
-    <div class="cattoggles">${toggles}${showAll}${statuses}
+    <div class="cattoggles">${toggles}${showAll}${statuses}${channelPicker(chide)}
       <span class="draghint">Scroll sideways, or ← → keys. Drag a card to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
       } — the channel's later videos follow; Shift-drop moves just the one.</span>
@@ -4590,7 +4701,7 @@ export function renderDay(
         document.getElementById("dayname").textContent = col.dataset.pretty;
         document.querySelectorAll("[data-dayhref]").forEach(function (a) {
           a.href = a.getAttribute("href")
-            .replace(new RegExp("/(day|week)/[0-9]{4}-[0-9]{2}-[0-9]{2}"), "/$1/" + d)
+            .replace(new RegExp("/(day|4day|week)/[0-9]{4}-[0-9]{2}-[0-9]{2}"), "/$1/" + d)
             .replace(new RegExp("/calendar/[0-9]{4}-[0-9]{2}"), "/calendar/" + d.slice(0, 7));
         });
         try { history.replaceState(null, "", "/day/" + d + location.search); } catch (e) {}
@@ -4637,37 +4748,41 @@ export function renderWeek(
   days: Array<{ date: string; list: StoredRecord[] }>,
   hide: string[] = [],
   st: StatusHide = [],
+  chide: string[] = [],
+  /** 7 for a week (Sunday to Saturday), 4 for the 4-day view (from any day). */
+  span: 7 | 4 = 7,
 ): string {
   const q = calQuery(mode, st);
   const today = dateIn(ORG_TZ);
   const off = new Set(shell.daysOff ?? []);
-  const end = shiftDay(start, 6);
+  const end = shiftDay(start, span - 1);
   const anchor = today >= start && today <= end ? today : start;
+  const path = span === 4 ? "4day" : "week";
 
   const tab = (value: CalendarMode, label: string) =>
-    `<a class="tab${mode === value ? " on" : ""}" href="/week/${start}${calQuery(value, st)}">${label}</a>`;
-  const { toggles, showAll } = categoryToggles(hide, (h) => `/week/${start}${q}&amp;hide=${h}`);
-  const statuses = statusToggles(st, (x) => `/week/${start}?mode=${mode}&amp;st=${x}`);
+    `<a class="tab${mode === value ? " on" : ""}" href="/${path}/${start}${calQuery(value, st)}">${label}</a>`;
+  const { toggles, showAll } = categoryToggles(hide, (h) => `/${path}/${start}${q}&amp;hide=${h}`);
+  const statuses = statusToggles(st, (x) => `/${path}/${start}?mode=${mode}&amp;st=${x}`);
   const total = days.reduce((n, d) => n + d.list.length, 0);
 
   return layout(
-    `Week of ${usDate(start)}`,
+    span === 4 ? `${usDate(start)} – ${usDate(end)}` : `Week of ${usDate(start)}`,
     shell,
-    `${pageHeader("Week")}
+    `${pageHeader(span === 4 ? "4 days" : "Week")}
     <div class="calbar">
-      <a class="nav" href="/week/${shiftDay(start, -7)}${q}" aria-label="Previous week">←</a>
+      <a class="nav" href="/${path}/${shiftDay(start, -span)}${q}" aria-label="${span === 4 ? "Previous 4 days" : "Previous week"}">←</a>
       <span class="month">${esc(usDate(start))} – ${esc(usDate(end))}</span>
-      <a class="nav" href="/week/${shiftDay(start, 7)}${q}" aria-label="Next week">→</a>
-      <a class="nav" href="/week/${today}${q}">This week</a>
-      ${viewTabs("week", anchor, q)}
+      <a class="nav" href="/${path}/${shiftDay(start, span)}${q}" aria-label="${span === 4 ? "Next 4 days" : "Next week"}">→</a>
+      <a class="nav" href="/${path}/${today}${q}">${span === 4 ? "Today" : "This week"}</a>
+      ${viewTabs(span === 4 ? "4day" : "week", anchor, q)}
       <div class="tabs">${tab("posting", "Posting")}${tab("deadlines", "Deadlines")}</div>
     </div>
-    <div class="cattoggles">${toggles}${showAll}${statuses}
-      <span class="draghint">${total} this week · drag a card to another day to move its ${
+    <div class="cattoggles">${toggles}${showAll}${statuses}${channelPicker(chide)}
+      <span class="draghint">${total} ${span === 4 ? "in these 4 days" : "this week"} · drag a card to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
       } — the channel's later videos follow; Shift-drop moves just the one.</span>
     </div>
-    <div class="weekgrid">${days
+    <div class="weekgrid${span === 4 ? " span4" : ""}">${days
       .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : "", off.has(d)))
       .join("")}</div>
     ${columnDragScript(mode)}`,
