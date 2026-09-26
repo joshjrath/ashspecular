@@ -34,6 +34,10 @@ import {
   setNoScript,
   listPaused,
   pausedCount,
+  channelSchedule,
+  snapshotMoves,
+  restoreMoves,
+  type MoveSnapshot,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -56,6 +60,8 @@ import { corpus, normsFor } from "./stories/corpus.js";
 import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
+import { cascadeText, planCascade, type Cascade } from "./cascade.js";
+import { randomUUID } from "node:crypto";
 import { FORMATS, type FormatId } from "./stories/formats.js";
 import { HEROES, WORLDS } from "./stories/lore.js";
 import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
@@ -64,7 +70,7 @@ import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, SORTS, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -743,10 +749,22 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderCategory(s, cat.label, cat.id, list, channels, listSort(request, reply)));
   });
 
-  app.get<{ Params: { id: string } }>("/r/:id", async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { moved?: string } }>("/r/:id", async (request, reply) => {
     const [s, record] = await Promise.all([shell(""), getRecord(Number(request.params.id))]);
     if (!record) return reply.code(404).type("text/html").send(renderList(s, "Not found", "That record is gone.", []));
-    return reply.type("text/html").send(renderRecord(s, record));
+    // How many of its channel's videos would move with a new air date.
+    const from = record.airDate;
+    const later =
+      from && record.channel && record.batchNo === null && !record.pausedAt
+        ? (await channelSchedule(record.channel, "posting", dateIn(ORG_TZ))).filter(
+            (r) => r.id !== record.id && r.airDate !== null && r.airDate > from,
+          ).length
+        : 0;
+    const token = request.query.moved ?? "";
+    const kept = token ? undos.get(token) : undefined;
+    return reply
+      .type("text/html")
+      .send(renderRecord(s, record, { later, moved: kept ? { token, text: kept.text } : null }));
   });
 
   /**
@@ -812,42 +830,128 @@ export async function startWeb(): Promise<void> {
   const voFor = (air: string | null) =>
     air ? instantIn(shiftDate(air, -VO_BUFFER_DAYS), DEADLINE_TIME, ORG_TZ) : null;
 
+  /** A deadline's time of day, so moving it to another day keeps it. */
+  const timeOf = (at: Date) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+
+  /** Whichever deadline the Deadlines calendar shows a record by. */
+  const dueOf = (r: StoredRecord) =>
+    r.voDue ? { field: "vo_due" as const, at: r.voDue }
+      : r.deadline ? { field: "deadline" as const, at: r.deadline }
+        : r.scriptDue ? { field: "script_due" as const, at: r.scriptDue }
+          : null;
+
+  /** Where the calendar shows a record, in the given mode. */
+  const dayIn = (r: StoredRecord, mode: CalendarMode) => {
+    if (mode === "posting") return r.airDate;
+    const due = dueOf(r);
+    return due ? dayOf(due.at) : null;
+  };
+
+  /** Put a record on another day, the way the calendar in that mode means it. */
+  async function placeOn(r: StoredRecord, date: string, mode: CalendarMode): Promise<boolean> {
+    if (mode === "posting") {
+      await moveAir(r.id, date, voFor(date));
+      return true;
+    }
+    const due = dueOf(r);
+    const at = due ? instantIn(date, timeOf(due.at), ORG_TZ) : null;
+    if (!due || !at) return false;
+    await moveDue(r.id, due.field, at);
+    return true;
+  }
+
+  /**
+   * Undo for a move that took the rest of a channel with it. Kept in memory for
+   * fifteen minutes: long enough to notice, and a restart simply ends it.
+   */
+  const undos = new Map<string, { at: number; snaps: MoveSnapshot[]; text: string }>();
+  const UNDO_MS = 15 * 60_000;
+  function keepUndo(snaps: MoveSnapshot[], text: string): string {
+    for (const [k, v] of undos) if (Date.now() - v.at > UNDO_MS) undos.delete(k);
+    const token = randomUUID();
+    undos.set(token, { at: Date.now(), snaps, text });
+    return token;
+  }
+
+  /**
+   * Move one record and, unless told otherwise, the rest of its channel's
+   * schedule after it. Daily batches, paused videos and records with no
+   * channel only ever move themselves.
+   */
+  async function moveWithRest(
+    record: StoredRecord,
+    date: string,
+    mode: CalendarMode,
+    alone: boolean,
+  ): Promise<{ ok: boolean; plan: Cascade; undo: string | null; text: string }> {
+    const none: Cascade = { days: 0, asked: 0, moves: [] };
+    const from = dayIn(record, mode);
+    const today = dateIn(ORG_TZ);
+    const schedule =
+      alone || !from || !record.channel || record.batchNo !== null || record.pausedAt
+        ? []
+        : await channelSchedule(record.channel, mode, today);
+    const plan = from && schedule.length
+      ? planCascade(
+          { id: record.id, from, to: date },
+          schedule.map((r) => ({ id: r.id, date: dayIn(r, mode)!, label: r.code ?? displayTitle(r) })),
+          today,
+        )
+      : none;
+    const snaps = plan.moves.length ? await snapshotMoves([record.id, ...plan.moves.map((m) => m.id)]) : [];
+    if (!(await placeOn(record, date, mode))) return { ok: false, plan: none, undo: null, text: "" };
+    const byId = new Map(schedule.map((r) => [r.id, r]));
+    for (const m of plan.moves) await placeOn(byId.get(m.id)!, m.to, mode);
+    const text = plan.moves.length ? cascadeText(record.channel!, plan) : "";
+    return { ok: true, plan, undo: plan.moves.length ? keepUndo(snaps, text) : null, text };
+  }
+
   // A calendar drag. Posting mode moves the air date; Deadlines mode moves
-  // whichever deadline the calendar was showing, keeping its time of day.
-  app.post<{ Params: { id: string }; Body: { date?: string; mode?: string } }>(
+  // whichever deadline the calendar was showing, keeping its time of day. The
+  // rest of the channel's schedule follows, unless Shift was held.
+  app.post<{ Params: { id: string }; Body: { date?: string; mode?: string; only?: string } }>(
     "/r/:id/move",
     async (request, reply) => {
       const id = Number(request.params.id);
       const date = safeDate(request.body?.date);
       const record = await getRecord(id);
       if (!record || !date) return reply.code(400).send({ ok: false });
-
-      if (safeMode(request.body?.mode) === "posting") {
-        await moveAir(id, date, voFor(date));
-      } else {
-        const field = record.voDue ? "vo_due" : record.deadline ? "deadline" : record.scriptDue ? "script_due" : null;
-        const current = record.voDue ?? record.deadline ?? record.scriptDue;
-        if (!field || !current) return reply.code(400).send({ ok: false });
-        const hhmm = new Intl.DateTimeFormat("en-GB", {
-          timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-        }).format(current);
-        const at = instantIn(date, hhmm, ORG_TZ);
-        if (!at) return reply.code(400).send({ ok: false });
-        await moveDue(id, field, at);
-      }
-      return reply.send({ ok: true });
+      const moved = await moveWithRest(record, date, safeMode(request.body?.mode), request.body?.only === "1");
+      if (!moved.ok) return reply.code(400).send({ ok: false });
+      return reply.send({ ok: true, moved: moved.plan.moves.length, days: moved.plan.days, text: moved.text, undo: moved.undo });
     },
   );
 
+  // Put a move back: the dragged video and everything that went with it.
+  app.post<{ Body: { token?: string } }>("/moves/undo", async (request, reply) => {
+    const kept = undos.get(String(request.body?.token ?? ""));
+    const json = (request.headers.accept ?? "").includes("application/json");
+    if (!kept) return json ? reply.code(410).send({ ok: false }) : reply.redirect(backTo(request.headers.referer, "/calendar"));
+    undos.delete(String(request.body?.token));
+    await restoreMoves(kept.snaps);
+    if (json) return reply.send({ ok: true });
+    // From a record's page: back to it, without the note that offered this.
+    const back = backTo(request.headers.referer, "/calendar");
+    return reply.redirect(back.replace(/\?.*$/, ""));
+  });
+
   // The date box on a record's page — for a phone, where dragging is awkward,
-  // or for a date weeks away. Empty clears it.
-  app.post<{ Params: { id: string }; Body: { air?: string } }>("/r/:id/air", async (request, reply) => {
+  // or for a date weeks away. Empty clears it. With "move the rest" ticked the
+  // channel's later videos go with it, as they do on the calendar.
+  app.post<{ Params: { id: string }; Body: { air?: string; rest?: string } }>("/r/:id/air", async (request, reply) => {
     const id = Number(request.params.id);
     const raw = (request.body?.air ?? "").trim();
     const date = raw ? safeDate(raw) : null;
     if (raw && !date) return reply.redirect(`/r/${id}`);
-    await moveAir(id, date, voFor(date));
-    return reply.redirect(`/r/${id}`);
+    const record = await getRecord(id);
+    if (!record) return reply.redirect(`/r/${id}`);
+    if (!date || !record.airDate) {
+      await moveAir(id, date, voFor(date));
+      return reply.redirect(`/r/${id}`);
+    }
+    const moved = await moveWithRest(record, date, "posting", request.body?.rest !== "1");
+    return reply.redirect(moved.undo ? `/r/${id}?moved=${moved.undo}` : `/r/${id}`);
   });
 
   // One segment on a reading channel's day: how many of its uploads are done.

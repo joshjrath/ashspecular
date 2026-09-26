@@ -117,6 +117,17 @@ plots the day the work is due.
   date; in Deadlines it moves the deadline and keeps its time of day. A VO
   deadline that was worked out from the air date follows it; one someone
   stated stays put.
+- **The rest of the channel follows.** Move a video later and every video
+  after it on the same channel goes later by the same number of days; move
+  it earlier and they come earlier, keeping their spacing. Nothing dated
+  before today moves — that's the post history — and nothing is pulled back
+  past today: a backward move stops where the first of the rest lands on
+  today. The videos before the one you moved stay where they are. A note at
+  the bottom names what else moved, with **Undo** (good for 15 minutes).
+  **Hold Shift as you drop** to move just the one. Daily batches and paused
+  videos never move with anything; in Deadlines only open work does.
+  The date box on a record's page does the same, with a ticked *Move the N
+  later … videos* box you can untick.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
 - **Complete / Incomplete** toggles sit beside the categories. Both are on

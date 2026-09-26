@@ -156,6 +156,76 @@ export async function moveDue(
 }
 
 /**
+ * A channel's schedule from `since` on, for moving the rest along with one
+ * video. Posting is by air date, cleared videos included (they haven't aired);
+ * Deadlines is by the day the deadline falls, open work only. Daily batches
+ * and paused videos never move with anything.
+ */
+export async function channelSchedule(channel: string, mode: CalendarMode, since: string): Promise<StoredRecord[]> {
+  const where =
+    mode === "posting"
+      ? `air_date >= $2::date AND status IN ('open', 'done')`
+      : `(${DUE} AT TIME ZONE '${ORG_TZ}')::date >= $2::date AND status = 'open'`;
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE channel = $1 AND batch_no IS NULL AND paused_at IS NULL AND ${where} LIMIT 500`,
+    [channel, since],
+  );
+  return rows.map(hydrate);
+}
+
+/** What a move changes on a record, kept so Undo can put it back exactly. */
+export interface MoveSnapshot {
+  id: number;
+  airDate: string | null;
+  voDue: Date | null;
+  voSource: string;
+  deadline: Date | null;
+  scriptDue: Date | null;
+  nudged: boolean;
+}
+
+export async function snapshotMoves(ids: number[]): Promise<MoveSnapshot[]> {
+  const { rows } = await pool.query<{
+    id: number; air_date: string | null; vo_due: Date | null; vo_source: string;
+    deadline: Date | null; script_due: Date | null; nudged: boolean;
+  }>(
+    `SELECT r.id, to_char(r.air_date, 'YYYY-MM-DD') AS air_date, r.vo_due, r.vo_source, r.deadline, r.script_due,
+       (n.record_id IS NOT NULL) AS nudged
+     FROM records r LEFT JOIN nudges n ON n.record_id = r.id WHERE r.id = ANY($1::bigint[])`,
+    [ids],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id), airDate: r.air_date, voDue: r.vo_due, voSource: r.vo_source,
+    deadline: r.deadline, scriptDue: r.script_due, nudged: r.nudged,
+  }));
+}
+
+/** Undo a move: every record back to its dates, in one transaction. */
+export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const s of snaps) {
+      await client.query(
+        `UPDATE records SET air_date = $2::date, vo_due = $3, vo_source = $4, deadline = $5, script_due = $6,
+           updated_at = now() WHERE id = $1`,
+        [s.id, s.airDate, s.voDue, s.voSource, s.deadline, s.scriptDue],
+      );
+      // Told about once already: don't tell again because it went back.
+      if (s.nudged) {
+        await client.query(`INSERT INTO nudges (record_id) VALUES ($1) ON CONFLICT (record_id) DO NOTHING`, [s.id]);
+      }
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Pause a video, or resume it. Paused, it has no deadline anywhere — it leaves
  * late, due, the calendar, the columns and the bell — and waits on the Paused
  * page; resumed, its deadline comes back as it was.

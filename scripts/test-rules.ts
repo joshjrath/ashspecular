@@ -46,6 +46,8 @@ import { keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
 import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
 import { renderStoryLab, renderPaused } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
+import { cascadeText, planCascade } from "../src/web/cascade.js";
+import { renderRecord } from "../src/web/page.js";
 
 let pass = 0;
 let fail = 0;
@@ -901,6 +903,40 @@ t("…five buttons, Discord's most for a row", cardRows("m1", { category: "stori
 const markedIds = ids(cardRows("m1", { category: "stories", channel: "Specular Studios" } as never, true, { paused: true, noScript: true }));
 t("…and they flip to Resume and Script in", ["resume:m1", "script:m1"].every((x) => markedIds.includes(x)), true);
 t("Discord never gets more than five rows", cardRows("m1", { category: "unknown", channel: null } as never, true).length <= 5, true);
+
+// ── moving a video moves the rest of its channel ──────────────────────────
+section("Moving a video moves the rest of its channel");
+const sched = [
+  { id: 1, date: "2026-09-20", label: "V-1" },
+  { id: 2, date: "2026-09-28", label: "V-2" },
+  { id: 3, date: "2026-10-02", label: "V-3" },
+  { id: 4, date: "2026-10-06", label: "V-4" },
+];
+const onDay = "2026-09-26";
+const fwd = planCascade({ id: 2, from: "2026-09-28", to: "2026-09-30" }, sched, onDay);
+t("later: every video after it goes later by the same days", fwd.moves.map((m) => [m.id, m.to]), [[3, "2026-10-04"], [4, "2026-10-08"]]);
+t("…the ones before it stay where they are", fwd.moves.some((m) => m.id === 1), false);
+const bwd = planCascade({ id: 2, from: "2026-09-28", to: "2026-09-27" }, sched, onDay);
+t("earlier: the ones after it come earlier", bwd.moves.map((m) => [m.id, m.to]), [[3, "2026-10-01"], [4, "2026-10-05"]]);
+const far = planCascade({ id: 2, from: "2026-09-28", to: "2026-09-18" }, sched, onDay);
+t("never pulled back past today: it stops where the first lands on today", [far.asked, far.days, far.moves.map((m) => m.to)], [-10, -6, ["2026-09-26", "2026-09-30"]]);
+const fromPast = planCascade({ id: 1, from: "2026-09-20", to: "2026-09-22" }, [...sched, { id: 5, date: "2026-09-24", label: "V-5" }], onDay);
+t("post history never moves: nothing dated before today", fromPast.moves.map((m) => m.id), [2, 3, 4]);
+const pastBack = planCascade({ id: 1, from: "2026-09-20", to: "2026-09-19" }, [...sched, { id: 5, date: "2026-09-24", label: "V-5" }], onDay);
+t("…backwards either", pastBack.moves.map((m) => m.id), [2, 3, 4]);
+t("…and a backward shift that would reach into the past stops at today", [pastBack.days, pastBack.moves[0]!.to], [-1, "2026-09-27"]);
+t("the same day isn't later", planCascade({ id: 3, from: "2026-10-02", to: "2026-10-03" }, [...sched, { id: 6, date: "2026-10-02", label: "V-6" }], onDay).moves.map((m) => m.id), [4]);
+t("nothing after it, nothing else moves", planCascade({ id: 4, from: "2026-10-06", to: "2026-10-09" }, sched, onDay).moves.length, 0);
+t("today is the floor: a video today can't be pulled back", planCascade({ id: 2, from: "2026-09-25", to: "2026-09-24" }, [{ id: 2, date: "2026-09-25", label: "a" }, { id: 7, date: "2026-09-26", label: "b" }], onDay).moves.length, 0);
+t("the note says what moved and by how much", cascadeText("Specular Studios", fwd), "Also moved 2 later Specular Studios videos 2 days later: V-3, V-4.");
+t("…and when today stopped it", cascadeText("Specular Studios", far).includes("(not 10: nothing goes before today)"), true);
+t("…naming three and counting the rest", cascadeText("Specular FNAF", { days: 1, asked: 1, moves: [1, 2, 3, 4, 5].map((n) => ({ id: n, from: "", to: "", label: `V-${n}` })) }),
+  "Also moved 5 later Specular FNAF videos 1 day later: V-1, V-2, V-3 and 2 more.");
+const recPage = renderRecord(shellFix, { ...plainRec, airDate: "2026-09-30" } as typeof plainRec, { later: 3, moved: { token: "tok", text: "Also moved <3> later" } });
+t("the record's date box offers to move the rest, ticked", /class="restbox"><input type="checkbox" name="rest" value="1" checked>\s*Move the 3 later Specular Studios videos/.test(recPage), true);
+t("…and after a move, an Undo for it", recPage.includes('action="/moves/undo"') && recPage.includes('value="tok"'), true);
+t("…with the note escaped", recPage.includes("Also moved <3> later"), false);
+t("no later videos, no box", renderRecord(shellFix, plainRec, { later: 0 }).includes(`class="restbox"`), false);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

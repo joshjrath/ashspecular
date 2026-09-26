@@ -420,6 +420,21 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .cattoggle.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
 .cattoggle.all { background: transparent; color: #9A9AA3; }
 .draghint { color: var(--dim); font-size: 12px; margin-left: auto; }
+.mtoast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(680px, calc(100vw - 32px));
+  padding: 12px 12px 12px 18px; border-radius: 16px; background: #2A2A31; border: 1px solid #3A3A43;
+  box-shadow: 0 14px 40px rgba(0,0,0,.55); color: #F2F2F5; font-size: 13.5px; line-height: 1.4; }
+.mtoast span { flex: 1; min-width: 0; }
+.mtoast small { display: block; color: #A9A9B3; font-size: 12px; margin-top: 2px; }
+.mtoast .undo, .mtoast form button { flex: none; border: 0; border-radius: 999px; padding: 8px 16px; background: #F2E86D;
+  color: #111; font: inherit; font-weight: 800; cursor: pointer; }
+.mtoast .undo:disabled { opacity: .6; cursor: default; }
+.mtoast .x { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: #C9C9D1;
+  font-size: 18px; line-height: 1; cursor: pointer; text-decoration: none; display: grid; place-items: center; }
+.mtoast .x:hover { background: #3A3A43; color: #fff; }
+.mtoast form { margin: 0; flex: none; }
+.restbox { display: flex; align-items: center; gap: 8px; flex-basis: 100%; color: var(--ink2); font-size: 13px; cursor: pointer; }
+.restbox input { width: 16px; height: 16px; accent-color: #F2E86D; }
 .cal .chip { box-shadow: inset 3px 0 0 var(--c); }
 .cal .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ch, var(--c)); flex: none; box-shadow: 0 0 0 1px var(--ring); }
 .cal .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
@@ -1607,7 +1622,7 @@ function titleOnDay(r: StoredRecord): string {
  * note about it — "need 2 more before 6" is what you wrote and what you will
  * recognise; "Filed by the channel name only" is bookkeeping.
  */
-function displayTitle(r: StoredRecord): string {
+export function displayTitle(r: StoredRecord): string {
   // A recurring batch is its channel and its day, and nothing else.
   if (r.batchNo && r.channel) return r.airDate ? `${r.channel} · ${usDate(r.airDate)}` : r.channel;
   if (r.title) return r.title;
@@ -2139,7 +2154,12 @@ export function renderCategory(
   );
 }
 
-export function renderRecord(shell: Shell, r: StoredRecord): string {
+export function renderRecord(
+  shell: Shell,
+  r: StoredRecord,
+  extra: { later?: number; moved?: { token: string; text: string } | null } = {},
+): string {
+  const later = extra.later ?? 0;
   const c = colourOf(r.category);
   const facts: Array<[string, string]> = [];
   if (r.code) facts.push(["Code", r.code]);
@@ -2199,8 +2219,21 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
               ? "Moves this batch's day."
               : `The VO deadline follows it, ${VO_BUFFER_DAYS} days before.`
         }</span>
+        ${
+          later && r.channel
+            ? `<label class="restbox"><input type="checkbox" name="rest" value="1" checked>
+                 Move ${later === 1 ? "the later" : `the ${later} later`} ${esc(r.channel)} video${later === 1 ? "" : "s"} by the same number of days</label>`
+            : ""
+        }
       </form>
     </section>
+    ${
+      extra.moved
+        ? `<div class="mtoast" role="status"><span>${esc(extra.moved.text)}</span>
+             <form method="post" action="/moves/undo"><input type="hidden" name="token" value="${esc(extra.moved.token)}"><button>Undo</button></form>
+             <a class="x" href="/r/${r.id}" aria-label="Dismiss">×</a></div>`
+        : ""
+    }
     ${links}
     ${r.brief ? `<section><h2>Story brief</h2><div class="brief">${esc(r.brief)}</div></section>` : ""}
     ${r.warnings.length ? `<section><h2>Warnings</h2><div class="empty warn">${esc(r.warnings.join(" · "))}</div></section>` : ""}
@@ -2497,6 +2530,75 @@ function dayColumn(
 }
 
 /**
+ * After a drop: the board says what else moved (the rest of the channel's
+ * schedule) with an Undo, across the reload that follows every move.
+ * `rememberMove` keeps the server's answer for the next page; the rest shows
+ * it. Shift held on the drop moves only the one.
+ */
+const MOVED_JS = `
+      var KEY = "board-moved";
+      function rememberMove(res) {
+        return res.json().then(function (j) {
+          if (j && j.undo) {
+            try { sessionStorage.setItem(KEY, JSON.stringify({ text: j.text, token: j.undo })); } catch (e) {}
+          }
+        }, function () {});
+      }
+      function saveMove(id, date, only) {
+        return fetch("/r/" + id + "/move", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+          body: new URLSearchParams({ date: date, mode: mode, only: only ? "1" : "" }),
+        }).then(function (res) {
+          if (!res.ok) { alert("Couldn't move that — nothing was changed."); return; }
+          return rememberMove(res);
+        }, function () {
+          alert("Couldn't reach the board — nothing was changed.");
+        }).then(function () { location.reload(); });
+      }
+      (function () {
+        var info = null;
+        try { info = JSON.parse(sessionStorage.getItem(KEY) || "null"); sessionStorage.removeItem(KEY); } catch (e) {}
+        if (!info || !info.token) return;
+        var toast = document.createElement("div");
+        toast.className = "mtoast";
+        toast.setAttribute("role", "status");
+        var text = document.createElement("span");
+        text.textContent = info.text;
+        var hint = document.createElement("small");
+        hint.textContent = "Hold Shift as you drop to move just the one.";
+        text.appendChild(hint);
+        var undo = document.createElement("button");
+        undo.type = "button";
+        undo.className = "undo";
+        undo.textContent = "Undo";
+        undo.addEventListener("click", function () {
+          undo.disabled = true;
+          fetch("/moves/undo", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+            body: new URLSearchParams({ token: info.token }),
+          }).then(function (res) {
+            if (!res.ok) alert("Too late to undo that one — it's been over 15 minutes, or the board restarted.");
+            location.reload();
+          }, function () {
+            alert("Couldn't reach the board — nothing was changed.");
+            undo.disabled = false;
+          });
+        });
+        var close = document.createElement("button");
+        close.type = "button";
+        close.className = "x";
+        close.setAttribute("aria-label", "Dismiss");
+        close.textContent = "×";
+        close.addEventListener("click", function () { toast.remove(); });
+        toast.appendChild(text);
+        toast.appendChild(undo);
+        toast.appendChild(close);
+        document.body.appendChild(toast);
+      })();`;
+
+/**
  * Drag a card onto another day's column. Saved at once, then the page
  * reloads — onto the same day, since the address follows the view.
  */
@@ -2538,19 +2640,10 @@ function columnDragScript(mode: CalendarMode): string {
           if (empty) empty.remove();
           body.appendChild(card);
           card.classList.add("saving");
-          fetch("/r/" + card.dataset.id + "/move", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
-            body: new URLSearchParams({ date: col.dataset.date, mode: mode }),
-          }).then(function (res) {
-            if (!res.ok) alert("Couldn't move that — nothing was changed.");
-            location.reload();
-          }, function () {
-            alert("Couldn't reach the board — nothing was changed.");
-            location.reload();
-          });
+          saveMove(card.dataset.id, col.dataset.date, e.shiftKey);
         });
       });
+      ${MOVED_JS}
     })();
     </script>`;
 }
@@ -2698,7 +2791,7 @@ export function renderCalendar(
     <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">Drag anything to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
-      }.</span>
+      } — the channel's later videos follow. Shift-drop moves just the one.</span>
     </div>
     <div class="cal">${heads}${cells}</div>
     ${
@@ -2746,19 +2839,10 @@ export function renderCalendar(
           if (from && from.dataset.date === cell.dataset.date) return;
           cell.insertBefore(chip, cell.querySelector(".more"));
           chip.classList.add("saving");
-          fetch("/r/" + chip.dataset.id + "/move", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
-            body: new URLSearchParams({ date: cell.dataset.date, mode: mode }),
-          }).then(function (res) {
-            if (!res.ok) alert("Couldn't move that — nothing was changed.");
-            location.reload();
-          }, function () {
-            alert("Couldn't reach the board — nothing was changed.");
-            location.reload();
-          });
+          saveMove(chip.dataset.id, cell.dataset.date, e.shiftKey);
         });
       });
+      ${MOVED_JS}
     })();
     </script>`,
   );
@@ -3737,7 +3821,7 @@ export function renderDay(
     <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">Scroll sideways, or ← → keys. Drag a card to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
-      }.</span>
+      } — the channel's later videos follow; Shift-drop moves just the one.</span>
     </div>
     <div class="daystrip" id="daystrip">
       <a class="dayedge" href="/day/${shiftDay(first, -1)}${q}">← Earlier</a>
@@ -3849,7 +3933,7 @@ export function renderWeek(
     <div class="cattoggles">${toggles}${showAll}${statuses}
       <span class="draghint">${total} this week · drag a card to another day to move its ${
         mode === "posting" ? "air date" : "deadline"
-      }.</span>
+      } — the channel's later videos follow; Shift-drop moves just the one.</span>
     </div>
     <div class="weekgrid">${days
       .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : ""))
