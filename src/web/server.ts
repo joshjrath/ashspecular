@@ -61,7 +61,7 @@ import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesCh
 import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
-import { corpus, normsFor } from "./stories/corpus.js";
+import { boardOpenings, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
 import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
@@ -69,6 +69,8 @@ import { SHAPES, SHAPE_BY_ID, applyAdditions, currentAdditions, diceItem } from 
 import type { DiceKind } from "./stories/dice.js";
 import { diceCard, diceLeft, rollDice } from "./stories/roll.js";
 import { addLabAddition, listLabAdditions, removeLabAddition } from "../db/lab.js";
+import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
+import { readDoc } from "./gdoc.js";
 
 const DICE_KINDS: DiceKind[] = ["shape", "hero", "world", "power", "target"];
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
@@ -217,6 +219,8 @@ export async function startWeb(): Promise<void> {
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
     // Whatever's been added to Story Lab from its dice.
     applyAdditions(await listLabAdditions().catch(() => []));
+    // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
+    setBoardScripts(await listScripts().catch(() => []));
   }
 
   const app = Fastify({ logger: false, trustProxy: true });
@@ -653,11 +657,13 @@ export async function startWeb(): Promise<void> {
     const ideaTitle = (query.idea ?? "").trim().slice(0, 200);
 
     // Each video's opening, from its script, for the idea details.
-    const openings = new Map(
-      corpus()
+    const openings = new Map([
+      ...corpus()
         .filter((sc) => sc.sections[0]?.name === "INTRO")
         .map((sc) => [normTitle(sc.title), sc.sections[0]!.paras.join(" ")] as const),
-    );
+      // Every category's scripts added on the board, not only Stories'.
+      ...boardOpenings(),
+    ]);
     const hooks = new Map(
       uploads.filter((u) => openings.has(normTitle(u.title))).map((u) => [u.url, openings.get(normTitle(u.title))!] as const),
     );
@@ -764,14 +770,17 @@ export async function startWeb(): Promise<void> {
     format?: string; hero?: string; world?: string; power?: string; target?: string; shape?: string;
     /** 🎲: any value rolls; `dice` keeps the roll to one group; `added` shows what was just added. */
     roll?: string; dice?: string; added?: string;
+    /** Why a script couldn't be added. */
+    scripterr?: string;
   };
   const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
     const channels = channelsIn("stories");
     const now = new Date();
-    const [s, all, views] = await Promise.all([
+    const [s, all, views, kept] = await Promise.all([
       shell("storylab"),
       hasDatabase ? listUploads(new Date(0)) : Promise.resolve([]),
       hasDatabase ? loadVideoViews(new Date(0), channels) : Promise.resolve([]),
+      hasDatabase ? listScripts().catch(() => []) : Promise.resolve([]),
     ]);
     const perf = scoreAll(views, now);
     const stories = all.filter((u) => channels.includes(u.channel));
@@ -837,6 +846,12 @@ export async function startWeb(): Promise<void> {
       }).filter((f) => f.examples.length),
       shapes: [...SHAPES],
       dice,
+      library: {
+        // Stories videos' scripts and those added on their own — the ones Story Lab reads.
+        scripts: kept.filter(learnsFrom),
+        drive: scripts.filter((x) => !x.board).length,
+        error: (query.scripterr ?? "").slice(0, 200),
+      },
     });
   };
   app.get<{ Querystring: LabQuery }>("/story-lab", async (request, reply) =>
@@ -963,8 +978,12 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderCategory(s, cat.label, cat.id, list, channels, listSort(request, reply)));
   });
 
-  app.get<{ Params: { id: string }; Querystring: { moved?: string } }>("/r/:id", async (request, reply) => {
-    const [s, record] = await Promise.all([shell(""), getRecord(Number(request.params.id))]);
+  app.get<{ Params: { id: string }; Querystring: { moved?: string; scripterr?: string } }>("/r/:id", async (request, reply) => {
+    const [s, record, scripts] = await Promise.all([
+      shell(""),
+      getRecord(Number(request.params.id)),
+      hasDatabase ? scriptsFor(Number(request.params.id)).catch(() => []) : Promise.resolve([]),
+    ]);
     if (!record) return reply.code(404).type("text/html").send(renderList(s, "Not found", "That record is gone.", []));
     // How many of its channel's videos would move with a new air date.
     const from = record.airDate;
@@ -978,7 +997,71 @@ export async function startWeb(): Promise<void> {
     const kept = token ? undos.get(token) : undefined;
     return reply
       .type("text/html")
-      .send(renderRecord(s, record, { later, moved: kept ? { token, text: kept.text } : null }));
+      .send(
+        renderRecord(s, record, {
+          later,
+          moved: kept ? { token, text: kept.text } : null,
+          scripts,
+          scriptError: (request.query.scripterr ?? "").slice(0, 200),
+        }),
+      );
+  });
+
+  // ── scripts: pasted, or read from a Google Doc ──────────────────────────
+  const reloadScripts = async () => setBoardScripts(await listScripts());
+  /** The script to keep: what was pasted, else the doc's text. */
+  async function scriptText(text: string | undefined, url: string | undefined): Promise<{ body: string; url: string | null } | { error: string }> {
+    const pasted = (text ?? "").replace(/\r\n?/g, "\n").trim().slice(0, 200_000);
+    const link = (url ?? "").trim().slice(0, 1000) || null;
+    if (pasted) return { body: pasted, url: link };
+    if (!link) return { error: "Paste the script, or give its Google Doc link." };
+    const read = await readDoc(link);
+    return read.ok ? { body: read.text, url: link } : { error: read.error };
+  }
+
+  app.post<{ Params: { id: string }; Body: { text?: string; url?: string } }>("/r/:id/scripts", async (request, reply) => {
+    const record = await getRecord(Number(request.params.id));
+    if (!record) return reply.redirect("/");
+    const got = await scriptText(request.body?.text, request.body?.url);
+    if ("error" in got) return reply.redirect(`/r/${record.id}?scripterr=${encodeURIComponent(got.error)}#script`);
+    await addScript({ recordId: record.id, title: displayTitle(record), ...got });
+    // The script is here, so the video isn't waiting on it any more.
+    if (record.noScriptAt) await setNoScript(record.id, false);
+    await reloadScripts();
+    return reply.redirect(`/r/${record.id}#script`);
+  });
+
+  app.post<{ Body: { title?: string; text?: string; url?: string } }>("/story-lab/scripts", async (request, reply) => {
+    const title = (request.body?.title ?? "").trim().slice(0, 200);
+    if (!hasDatabase) return reply.redirect("/story-lab#scripts");
+    if (!title) return reply.redirect(`/story-lab?scripterr=${encodeURIComponent("Give the script its video title — that's how Story Lab reads its format, hero and world.")}#scripts`);
+    const got = await scriptText(request.body?.text, request.body?.url);
+    if ("error" in got) return reply.redirect(`/story-lab?scripterr=${encodeURIComponent(got.error)}#scripts`);
+    await addScript({ recordId: null, title, ...got });
+    await reloadScripts();
+    return reply.redirect("/story-lab#scripts");
+  });
+
+  // Read a linked doc again, for the latest draft.
+  app.post<{ Params: { sid: string } }>("/scripts/:sid/refresh", async (request, reply) => {
+    const script = await getScript(Number(request.params.sid));
+    const back = backTo(request.headers.referer, "/story-lab#scripts").replace(/#.*$/, "");
+    if (!script?.url) return reply.redirect(back);
+    const read = await readDoc(script.url);
+    const sep = back.includes("?") ? "&" : "?";
+    if (!read.ok) return reply.redirect(`${back}${sep}scripterr=${encodeURIComponent(read.error)}#${script.recordId ? "script" : "scripts"}`);
+    await updateScriptBody(script.id, read.text);
+    await reloadScripts();
+    return reply.redirect(`${back}#${script.recordId ? "script" : "scripts"}`);
+  });
+
+  app.post<{ Params: { sid: string } }>("/scripts/:sid/remove", async (request, reply) => {
+    const script = await getScript(Number(request.params.sid));
+    if (script) {
+      await removeScript(script.id);
+      await reloadScripts();
+    }
+    return reply.redirect(backTo(request.headers.referer, "/story-lab#scripts"));
   });
 
   /**

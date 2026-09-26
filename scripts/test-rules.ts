@@ -37,7 +37,8 @@ import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
 import { batchDay as ownDay } from "../src/jobs/batches.js";
 import { everyFor, describeTarget } from "../src/web/targets.js";
 import { isLongFormRecurring } from "../src/catalog.js";
-import { corpus, splitScript } from "../src/web/stories/corpus.js";
+import { boardOpenings, corpus, setBoardScripts, splitScript } from "../src/web/stories/corpus.js";
+import { docId, readDoc } from "../src/web/gdoc.js";
 import { formatOfTitle } from "../src/web/stories/formats.js";
 import { readTitle } from "../src/web/stories/lore.js";
 import { blueprint } from "../src/web/stories/blueprint.js";
@@ -1197,6 +1198,44 @@ t("every calendar view has the channel dropdown", [pages.calendar, pages.day, pa
 t("…a hidden channel is unticked, the rest ticked", [/value="nochannel"(?! checked)/.test(picked), /value="nochannel" checked/.test(pages.week)], [true, true]);
 const fourScripts = [...four.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
 t("4 days: inline scripts compile", fourScripts.filter((src) => { try { new Function(src); return false; } catch { return true; } }).length, 0);
+
+section("Scripts — pasted or read from a Google Doc, and learned from");
+const para = (w: string) => Array.from({ length: 12 }, (_, i) => `${w} would test the limits of the arena in round ${i + 1}.`).join(" ");
+const boardBody = `INTRO\n${para("Gojo")}\nPART 1\n${para("Invincible")}\nPART 2\n${para("Omni-Man")}\nOUTRO\n${para("Everyone")}`;
+t("a Google Docs link gives its id", docId("https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit?usp=sharing"), "1AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+t("…anything else doesn't", [docId("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view"), docId("not a link")], [null, null]);
+const docFetch = (status: number, type: string, body: string) =>
+  (async () => new Response(body, { status, headers: { "content-type": type } })) as unknown as typeof fetch;
+t("a shared doc is read as plain text", await readDoc("https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit", docFetch(200, "text/plain; charset=utf-8", "\uFEFFINTRO\r\nHello")), { ok: true, text: "INTRO\nHello" });
+const priv = await readDoc("https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit", docFetch(200, "text/html", "<html>Sign in</html>"));
+t("a private doc says so, and isn't kept as the script", [priv.ok, !priv.ok && priv.error.includes("private")], [false, true]);
+t("a link that isn't a doc is refused before any fetch", (await readDoc("https://example.com/x", docFetch(200, "text/plain", "x"))).ok, false);
+const driveCount = corpus().length;
+const firstTitle = corpus()[0]!.title;
+setBoardScripts([
+  { id: 1, recordId: 50, category: "stories", title: "What If Gojo Was In Invincible?", body: boardBody },
+  { id: 2, recordId: null, category: null, title: firstTitle, body: boardBody },
+  { id: 3, recordId: 51, category: "reading", title: "Every Batman Villain Explained", body: boardBody },
+  { id: 4, recordId: 52, category: "stories", title: "Too Short", body: "INTRO\nA line." },
+]);
+const learned = corpus();
+t("a Stories video's script joins what Story Lab reads", learned.some((x) => x.board?.id === 1), true);
+t("…read by its title like the Drive's", learned.find((x) => x.board?.id === 1)?.format, formatOfTitle("What If Gojo Was In Invincible?"));
+t("…and split into its parts", learned.find((x) => x.board?.id === 1)?.metrics.parts, 2);
+t("a newer copy of a Drive script takes its place", [learned.length, learned.filter((x) => x.title === firstTitle).length, learned.find((x) => x.title === firstTitle)?.board?.id], [driveCount + 1, 1, 2]);
+t("another category's script stays out of Story Lab, and so does one too short", [learned.some((x) => x.board?.id === 3), learned.some((x) => x.board?.id === 4)], [false, false]);
+t("…but every category's opening feeds the idea hooks", boardOpenings().has("every batman villain explained"), true);
+const now0 = new Date("2026-09-26T12:00:00Z");
+const keptScripts = [{ id: 1, recordId: 50, category: "stories", title: "What If Gojo Was In Invincible?", body: boardBody, url: "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit", words: 400, addedAt: now0, updatedAt: now0 }];
+const withScript = renderRecord(shellFix, { ...plainRec, id: 50 } as typeof plainRec, { scripts: keptScripts });
+t("a video's page shows its script, and whether Story Lab learns from it", [withScript.includes('id="script"'), withScript.includes("Story Lab learns from it"), withScript.includes("/scripts/1/refresh")], [true, true, true]);
+t("…with a box for another draft", withScript.includes("Add another draft"), true);
+const docRec = { ...plainRec, id: 53, links: [{ kind: "docs", url: "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit", label: "" }] } as unknown as typeof plainRec;
+t("a video with a doc linked has it ready to read", renderRecord(shellFix, docRec, { scripts: [] }).includes('name="url" value="https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit"'), true);
+t("a script that couldn't be read says why", renderRecord(shellFix, plainRec, { scripts: [], scriptError: "The doc is private." }).includes("The doc is private."), true);
+t("a revision has no script box", renderRecord(shellFix, revRec, { scripts: [] }).includes('id="script"'), false);
+setBoardScripts([]);
+t("…and removing them puts the Drive's back", corpus().length, driveCount);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

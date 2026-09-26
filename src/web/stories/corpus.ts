@@ -27,6 +27,8 @@ export interface Script {
   worlds: World[];
   powers: Power[];
   metrics: Metrics;
+  /** Set when the script was added on the board rather than built from the Drive. */
+  board?: { id: number; recordId: number | null };
 }
 
 export interface Metrics {
@@ -149,6 +151,39 @@ export function resetCorpus(): void {
   loaded = null;
 }
 
+/** A script added on the board: pasted in, or read from a Google Doc. */
+export interface BoardScript {
+  id: number;
+  recordId: number | null;
+  /** The video's category; null for one added on its own in Story Lab. */
+  category: string | null;
+  title: string;
+  body: string;
+}
+
+let board: BoardScript[] = [];
+
+const normTitle = (t: string) => t.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/** The board's scripts, as stored — applied at start and after every add, refresh or remove. */
+export function setBoardScripts(list: BoardScript[]): void {
+  board = [...list];
+  loaded = null;
+}
+
+/** Whether Story Lab learns from a board script: a Stories video's, or one added on its own. */
+export const learnsFrom = (s: { category: string | null }) => s.category === null || s.category === "stories";
+
+/** Every board script's opening, by title, whatever its category — for the Uploads idea hooks. */
+export function boardOpenings(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const s of board) {
+    const intro = splitScript(s.body, s.title)[0];
+    if (intro?.name === "INTRO" && intro.paras.length) out.set(normTitle(s.title), intro.paras.join(" "));
+  }
+  return out;
+}
+
 export function corpus(): Script[] {
   if (loaded) return loaded;
   let raw: { scripts: Array<{ title: string; file: string; words: number; sections: Section[] }> } = { scripts: [] };
@@ -160,7 +195,13 @@ export function corpus(): Script[] {
       /* try the next place */
     }
   }
-  loaded = raw.scripts.map((s) => {
+  // A script added on the board is newer than the Drive's copy of the same title, so it takes its place.
+  const mine = board.filter(learnsFrom).map((b) => {
+    const sections = splitScript(b.body, b.title);
+    return { title: b.title, file: b.recordId ? `board: video ${b.recordId}` : "board", words: sections.reduce((n, x) => n + x.words, 0), sections, board: { id: b.id, recordId: b.recordId } };
+  }).filter((b) => b.sections.length && b.words >= 150);
+  const replaced = new Set(mine.map((b) => normTitle(b.title)));
+  loaded = [...raw.scripts.filter((s) => !replaced.has(normTitle(s.title))), ...mine].map((s) => {
     const read = readTitle(s.title);
     const format = formatOfTitle(s.title);
     // A story that stays in the lead's own world (a divergence, a rebirth)

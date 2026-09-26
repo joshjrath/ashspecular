@@ -345,6 +345,7 @@ do by the three-hour Eastern window they went up in, best first.
 
 **Story Lab** in the sidebar (also linked from the Stories uploads page).
 It has learned from the 94 Stories scripts the writers delivered (446K words),
+plus every script added on the board since,
 and it doesn't copy them. It knows how they're built:
 
 - **The formats**, each with its own beat order: crossover insertion
@@ -432,10 +433,32 @@ What's on the page:
   third on every measure.
 - **The formats** and **What's been done** (heroes × worlds).
 
-**Adding scripts:** put the new .docx files in a folder and run
-`python3 scripts/build-story-corpus.py "<folder>"`, then commit
-`src/web/stories/corpus.json`. Everything above updates from it. New heroes
-and worlds go in `src/web/stories/lore.ts`.
+**Adding scripts:** straight from the board, with no rebuild needed.
+
+- **On a video's page**, the **Script** box takes the script pasted in (with
+  its INTRO / PART 1 / … / OUTRO headers), or its **Google Doc link**. The
+  link is read once, and again whenever you press **Re-read the doc**. A doc
+  already linked on the video is filled in, ready to read. The doc must be
+  shared as "Anyone with the link can view"; a private one says so instead of
+  keeping Google's sign-in page as the script. Adding a script also clears
+  the video's **No script** mark.
+- **In Story Lab**, **Scripts it learns from → + Add a script** takes one on
+  its own: give it the video's title, because that's how its format, hero and
+  world are read.
+- A Stories script, or one added on its own, joins the corpus straight away
+  once it's 150 words or more. It then counts in the format norms, the
+  blueprints' reference parts, the draft check, what the best scripts did
+  differently, and what's been done. A new copy of a Drive script's title
+  takes that script's place.
+- Any category's script also gives its video's opening to the Uploads **idea
+  hooks**.
+- Each script shows its words, its parts, whether Story Lab learns from it,
+  the text itself, **Check its structure**, and **Remove**.
+
+For a batch of .docx files, the old way still works: put them in a folder and
+run `python3 scripts/build-story-corpus.py "<folder>"`, then commit
+`src/web/stories/corpus.json`. New heroes and worlds go in
+`src/web/stories/lore.ts`.
 
 ## Uploads — is Stories keeping to every four days?
 

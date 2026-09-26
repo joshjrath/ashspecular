@@ -25,7 +25,9 @@ import type { LabIdea, Contrast, PublicVideo, ScriptResult } from "./stories/lab
 import { DICE_LABELS, type DiceKind, type Shape } from "./stories/dice.js";
 import type { DiceCard } from "./stories/roll.js";
 import type { DraftCheck } from "./stories/check.js";
-import type { Norms } from "./stories/corpus.js";
+import { corpus, learnsFrom, splitScript, type Norms } from "./stories/corpus.js";
+import { formatOfTitle } from "./stories/formats.js";
+import type { StoredScript } from "../db/scripts.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
@@ -1343,6 +1345,24 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 }
 .sform input[type=file] { color: var(--ink2); font-size: 12.5px; }
 .sform button { align-self: flex-start; }
+.scripts { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.scard { background: var(--raised); border: 1px solid #2A2A30; border-left: 3px solid var(--c, var(--salmon)); border-radius: 12px; padding: 12px 14px; }
+.scard .st { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--ink); }
+.scard .sm { font-size: 12.5px; color: var(--ink2); margin-top: 4px; line-height: 1.5; }
+.scard .sm a { color: var(--ink); text-decoration: underline; }
+.scard .learn { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #1E2A24; color: #8FE3B6; }
+.scard .learn.no { background: #26262A; color: var(--ink3); }
+.scard details { margin-top: 8px; }
+.scard summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+.scripttext { margin-top: 8px; max-height: 420px; overflow: auto; background: var(--sunk); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.6; color: var(--ink2); }
+.scripttext h4 { margin: 10px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.scripttext h4:first-child { margin-top: 0; }
+.scripttext p { margin: 0 0 8px; }
+.sacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.sacts form { display: inline; margin: 0; }
+.sacts button { font-size: 12px; padding: 6px 12px; }
+.scripterr { background: #3A1D1D; color: #FFB4B4; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
+.sform .or { font-size: 12px; color: var(--ink3); text-align: center; }
 .shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
 .idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
 .idrafts a:hover { text-decoration: underline; }
@@ -2646,10 +2666,54 @@ export function renderCategory(
   );
 }
 
+/**
+ * One kept script: how long, how it splits, where it came from, whether
+ * Story Lab learns from it, the text itself, and what can be done with it.
+ */
+function scriptCard(sc: StoredScript, colour: string, from = ""): string {
+  const sections = splitScript(sc.body, sc.title);
+  const parts = sections.filter((x) => x.name.startsWith("PART")).length;
+  const inLab = corpus().some((c) => c.board?.id === sc.id);
+  const status = inLab
+    ? `<span class="learn">Story Lab learns from it · read as ${esc(FORMAT_BY_ID.get(formatOfTitle(sc.title))?.name ?? "a script")}</span>`
+    : learnsFrom(sc)
+      ? `<span class="learn no">Too short for Story Lab to learn from — it needs 150 words or more</span>`
+      : `<span class="learn no">Kept with the video · its opening feeds the Uploads idea hooks</span>`;
+  const shown = sections.length
+    ? sections
+        .map((x) => `<h4>${esc(x.name)}${x.label ? ` — ${esc(x.label)}` : ""}</h4>${x.paras.map((p) => `<p>${esc(p)}</p>`).join("")}`)
+        .join("")
+    : `<p>${esc(sc.body)}</p>`;
+  return `<div class="scard" style="--c:${colour}">
+      <div class="st">${esc(sc.title)}</div>
+      <div class="sm">${sc.words.toLocaleString("en-US")} words · ${parts ? `${parts} part${parts === 1 ? "" : "s"}` : "no PART headers"}${
+        sc.url ? ` · <a href="${esc(sc.url)}" target="_blank" rel="noreferrer">Google Doc</a>` : " · pasted"
+      } · added ${esc(usDate(dayOf(sc.addedAt)))}${sc.updatedAt.getTime() - sc.addedAt.getTime() > 60_000 ? `, re-read ${esc(usDate(dayOf(sc.updatedAt)))}` : ""}${from}</div>
+      ${status}
+      <details><summary>Read it</summary><div class="scripttext">${shown}</div></details>
+      <div class="sacts">
+        ${inLab ? `<form method="post" action="/story-lab/check#check"><input type="hidden" name="title" value="${esc(sc.title)}"><input type="hidden" name="script" value="${esc(sc.body)}"><button class="clear secondary">Check its structure</button></form>` : ""}
+        ${sc.url ? `<form method="post" action="/scripts/${sc.id}/refresh"><button class="clear secondary" title="Read the doc again for its latest draft">Re-read the doc</button></form>` : ""}
+        <form method="post" action="/scripts/${sc.id}/remove" onsubmit="return confirm('Remove this script? Story Lab stops learning from it.')"><button class="clear secondary">Remove</button></form>
+      </div>
+    </div>`;
+}
+
+/** Paste a script, or give its Google Doc link. */
+function scriptForm(action: string, opts: { title?: boolean; url?: string; again?: boolean }): string {
+  return `<form class="sform" method="post" action="${action}" style="padding:0">
+      ${opts.title ? `<input type="text" name="title" placeholder="Its video title — e.g. What If Gojo Was In Invincible?" autocomplete="off" required>` : ""}
+      <textarea name="text" rows="6" placeholder="Paste the script, with its INTRO / PART 1 / … / OUTRO headers"></textarea>
+      <div class="or">or</div>
+      <input type="text" name="url" value="${esc(opts.url ?? "")}" placeholder="Its Google Doc link — shared as “Anyone with the link can view”" autocomplete="off">
+      <button class="clear">${opts.again ? "Add another draft" : "Add the script"}</button>
+    </form>`;
+}
+
 export function renderRecord(
   shell: Shell,
   r: StoredRecord,
-  extra: { later?: number; moved?: { token: string; text: string } | null } = {},
+  extra: { later?: number; moved?: { token: string; text: string } | null; scripts?: StoredScript[]; scriptError?: string } = {},
 ): string {
   const later = extra.later ?? 0;
   const c = colourOf(r.category);
@@ -2728,6 +2792,19 @@ export function renderRecord(
     }
     ${links}
     ${r.brief ? `<section><h2>Story brief</h2><div class="brief">${esc(r.brief)}</div></section>` : ""}
+    ${
+      r.kind === "review"
+        ? ""
+        : `<section id="script"><h2>Script</h2>
+      ${extra.scriptError ? `<div class="scripterr" role="alert">${esc(extra.scriptError)}</div>` : ""}
+      ${extra.scripts?.length ? `<div class="scripts">${extra.scripts.map((sc) => scriptCard(sc, c)).join("")}</div>` : ""}
+      ${scriptForm(`/r/${r.id}/scripts`, {
+        again: Boolean(extra.scripts?.length),
+        // The doc already linked on the video, ready to read.
+        url: extra.scripts?.length ? "" : (r.links.find((l) => l.kind === "docs" && l.url.includes("/document/"))?.url ?? ""),
+      })}
+    </section>`
+    }
     ${r.warnings.length ? `<section><h2>Warnings</h2><div class="empty warn">${esc(r.warnings.join(" · "))}</div></section>` : ""}
     <section>
       ${
@@ -5109,6 +5186,8 @@ export interface StoryLabData {
   formats: Array<{ format: Format; norms: Norms; examples: string[] }>;
   /** Title shapes added from the dice. */
   shapes?: Shape[];
+  /** The scripts added on the board, and how many came from the Drive. */
+  library?: { scripts: StoredScript[]; drive: number; error: string };
   /** 🎲 What was rolled, what was just added, and what's been added so far. */
   dice?: {
     rolled: DiceCard | null;
@@ -5119,6 +5198,28 @@ export interface StoryLabData {
     nonce: string;
     rolledNothing: boolean;
   };
+}
+
+/**
+ * The scripts Story Lab learns from: the Drive's, plus every one added on the
+ * board — a Stories video's own, or one added here on its own.
+ */
+function libraryPanel(lib: NonNullable<StoryLabData["library"]>): string {
+  const learning = lib.scripts.filter((sc) => corpus().some((c) => c.board?.id === sc.id)).length;
+  const cards = lib.scripts
+    .slice()
+    .reverse()
+    .map((sc) => scriptCard(sc, colourOf(sc.category ?? "stories"), sc.recordId ? ` · <a href="/r/${sc.recordId}#script">its video</a>` : " · added here"))
+    .join("");
+  return `<div class="panel ideas" id="scripts"><h2>Scripts it learns from <span class="sub">— ${lib.drive} from the Drive${
+    lib.scripts.length ? ` · ${learning} added on the board` : ""
+  }</span></h2>
+    <p class="hint" style="padding:0 14px">Every Stories script added to a video (on its page) or here joins the ${lib.drive + learning} Story Lab reads: format norms, blueprints' reference parts, the draft check, what the best scripts did differently and what's been done. Any category's script also gives its video's opening to the Uploads idea hooks.</p>
+    <div style="padding:0 14px 14px">
+      ${lib.error ? `<div class="scripterr" role="alert">${esc(lib.error)}</div>` : ""}
+      ${cards ? `<div class="scripts">${cards}</div>` : ""}
+      <details class="addscript"><summary class="clear secondary" style="display:inline-block;cursor:pointer">+ Add a script</summary><div style="margin-top:10px">${scriptForm("/story-lab/scripts", { title: true })}</div></details>
+    </div></div>`;
 }
 
 /**
@@ -5327,6 +5428,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     ${d.dice ? dicePanel(d.dice) : ""}
     <div class="panel ideas"><h2>Build any blueprint</h2>${builder}</div>
     <div class="panel ideas" id="check"><h2>Check a draft <span class="sub">— against the ${d.scripts} scripts, format by format</span></h2>${checker}</div>
+    ${d.library ? libraryPanel(d.library) : ""}
     <div class="panel ideas"><h2>What the best-performing scripts did differently</h2>${contrast}${results}</div>
     <div class="panel ideas"><h2>The formats <span class="sub">— how each one is actually built</span></h2><ul class="isugg labformats">${formats}</ul></div>
     <div class="panel ideas"><h2>What's been done <span class="sub">— ● written · + opens a blueprint</span></h2>${coverage}</div>`,
