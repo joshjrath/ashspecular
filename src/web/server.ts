@@ -246,6 +246,8 @@ export async function startWeb(): Promise<void> {
         renderDashboard(s, {
           stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request),
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
+          order: (request.cookies.dash_order ?? "").split(".").filter(Boolean),
+          hideParts: (request.cookies.dash_hide ?? "").split(".").filter((x) => x === "unsorted" || x === "channels"),
         }),
       );
   });

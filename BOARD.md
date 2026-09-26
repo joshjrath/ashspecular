@@ -67,9 +67,13 @@ toggles, the Uploads switch, the calendar feed and the Discord menus.
 **Columns** menu top right is a checklist of the five categories with their
 counts — tick three and you get three columns, tick five and you get five; it
 takes effect at once and the dashboard remembers it. Stories, Gaming and Bits
-until you choose. Each column shows its ten most pressing, pinned first, with
-"See all" for the rest; in a narrow column each task stacks itself so nothing
-is cut off. Anything with no category yet always shows, full width, below.
+until you choose. **Put the columns in any order**: drag one by the ⠿ beside
+its name, or use the ↑ ↓ arrows in the menu (first is leftmost, and the
+arrows work on a phone). Each column shows its ten most pressing, pinned
+first, with "See all" for the rest; in a narrow column each task stacks itself
+so nothing is cut off. Anything with no category yet shows full width below,
+then the list of channels; the menu's **Also show** switches turn either of
+those off. Every choice is remembered in the browser.
 
 Recurring batches opened ahead for a later day stay on Recurring and the
 calendar; they join the dashboard, the lists and every count on the morning

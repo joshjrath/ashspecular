@@ -812,6 +812,7 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 15; width: 230px; padding: 6px;
   background: var(--card); border-radius: 16px; box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 0 1px #2E2E35;
 }
+.colmenu { width: 262px; }
 .colmenu label {
   display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px;
   cursor: pointer; color: var(--ink); font-size: 13.5px; font-weight: 600;
@@ -820,6 +821,23 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .colmenu input { width: 16px; height: 16px; accent-color: var(--yellow); margin: 0; }
 .colmenu i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
 .colmenu span { margin-left: auto; color: var(--ink3); font-variant-numeric: tabular-nums; font-weight: 700; }
+.colopt { display: flex; align-items: center; gap: 2px; }
+.colopt label { flex: 1; min-width: 0; }
+.colopt .mv { width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--ink3);
+  font-size: 13px; cursor: pointer; }
+.colopt .mv:hover { background: var(--sunk); color: #fff; }
+.colopt:first-child .mv[data-d="-1"], .colopt:last-child .mv[data-d="1"] { visibility: hidden; }
+.colhint { margin: 4px 10px 8px; color: var(--ink3); font-size: 11.5px; }
+.colparts { border-top: 1px solid #2E2E35; margin-top: 4px; padding-top: 6px; }
+.colparts b { display: block; padding: 6px 10px 2px; color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+.dashpart[hidden] { display: none; }
+.colhead .grip { align-self: center; display: grid; place-items: center; width: 18px; height: 24px; margin-left: -6px;
+  color: var(--ink3); cursor: grab; border-radius: 6px; opacity: .55; }
+.colhead .grip svg { width: 8px; height: 13px; }
+.colhead:hover .grip { opacity: 1; }
+.colhead .grip:hover { background: var(--sunk); color: #fff; }
+.catcol.moving { opacity: .45; }
+@media (hover: none) { .colhead .grip { display: none; } }
 .catcols { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; align-items: start; margin-bottom: 14px; }
 .catcol { min-width: 0; container-type: inline-size; }
 .catcol[hidden], .nocols[hidden] { display: none; }
@@ -2098,6 +2116,15 @@ function group(id: string, list: StoredRecord[], sub = ""): string {
 /** The dashboard's columns until you pick your own. */
 export const DEFAULT_DASH_COLS = ["stories", "gaming", "bits"];
 
+/** The categories in the dashboard's column order: the saved order, then any it doesn't name. */
+export function dashOrder(saved: string[] = []): typeof CATEGORIES {
+  const byId = new Map(CATEGORIES.map((c) => [c.id as string, c]));
+  const first = [...new Set(saved)].map((id) => byId.get(id)).filter((c): c is (typeof CATEGORIES)[number] => Boolean(c));
+  return [...first, ...CATEGORIES.filter((c) => !first.includes(c))];
+}
+
+const GRIP_ICON = `<svg viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.3"/><circle cx="7.5" cy="3" r="1.3"/><circle cx="2.5" cy="8" r="1.3"/><circle cx="7.5" cy="8" r="1.3"/><circle cx="2.5" cy="13" r="1.3"/><circle cx="7.5" cy="13" r="1.3"/></g></svg>`;
+
 export function renderDashboard(
   shell: Shell,
   data: {
@@ -2109,6 +2136,10 @@ export function renderDashboard(
     seen?: number;
     /** Which categories show as columns, from the dash_cols cookie. */
     cols?: string[];
+    /** The columns' order, every category, from the dash_order cookie. */
+    order?: string[];
+    /** Parts of the dashboard switched off ("unsorted", "channels"), from dash_hide. */
+    hideParts?: string[];
     /** Open work a day off brought forward. */
     shifted?: StoredRecord[];
   },
@@ -2134,15 +2165,19 @@ export function renderDashboard(
     </div>`;
   }).join("");
 
-  // Categories side by side. Every category is rendered; the ones not picked
-  // are hidden, so ticking one in the Columns menu shows it at once.
+  // Categories side by side, in the order they were last arranged. Every
+  // category is rendered; the ones not picked are hidden, so ticking one in
+  // the Columns menu shows it at once.
   const picked = new Set(data.cols ?? DEFAULT_DASH_COLS);
-  const shown = CATEGORIES.filter((c) => picked.has(c.id)).length;
-  const columns = CATEGORIES.map((c) => {
+  const cats = dashOrder(data.order);
+  const shown = cats.filter((c) => picked.has(c.id)).length;
+  const hideParts = new Set(data.hideParts ?? []);
+  const columns = cats.map((c) => {
     const list = pinnedFirst(data.grouped.get(c.id) ?? []);
     const channels = CHANNELS.filter((ch) => ch.category === c.id).length;
     return `<section class="catcol" data-cat="${c.id}" style="--c:${c.color}"${picked.has(c.id) ? "" : " hidden"}>
       <div class="colhead">
+        <span class="grip" draggable="true" title="Drag to move this column" aria-hidden="true">${GRIP_ICON}</span>
         <span class="dot"></span>
         <a class="name" href="/category/${c.id}">${esc(c.label)}</a>
         ${channels > 1 ? `<span class="sub">${channels} channels</span>` : ""}
@@ -2155,13 +2190,23 @@ export function renderDashboard(
 
   const colPicker = `<details class="colpick">
     <summary>Columns <b id="colcount">${shown}</b></summary>
-    <div class="colmenu" role="group" aria-label="Categories to show">
-      ${CATEGORIES.map(
-        (c) => `<label style="--c:${c.color}">
-          <input type="checkbox" value="${c.id}"${picked.has(c.id) ? " checked" : ""}>
-          <i></i>${esc(c.label)}<span>${(data.grouped.get(c.id) ?? []).length}</span>
-        </label>`,
-      ).join("")}
+    <div class="colmenu" role="group" aria-label="Categories to show, in order">
+      <div class="colorder" id="colorder">${cats
+        .map(
+          (c) => `<div class="colopt" data-cat="${c.id}" style="--c:${c.color}">
+          <label><input type="checkbox" value="${c.id}"${picked.has(c.id) ? " checked" : ""}>
+            <i></i>${esc(c.label)}<span>${(data.grouped.get(c.id) ?? []).length}</span></label>
+          <button type="button" class="mv" data-d="-1" aria-label="Move ${esc(c.label)} left">↑</button>
+          <button type="button" class="mv" data-d="1" aria-label="Move ${esc(c.label)} right">↓</button>
+        </div>`,
+        )
+        .join("")}</div>
+      <p class="colhint">Drag a column by its ⠿, or use the arrows. First is leftmost.</p>
+      <div class="colparts">
+        <b>Also show</b>
+        <label><input type="checkbox" data-part="unsorted"${hideParts.has("unsorted") ? "" : " checked"}> Unsorted</label>
+        <label><input type="checkbox" data-part="channels"${hideParts.has("channels") ? "" : " checked"}> Channels</label>
+      </div>
     </div>
   </details>`;
 
@@ -2203,23 +2248,84 @@ export function renderDashboard(
     <div class="catcols" id="catcols" data-n="${shown}" style="--n:${Math.max(shown, 1)}">${columns}</div>
     <div class="empty nocols"${shown ? " hidden" : ""}>Pick a category under Columns to see its work here.</div>
     <script>
-    // Tick a category and its column appears; the choice is kept in a cookie
-    // so the dashboard opens the same way next time.
+    // Tick a category and its column appears; drag a column by its grip (or
+    // use the arrows in the menu) to put it where you want. Both are kept in
+    // cookies so the dashboard opens the same way next time.
     (function () {
       var grid = document.getElementById("catcols"), count = document.getElementById("colcount");
+      var list = document.getElementById("colorder");
       var none = document.querySelector(".nocols");
-      document.querySelectorAll(".colmenu input").forEach(function (box) {
+      var YEAR = "; path=/; max-age=31536000; samesite=lax";
+      function ticked() {
+        var on = [];
+        list.querySelectorAll(".colopt input").forEach(function (b) {
+          grid.querySelector('[data-cat="' + b.value + '"]').hidden = !b.checked;
+          if (b.checked) on.push(b.value);
+        });
+        grid.dataset.n = String(on.length);
+        grid.style.setProperty("--n", String(Math.max(on.length, 1)));
+        count.textContent = String(on.length);
+        none.hidden = on.length > 0;
+        document.cookie = "dash_cols=" + (on.join(".") || "none") + YEAR;
+      }
+      // One order for both: the menu's rows and the columns follow it.
+      function arrange(ids) {
+        ids.forEach(function (id) {
+          grid.appendChild(grid.querySelector('.catcol[data-cat="' + id + '"]'));
+          list.appendChild(list.querySelector('.colopt[data-cat="' + id + '"]'));
+        });
+        document.cookie = "dash_order=" + ids.join(".") + YEAR;
+        ticked();
+      }
+      function order(root, sel) {
+        return Array.prototype.map.call(root.querySelectorAll(sel), function (el) { return el.dataset.cat; });
+      }
+      list.querySelectorAll(".colopt input").forEach(function (box) { box.addEventListener("change", ticked); });
+      list.querySelectorAll(".mv").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var ids = order(list, ".colopt");
+          var id = btn.closest(".colopt").dataset.cat, i = ids.indexOf(id), j = i + Number(btn.dataset.d);
+          if (j < 0 || j >= ids.length) return;
+          ids.splice(i, 1);
+          ids.splice(j, 0, id);
+          arrange(ids);
+          btn.focus();
+        });
+      });
+      var dragging = null;
+      grid.querySelectorAll(".catcol .grip").forEach(function (grip) {
+        grip.addEventListener("dragstart", function (e) {
+          dragging = grip.closest(".catcol");
+          dragging.classList.add("moving");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", dragging.dataset.cat);
+        });
+        grip.addEventListener("dragend", function () {
+          if (dragging) dragging.classList.remove("moving");
+          dragging = null;
+          arrange(order(grid, ".catcol"));
+        });
+      });
+      grid.addEventListener("dragover", function (e) {
+        if (!dragging) return;
+        e.preventDefault();
+        var over = e.target.closest && e.target.closest(".catcol");
+        if (!over || over === dragging) return;
+        var box = over.getBoundingClientRect();
+        grid.insertBefore(dragging, e.clientX > box.left + box.width / 2 ? over.nextSibling : over);
+      });
+      grid.addEventListener("drop", function (e) { if (dragging) e.preventDefault(); });
+      // Unsorted and Channels: shown or not, remembered the same way.
+      document.querySelectorAll(".colparts input").forEach(function (box) {
         box.addEventListener("change", function () {
-          var on = [];
-          document.querySelectorAll(".colmenu input").forEach(function (b) {
-            grid.querySelector('[data-cat="' + b.value + '"]').hidden = !b.checked;
-            if (b.checked) on.push(b.value);
+          var off = [];
+          document.querySelectorAll(".colparts input").forEach(function (b) {
+            document.querySelectorAll('[data-part="' + b.dataset.part + '"]').forEach(function (el) {
+              if (el !== b) el.hidden = !b.checked;
+            });
+            if (!b.checked) off.push(b.dataset.part);
           });
-          grid.dataset.n = String(on.length);
-          grid.style.setProperty("--n", String(Math.max(on.length, 1)));
-          count.textContent = String(on.length);
-          none.hidden = on.length > 0;
-          document.cookie = "dash_cols=" + (on.join(".") || "none") + "; path=/; max-age=31536000; samesite=lax";
+          document.cookie = "dash_hide=" + (off.join(".") || "none") + YEAR;
         });
       });
       document.addEventListener("click", function (e) {
@@ -2228,9 +2334,11 @@ export function renderDashboard(
       });
     })();
     </script>
-    ${unsorted.length ? group("unknown", unsorted.slice(0, 8), "needs a category") : ""}
+    <div class="dashpart" data-part="unsorted"${hideParts.has("unsorted") ? " hidden" : ""}>${
+      unsorted.length ? group("unknown", unsorted.slice(0, 8), "needs a category") : ""
+    }</div>
 
-    <div class="group">
+    <div class="group dashpart" data-part="channels"${hideParts.has("channels") ? " hidden" : ""}>
       <h2 class="section-title">Channels</h2>
       <div class="chanlist">${chanList}</div>
     </div>`,

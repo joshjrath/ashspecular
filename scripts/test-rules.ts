@@ -552,14 +552,23 @@ const said = parseReview("Walter White v4 is up https://f.io/7bu6f54B", new Date
 t("what the message says wins over the file name", mergeFrame(said, "https://f.io/7bu6f54B", followed!).version, 4);
 
 section("Dashboard columns");
-const dashWith = (cols?: string[]) => renderDashboard({ ...shellFix, active: "dashboard" }, {
+const dashWith = (cols?: string[], order?: string[], hideParts?: string[]) => renderDashboard({ ...shellFix, active: "dashboard" }, {
   stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
-  byDay: [], grouped: new Map([["stories", [plainRec]]]), channels: {}, cols,
+  byDay: [], grouped: new Map([["stories", [plainRec]], ["unknown", [{ ...plainRec, id: 30, category: "unknown", channel: null }]]]),
+  channels: {}, cols, order, hideParts,
 });
 const visibleCols = (html: string) => [...html.matchAll(/class="catcol" data-cat="([a-z]+)"[^>]*?(hidden)?>/g)].filter((m) => !m[2]).map((m) => m[1]);
 t("default columns: Stories, Gaming, Bits side by side", visibleCols(dashWith()), ["stories", "gaming", "bits"]);
 t("the number ticked is the number of columns", /data-n="2" style="--n:2"/.test(dashWith(["stories", "reading"])), true);
-t("columns keep the studio's order", visibleCols(dashWith(["movies", "gaming", "stories"])), ["stories", "gaming", "movies"]);
+t("columns keep the studio's order until they're rearranged", visibleCols(dashWith(["movies", "gaming", "stories"])), ["stories", "gaming", "movies"]);
+t("rearranged, they go in that order", visibleCols(dashWith(["movies", "gaming", "stories"], ["movies", "stories", "reading", "gaming", "bits"])), ["movies", "stories", "gaming"]);
+t("a saved order missing a category still shows it, at the end", visibleCols(dashWith(["stories", "bits", "gaming"], ["bits", "stories"])), ["bits", "stories", "gaming"]);
+t("the Columns menu lists them in the same order", [...dashWith(undefined, ["bits", "stories"]).matchAll(/class="colopt" data-cat="([a-z]+)"/g)].map((m) => m[1]).slice(0, 2), ["bits", "stories"]);
+t("every column has a grip to drag it by", (dashWith().match(/class="grip" draggable="true"/g) ?? []).length, 5);
+t("Unsorted and Channels show until switched off", [/data-part="unsorted">/.test(dashWith()), /class="group dashpart" data-part="channels">/.test(dashWith())], [true, true]);
+t("…and hide when they are", [/data-part="unsorted" hidden/.test(dashWith(undefined, undefined, ["unsorted", "channels"])), /data-part="channels" hidden/.test(dashWith(undefined, undefined, ["unsorted", "channels"]))], [true, true]);
+t("…with their boxes unticked to match", /data-part="channels">/.test(dashWith(undefined, undefined, ["channels"]).slice(dashWith(undefined, undefined, ["channels"]).indexOf('class="colparts"'))), true);
+t("the dashboard's column script compiles", [...dashWith().matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 t("nothing ticked shows no columns, and says how to pick", [visibleCols(dashWith([])).length, /class="empty nocols">/.test(dashWith([]))], [0, true]);
 
 section("Scripts — the scriptwriter's board, as data");
