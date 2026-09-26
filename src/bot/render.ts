@@ -143,6 +143,7 @@ export function cardRows(
   messageId: string,
   record: DerivedRecord,
   saved: boolean,
+  marks: { paused?: boolean; noScript?: boolean } = {},
 ): Array<ActionRowBuilder<MessageActionRowComponentBuilder>> {
   const rows: Array<ActionRowBuilder<MessageActionRowComponentBuilder>> = [];
 
@@ -203,6 +204,17 @@ export function cardRows(
       .setCustomId(`done:${messageId}`)
       .setLabel("Clear")
       .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!saved),
+    // The board's ⏸ and no-script marks, for when it's known at intake.
+    new ButtonBuilder()
+      .setCustomId(`${marks.paused ? "resume" : "pause"}:${messageId}`)
+      .setLabel(marks.paused ? "Resume" : "Pause")
+      .setStyle(marks.paused ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(!saved),
+    new ButtonBuilder()
+      .setCustomId(`${marks.noScript ? "script" : "noscript"}:${messageId}`)
+      .setLabel(marks.noScript ? "Script in" : "No script")
+      .setStyle(marks.noScript ? ButtonStyle.Primary : ButtonStyle.Secondary)
       .setDisabled(!saved),
     new ButtonBuilder()
       .setCustomId(`bad:${messageId}`)

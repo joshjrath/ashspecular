@@ -18,7 +18,10 @@ type Msg = OmitPartialGroupDMChannel<Message<boolean>>;
 const PENDING_DIR = join(process.cwd(), "evals", "cases", "pending");
 
 /** Everything the bot has parsed this run, so the controls can find it again. */
-const seen = new Map<string, { input: ClassifyInput; record: DerivedRecord; savedId: number | null }>();
+const seen = new Map<
+  string,
+  { input: ClassifyInput; record: DerivedRecord; savedId: number | null; paused?: boolean; noScript?: boolean }
+>();
 
 export function registerIntake(): void {
   client.on(Events.MessageCreate, (message) => {
@@ -149,7 +152,7 @@ async function correct(
 
   await interaction.update({
     embeds: [recordEmbed(entry.record)],
-    components: cardRows(messageId, entry.record, entry.savedId !== null),
+    components: cardRows(messageId, entry.record, entry.savedId !== null, entry),
   });
 
   await saveCase(entry, before, "corrected by hand in Discord — the parser filed it wrong");
@@ -194,6 +197,37 @@ async function feedback(interaction: import("discord.js").ButtonInteraction): Pr
     const { setStatus } = await import("../db/records.js");
     await setStatus(entry.savedId, "done");
     await interaction.reply({ content: "Cleared.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Pause / No script: the same marks as the board's buttons. The card is
+  // redrawn so the button now offers the way back.
+  if (verdict === "pause" || verdict === "resume" || verdict === "noscript" || verdict === "script") {
+    if (!entry.savedId || !hasDatabase) {
+      await interaction.reply({
+        content: "Nothing to mark — this one was never stored.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const { setPaused, setNoScript } = await import("../db/records.js");
+    if (verdict === "pause" || verdict === "resume") {
+      entry.paused = verdict === "pause";
+      await setPaused(entry.savedId, entry.paused);
+    } else {
+      entry.noScript = verdict === "noscript";
+      await setNoScript(entry.savedId, entry.noScript);
+    }
+    await interaction.update({ components: cardRows(messageId, entry.record, true, entry) });
+    await interaction.followUp({
+      content: {
+        pause: "Paused — it's off every deadline, the late list and the calendar until you resume it.",
+        resume: "Resumed — its deadline is back.",
+        noscript: "Marked as waiting on the script — its card turns magenta on the board until the script arrives.",
+        script: "Script arrived — the no-script mark is cleared.",
+      }[verdict],
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

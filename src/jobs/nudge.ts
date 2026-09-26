@@ -29,7 +29,7 @@ export async function unNudged(): Promise<LateRow[]> {
             COALESCE(r.vo_due, r.deadline, r.script_due) AS due
      FROM records r
      LEFT JOIN nudges n ON n.record_id = r.id
-     WHERE r.status = 'open'
+     WHERE r.status = 'open' AND r.paused_at IS NULL
        AND r.batch_no IS NULL
        AND n.record_id IS NULL
        AND COALESCE(r.vo_due, r.deadline, r.script_due) < now()

@@ -30,6 +30,10 @@ import {
   feedRecords,
   listNotices,
   setPinned,
+  setPaused,
+  setNoScript,
+  listPaused,
+  pausedCount,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -69,6 +73,7 @@ import {
   renderDay,
   renderEmptyState,
   renderList,
+  renderPaused,
   renderLogin,
   renderRecurring,
   renderScripts,
@@ -86,7 +91,7 @@ const PUBLIC = new Set(["/login", "/healthz"]);
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
@@ -95,6 +100,7 @@ async function shell(active: string): Promise<Shell> {
     removedCount(),
     openBatchCount(shortsDay()),
     behindCount().catch(() => null),
+    pausedCount(),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
@@ -109,6 +115,7 @@ async function shell(active: string): Promise<Shell> {
     },
     lastIntake: at,
     removed,
+    paused,
     scripts: Boolean(config.scriptsUrl || config.scriptsUrlRaw),
   };
 }
@@ -416,6 +423,11 @@ export async function startWeb(): Promise<void> {
     return reply
       .type("text/html")
       .send(renderList(s, "Removed", "Nothing removed. Anything you take off the board lands here, to restore.", list, listSort(request, reply)));
+  });
+
+  app.get("/paused", async (_request, reply) => {
+    const [s, list] = await Promise.all([shell("paused"), listPaused()]);
+    return reply.type("text/html").send(renderPaused(s, list));
   });
 
   app.get("/revisions", async (request, reply) => {
@@ -756,6 +768,16 @@ export async function startWeb(): Promise<void> {
     const { id, action } = request.params;
     if (action === "pin" || action === "unpin") {
       await setPinned(Number(id), action === "pin");
+      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+    }
+    // Pause takes it off every deadline until it's resumed; no script marks
+    // it as waiting on the writer. Neither touches its status.
+    if (action === "pause" || action === "resume") {
+      await setPaused(Number(id), action === "pause");
+      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+    }
+    if (action === "noscript" || action === "script") {
+      await setNoScript(Number(id), action === "noscript");
       return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
     }
     const status = action === "remove" ? "removed" : action;

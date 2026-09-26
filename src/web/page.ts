@@ -628,7 +628,28 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .login button:hover { filter: brightness(1.06); }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
 
-.acts { display: flex; gap: 6px; align-items: center; flex: none; }
+.acts { display: grid; grid-template-columns: repeat(2, auto); gap: 5px 6px; align-items: center; justify-content: end; flex: none; }
+.tick svg { width: 12px; height: 12px; display: block; margin: auto; }
+.tick.pause button:hover { border-color: #8D9BF2; color: #8D9BF2; }
+.tick.resume button, .tick.resume button.on { background: transparent; border-color: #8D9BF2; color: #8D9BF2; }
+.tick.noscript button:hover { border-color: #E24FCB; color: #F7A6E9; }
+.tick.noscript button.on { background: #E24FCB; border-color: #E24FCB; color: #1E0C1B; }
+/* No script: the whole card turns magenta, so a card waiting on its script
+   reads at a glance — a colour no other state uses (pinned is yellow, late
+   red, due-soon orange, cleared green, Frame.io blue). */
+.row.noscript { background: rgba(226,79,203,.10); box-shadow: inset 3px 0 0 #E24FCB; }
+.row.noscript:hover { background: rgba(226,79,203,.15); }
+.noscript-tag { padding: 1px 8px; border-radius: 6px; background: rgba(226,79,203,.2); color: #F7B8EC; font-weight: 700; font-size: 11px; }
+.dcard.noscript { background: #2B1A28; box-shadow: inset 0 0 0 1.5px #E24FCB; }
+.chip.noscript { box-shadow: inset 3px 0 0 #E24FCB; }
+.paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
+.row.paused .title a { color: var(--ink2); }
+.row .due.paused { background: rgba(141,155,242,.12); color: #B8C1F7; }
+.row .due.paused b { color: #C3CAF8; }
+.recacts2 { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 0; }
+.pausebtn svg, .noscriptbtn svg { width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; }
+.noscriptbtn.on { background: #E24FCB !important; color: #1E0C1B !important; }
+.paused-link { color: #C3CAF8 !important; }
 .tick { display: flex; }
 .tick button {
   width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid #45454D;
@@ -1263,6 +1284,8 @@ export interface Shell {
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
+  /** How many are paused; the rail links to them when there are any. */
+  paused?: number;
   /** Kept so the box still shows what was searched for. */
   query?: string;
   /** Set when SCRIPTS_URL is, so the rail shows a Scripts tab. */
@@ -1335,6 +1358,11 @@ function sidebar(s: Shell): string {
     <h3>Categories</h3>
     <div class="cats">${cats}</div>
     <div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>
+    ${
+      s.paused
+        ? `<a class="removed-link paused-link${s.active === "paused" ? " on" : ""}" href="/paused">Paused · ${s.paused}</a>`
+        : ""
+    }
     ${
       s.removed
         ? `<a class="removed-link${s.active === "removed" ? " on" : ""}" href="/removed">Removed · ${s.removed}</a>`
@@ -1624,8 +1652,10 @@ function row(r: StoredRecord): string {
     );
   }
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
+  if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
+  if (r.pausedAt) meta.unshift(`<span class="paused-tag" title="Paused ${esc(usDate(dayOf(r.pausedAt)))}">Paused</span>`);
 
-  return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" style="--c:${c}">
+  return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(displayTitle(r))}">${
       r.batchNo && r.channel ? `<i class="chdot" style="--ch:${channelColour(r.channel)}"></i>` : ""
     }${esc(title)}</a>${pinControl(r)}</div>
@@ -1642,6 +1672,9 @@ function row(r: StoredRecord): string {
  */
 function duePill(r: StoredRecord): string {
   const at = r.voDue ?? r.deadline ?? r.scriptDue;
+  // Paused: no deadline anywhere until it's resumed.
+  if (r.pausedAt)
+    return `<span class="due paused" title="${esc(at ? `Was due ${renderIn(at, ORG_TZ, "ET")} — back when it's resumed` : "No deadline")}"><b>Paused</b>no deadline</span>`;
   if (!at) return `<span class="due none">no deadline</span>`;
   const label = r.voDue ? "VO" : r.deadline ? "Due" : "Script";
   const ms = at.getTime() - Date.now();
@@ -1697,20 +1730,36 @@ export function pinnedFirst(list: StoredRecord[]): StoredRecord[] {
 
 const PIN_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l-.75 4.5 2.5 2.5v1.25h-8.5V8.75l2.5-2.5z" fill="currentColor"/><path d="M8 10v4.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
+const PAUSE_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/><rect x="7.1" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/></svg>`;
+const PLAY_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L9.6 6z" fill="currentColor"/></svg>`;
+const NOSCRIPT_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4.2L9.5 3.8v6.7H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6.2 4v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="8.6" r=".75" fill="currentColor"/></svg>`;
+
+/**
+ * A card's buttons: ✓ clear and × remove on top; below them ⏸ pause (off
+ * every deadline until resumed) and the no-script mark (the VO is needed but
+ * the script hasn't been sent — the whole card turns magenta until it has).
+ */
 function actions(r: StoredRecord): string {
-  const button = (action: string, label: string, glyph: string, cls = "") =>
+  const button = (action: string, label: string, glyph: string, cls = "", on = false) =>
     `<form class="tick${cls ? ` ${cls}` : ""}" method="post" action="/r/${r.id}/${action}">
-      <button aria-label="${label}" title="${label}"${
-        cls === "on" ? ' class="on"' : ""
-      }>${glyph}</button>
+      <button aria-label="${label}" title="${label}"${on ? ' class="on"' : ""}>${glyph}</button>
     </form>`;
 
   if (r.status === "removed") return `<div class="acts">${button("open", "Restore", "↺", "restore")}</div>`;
 
-  return `<div class="acts">
-    ${r.status === "done" ? button("open", "Reopen", "✓", "on") : button("done", "Clear", "✓")}
-    ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}
-  </div>`;
+  const top = `${r.status === "done" ? button("open", "Reopen", "✓", "", true) : button("done", "Clear", "✓")}
+    ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}`;
+  if (r.status === "done") return `<div class="acts">${top}</div>`;
+  const pause = r.pausedAt
+    ? button("resume", "Resume — its deadline comes back", PLAY_ICON, "resume", true)
+    : button("pause", "Pause — off every deadline, late list and the calendar until resumed", PAUSE_ICON, "pause");
+  // A daily batch has no script to wait on.
+  const noScript = r.batchNo
+    ? ""
+    : r.noScriptAt
+      ? button("script", "Script arrived — clear the no-script mark", NOSCRIPT_ICON, "noscript", true)
+      : button("noscript", "No script — the VO is needed but the script hasn't been sent", NOSCRIPT_ICON, "noscript");
+  return `<div class="acts">${top}${pause}${noScript}</div>`;
 }
 
 /**
@@ -2109,6 +2158,8 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
   if (r.wordCount) facts.push(["Word count", r.wordCount.toLocaleString()]);
   if (r.assignee) facts.push(["Assigned", r.assignee]);
   if (r.version) facts.push(["Version", `v${r.version}`]);
+  if (r.pausedAt) facts.unshift(["Paused", `since ${usDate(dayOf(r.pausedAt))} · no deadline until it's resumed`]);
+  if (r.noScriptAt && r.status === "open") facts.unshift(["No script", `waiting on the script since ${usDate(dayOf(r.noScriptAt))}`]);
   facts.push(["Read by", r.parsedBy === "pattern" ? "pattern (no API call)" : r.parsedBy]);
 
   const table = facts
@@ -2170,7 +2221,19 @@ export function renderRecord(shell: Shell, r: StoredRecord): string {
         r.status === "open"
           ? `<form class="inline" method="post" action="/r/${r.id}/remove" style="margin-left:8px">
                <button class="clear secondary" title="Take it off the board without counting it as cleared">Remove</button>
-             </form>`
+             </form>
+             <div class="recacts2">
+               <form class="inline" method="post" action="/r/${r.id}/${r.pausedAt ? "resume" : "pause"}">
+                 <button class="clear secondary pausebtn" title="${r.pausedAt ? "Its deadline comes back as it was" : "Off every deadline, the late list and the calendar until you resume it"}">${r.pausedAt ? `${PLAY_ICON} Resume` : `${PAUSE_ICON} Pause`}</button>
+               </form>
+               ${
+                 r.batchNo
+                   ? ""
+                   : `<form class="inline" method="post" action="/r/${r.id}/${r.noScriptAt ? "script" : "noscript"}" style="margin-left:8px">
+                        <button class="clear secondary noscriptbtn${r.noScriptAt ? " on" : ""}" title="${r.noScriptAt ? "The script has arrived" : "The VO is needed but the script hasn't been sent"}">${NOSCRIPT_ICON} ${r.noScriptAt ? "Script arrived" : "No script"}</button>
+                      </form>`
+               }
+             </div>`
           : ""
       }
       ${
@@ -2587,7 +2650,7 @@ export function renderCalendar(
       const chips = list
         .slice(0, CHIPS_PER_CELL)
         .map(
-          (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}" draggable="true" data-id="${e.record.id}"
+          (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}${e.record.noScriptAt && e.record.status === "open" ? " noscript" : ""}" draggable="true" data-id="${e.record.id}"
             style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
             href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
             <span class="dot"></span><span class="t">${esc(titleOnDay(e.record))}</span>
@@ -3809,7 +3872,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
     bits.push(`${r.status === "done" ? r.batchTarget : r.batchDone}/${r.batchTarget}`);
   }
 
-  return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}" draggable="true" data-id="${r.id}"
+  return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
       style="--c:${colourOf(r.category)}">
     <div class="top">
       <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>
@@ -4254,5 +4317,18 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     <div class="panel ideas"><h2>What the best-performing scripts did differently</h2>${contrast}${results}</div>
     <div class="panel ideas"><h2>The formats <span class="sub">— how each one is actually built</span></h2><ul class="isugg labformats">${formats}</ul></div>
     <div class="panel ideas"><h2>What's been done <span class="sub">— ● written · + opens a blueprint</span></h2>${coverage}</div>`,
+  );
+}
+
+/** Everything paused — out of the workflow with no deadline — and the way back. */
+export function renderPaused(shell: Shell, list: StoredRecord[]): string {
+  return layout(
+    "Paused",
+    shell,
+    `${pageHeader("Paused")}
+    <p class="labsub">Paused videos have no deadline anywhere: they're off late, due today, the calendar, the
+      dashboard columns, the bell and the reminders. Resume one (▶) and its deadline comes back as it was —
+      if that date has passed, change it on its page.</p>
+    ${rows(list, "Nothing paused.")}`,
   );
 }

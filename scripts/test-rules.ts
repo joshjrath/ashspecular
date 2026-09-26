@@ -44,7 +44,8 @@ import { blueprint } from "../src/web/stories/blueprint.js";
 import { checkDraft } from "../src/web/stories/check.js";
 import { keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
 import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
-import { renderStoryLab } from "../src/web/page.js";
+import { renderStoryLab, renderPaused } from "../src/web/page.js";
+import { cardRows } from "../src/bot/render.js";
 
 let pass = 0;
 let fail = 0;
@@ -870,6 +871,36 @@ const labPage = renderStoryLab(shellFix, {
 });
 t("the Story Lab page escapes what's typed into it", labPage.includes("What If <Gojo>"), false);
 t("the Story Lab page's scripts compile", [...labPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+
+// ── pause and no script ───────────────────────────────────────────────────
+section("Pause and no script");
+const openCard = renderList(shellFix, "Queue", "", [plainRec]);
+t("an open card offers pause and no script under clear and remove",
+  ["/r/8/done", "/r/8/remove", "/r/8/pause", "/r/8/noscript"].map((a) => openCard.indexOf(a) >= 0), [true, true, true, true]);
+const pausedRec = { ...plainRec, id: 10, pausedAt: new Date("2026-09-20T12:00:00Z") } as typeof plainRec;
+const pausedCard = renderList(shellFix, "Queue", "", [pausedRec]);
+t("a paused card offers resume, not pause", [pausedCard.includes("/r/10/resume"), pausedCard.includes("/r/10/pause")], [true, false]);
+t("a paused card has no deadline", /class="due paused"[^>]*><b>Paused<\/b>no deadline/.test(pausedCard), true);
+t("a paused card says so", pausedCard.includes('class="paused-tag"'), true);
+const waitingRec = { ...plainRec, id: 11, noScriptAt: new Date() } as typeof plainRec;
+const waitingCard = renderList(shellFix, "Queue", "", [waitingRec]);
+t("no script colours the whole card", /class="row[^"]* noscript"/.test(waitingCard), true);
+t("…and the button becomes 'script arrived'", [waitingCard.includes("/r/11/script\""), waitingCard.includes("/r/11/noscript")], [true, false]);
+t("a daily batch has no script to wait on", renderList(shellFix, "Queue", "", [batchRec]).includes("/r/9/noscript"), false);
+const doneCard = renderList(shellFix, "Queue", "", [{ ...plainRec, id: 12, status: "done", noScriptAt: new Date() } as typeof plainRec]);
+t("a cleared card is only reopen and remove", [doneCard.includes("/r/12/pause"), doneCard.includes("/r/12/noscript"), doneCard.includes("/r/12/open")], [false, false, true]);
+t("…and isn't magenta once it's done", /class="row[^"]* noscript"/.test(doneCard), false);
+const pausedPage = renderPaused({ ...shellFix, active: "paused", paused: 1 }, [pausedRec]);
+t("the Paused page lists them with the way back", pausedPage.includes("/r/10/resume"), true);
+t("the rail links to Paused when anything is", pausedPage.includes('href="/paused"'), true);
+t("…and not when nothing is", renderList(shellFix, "Queue", "", []).includes('href="/paused"'), false);
+const ids = (rows: ReturnType<typeof cardRows>) => rows.flatMap((r) => r.components.map((c) => (c.toJSON() as { custom_id?: string }).custom_id ?? ""));
+const cardIds = ids(cardRows("m1", { category: "stories", channel: "Specular Studios" } as never, true));
+t("the Discord card has Pause and No script too", ["pause:m1", "noscript:m1"].every((x) => cardIds.includes(x)), true);
+t("…five buttons, Discord's most for a row", cardRows("m1", { category: "stories", channel: "Specular Studios" } as never, true).at(-1)!.components.length, 5);
+const markedIds = ids(cardRows("m1", { category: "stories", channel: "Specular Studios" } as never, true, { paused: true, noScript: true }));
+t("…and they flip to Resume and Script in", ["resume:m1", "script:m1"].every((x) => markedIds.includes(x)), true);
+t("Discord never gets more than five rows", cardRows("m1", { category: "unknown", channel: null } as never, true).length <= 5, true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

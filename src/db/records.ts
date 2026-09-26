@@ -37,6 +37,10 @@ export interface StoredRecord extends DerivedRecord {
   batchDone: number;
   /** When it was pinned to the top of the dashboard; null when it isn't. */
   pinnedAt: Date | null;
+  /** When it was paused — out of the workflow, no deadline anywhere; null when it isn't. */
+  pausedAt: Date | null;
+  /** When it was marked "no script" — the VO is waiting on a script; null when it isn't. */
+  noScriptAt: Date | null;
   createdAt: Date;
 }
 
@@ -151,6 +155,43 @@ export async function moveDue(
   await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
 }
 
+/**
+ * Pause a video, or resume it. Paused, it has no deadline anywhere — it leaves
+ * late, due, the calendar, the columns and the bell — and waits on the Paused
+ * page; resumed, its deadline comes back as it was.
+ */
+export async function setPaused(id: number, on: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE records SET paused_at = CASE WHEN $2 THEN COALESCE(paused_at, now()) END, updated_at = now() WHERE id = $1`,
+    [id, on],
+  );
+  await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+}
+
+/** Mark a video as waiting on its script (the VO is needed, the script isn't here), or clear it. */
+export async function setNoScript(id: number, on: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE records SET no_script_at = CASE WHEN $2 THEN COALESCE(no_script_at, now()) END, updated_at = now() WHERE id = $1`,
+    [id, on],
+  );
+}
+
+/** Everything paused, most recently paused first. */
+export async function listPaused(limit = 200): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE paused_at IS NOT NULL AND status = 'open' ORDER BY paused_at DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map(hydrate);
+}
+
+export async function pausedCount(): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `SELECT COUNT(*) AS n FROM records WHERE paused_at IS NOT NULL AND status = 'open'`,
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Correct where a record is filed, from the Discord card. */
 export async function updateFiling(
   id: number,
@@ -166,8 +207,10 @@ export async function updateFiling(
 export async function setStatus(id: number, status: Status): Promise<void> {
   // A batch cleared by its tick is all its uploads done; one reopened from
   // cleared starts its count again rather than sitting at 5/5 but open.
+  // Finishing a paused video un-pauses it: it's done, not waiting.
   await pool.query(
     `UPDATE records SET status = $2, done_at = CASE WHEN $2 = 'done' THEN now() END,
+       paused_at = CASE WHEN $2 = 'done' THEN NULL ELSE paused_at END,
        batch_done = CASE
          WHEN batch_no IS NULL THEN batch_done
          WHEN $2 = 'done' THEN COALESCE(batch_target, 1)
@@ -218,6 +261,8 @@ interface Row {
   batch_target: number | null;
   batch_done: number | null;
   pinned_at: Date | null;
+  paused_at: Date | null;
+  no_script_at: Date | null;
   created_at: Date;
 }
 
@@ -253,6 +298,8 @@ function hydrate(r: Row): StoredRecord {
     batchTarget: r.batch_target ?? null,
     batchDone: r.batch_done ?? 0,
     pinnedAt: r.pinned_at ?? null,
+    pausedAt: r.paused_at ?? null,
+    noScriptAt: r.no_script_at ?? null,
     createdAt: r.created_at,
   };
 }
@@ -260,7 +307,7 @@ function hydrate(r: Row): StoredRecord {
 const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
   air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, created_at FROM records`;
+  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, created_at FROM records`;
 
 /** Everything still open, newest first. */
 export async function listOpen(limit = 200): Promise<StoredRecord[]> {
@@ -346,8 +393,9 @@ const DUE = "COALESCE(vo_due, deadline, script_due)";
  * is real, but it isn't today's work: it stays on Recurring and the calendar,
  * and joins the dashboard, the lists and every count when its day begins —
  * 3 AM for the Bits/Reading day, midnight for a long-form channel's (Specular).
+ * Paused work is never live: it waits on the Paused page with no deadline.
  */
-const LIVE = `NOT (batch_no IS NOT NULL AND air_date > (CASE WHEN category IN ('bits', 'reading')
+const LIVE = `paused_at IS NULL AND NOT (batch_no IS NOT NULL AND air_date > (CASE WHEN category IN ('bits', 'reading')
   THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
   ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))`;
 
@@ -499,7 +547,7 @@ export async function openBatchCount(date: string): Promise<number> {
  */
 export async function feedRecords(from: string, to: string, batches: boolean): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status <> 'removed' ${batches ? "" : "AND batch_no IS NULL"}
+    `${SELECT} WHERE status <> 'removed' AND paused_at IS NULL ${batches ? "" : "AND batch_no IS NULL"}
        AND (air_date BETWEEN $1 AND $2 OR (${DUE} AT TIME ZONE '${ORG_TZ}')::date BETWEEN $1 AND $2)
      ORDER BY COALESCE(air_date, (${DUE})::date) ASC LIMIT 5000`,
     [from, to],
@@ -539,9 +587,9 @@ export interface Notice {
 export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
   const q = (where: string, order: string) =>
     pool.query<Row>(`${SELECT} WHERE ${where} ORDER BY ${order} LIMIT 30`).then((r) => r.rows.map(hydrate));
-  const open = "status = 'open' AND batch_no IS NULL";
+  const open = "status = 'open' AND batch_no IS NULL AND paused_at IS NULL";
   const [revisions, overdue, upcoming, airing, fresh] = await Promise.all([
-    q("kind = 'review' AND status = 'open'", "created_at DESC"),
+    q("kind = 'review' AND status = 'open' AND paused_at IS NULL", "created_at DESC"),
     q(`${open} AND ${DUE} < now()`, `${DUE} DESC`),
     q(`${open} AND ${DUE} >= now() AND ${DUE} < now() + interval '24 hours'`, `${DUE} ASC`),
     pool
@@ -633,9 +681,9 @@ export async function calendarRange(
     `SELECT ${day} AS day, id, kind, category, channel, code, title, tag, stage,
        air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
        version, links, brief, note, status, parsed_by, confidence, warnings,
-       source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, created_at
+       source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, created_at
      FROM records
-     WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed'
+     WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed' AND paused_at IS NULL
      -- Recurring batches sort last within a day: a dozen of them would
      -- otherwise bury the one video that is actually airing.
      ORDER BY 1 ASC, (batch_no IS NOT NULL) ASC, category ASC, created_at ASC

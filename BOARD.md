@@ -24,6 +24,23 @@ row turns cream, carries a black *Pinned* tag, and sits at the top of its own
 category — on the dashboard and on the category page, whatever the sort. Pin
 as many as you like; the newest pin comes first. Press the tag to unpin.
 
+**The buttons on a card** — ✓ clears it and × removes it; below them:
+
+- **⏸ Pause** takes the video out of the workflow without clearing it. It has
+  no deadline anywhere: it leaves late, due today, VO to record, the
+  dashboard columns, the calendar, the bell, the digest and the overdue
+  nudge, and goes to **Paused** at the foot of the sidebar. ▶ Resume there
+  (or on its page) brings it back with its deadline as it was. Clearing a
+  paused video un-pauses it.
+- **No script** (the page with the !) is for a VO that's needed while the
+  script hasn't been sent. The whole card turns magenta, with a *No script ·
+  waiting* tag, until you press it again (*Script arrived*). The video keeps
+  its place and its deadline. Daily batches don't have it; they have no
+  script.
+
+Both are on the Discord card too (*Pause*, *No script*), for when it's
+already known at intake, and on every record's own page.
+
 **The bell** — top right of the dashboard. Five kinds, each with its own icon
 and colour:
 
