@@ -172,6 +172,11 @@ export function setBoardScripts(list: BoardScript[]): void {
   loaded = null;
 }
 
+/** The board's scripts as last applied. */
+export function boardScripts(): BoardScript[] {
+  return board;
+}
+
 /** Whether Story Lab learns from a board script: a Stories video's, or one added on its own. */
 export const learnsFrom = (s: { category: string | null }) => s.category === null || s.category === "stories";
 

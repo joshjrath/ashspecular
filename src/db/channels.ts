@@ -35,3 +35,20 @@ export async function resumeChannel(channel: string): Promise<number> {
   if (rows.length) await pool.query("DELETE FROM nudges WHERE record_id = ANY($1::bigint[])", [rows.map((r) => r.id)]);
   return rows.length;
 }
+
+/** "Nothing assigned" days cleared by hand, from a day on, as "channel|YYYY-MM-DD". */
+export async function dismissedGaps(from: string): Promise<Set<string>> {
+  const { rows } = await pool.query<{ channel: string; day: string }>(
+    "SELECT channel, to_char(day, 'YYYY-MM-DD') AS day FROM gap_dismissals WHERE day >= $1::date",
+    [from],
+  );
+  return new Set(rows.map((r) => `${r.channel}|${r.day}`));
+}
+
+export async function dismissGaps(channel: string, days: string[]): Promise<void> {
+  if (!days.length) return;
+  await pool.query(
+    "INSERT INTO gap_dismissals (channel, day) SELECT $1, unnest($2::date[]) ON CONFLICT DO NOTHING",
+    [channel, days],
+  );
+}

@@ -99,8 +99,28 @@ places:
 - a dashed slot on that day in the calendar (Posting view; the category
   toggles and the Channels dropdown apply to it too)
 
-Putting a video on the day, or on an earlier one, clears it. A channel with
-nothing in the last month and nothing ahead counts as resting.
+Putting a video on the day, or on an earlier one, clears it. So does **×** on
+a dashboard chip (all the days it names) or on a calendar slot (that one day),
+for when the channel isn't posting then after all. A cleared day stays
+cleared and leaves the bell too. A channel with nothing in the last month and
+nothing ahead counts as resting.
+
+**Script mark.** Every video card says whether its script is somewhere:
+
+- a green **Script** chip (a green icon on calendar cards) when one is found,
+  linking to it, with where in its tooltip
+- a dashed grey one when none is
+
+The board looks in three places:
+
+- **attached**: pasted or linked in the video's own Script box
+- **Story Lab**: one of the scripts it learns from, matched by title
+- **Scripts tab**: delivered on Josh's board, matched by code or title,
+  linking to the delivered doc
+
+The video's page lists where under *Script*, and Uploads marks each video
+that has a script. Batches and revisions don't show it, and a video marked
+*No script · waiting* shows that tag instead.
 
 **Uploaded.** Every card except a revision has an upload button (↥), and each
 video's page has one too. It marks the video live on its channel and clears

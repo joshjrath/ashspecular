@@ -57,6 +57,7 @@ import jpegJs from "jpeg-js";
 import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
+import { scriptFor, setScriptIndex } from "../src/web/scriptindex.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../src/revisions/comments.js";
 import { scoreRevision, severityOf, themeOf } from "../src/revisions/score.js";
@@ -1426,6 +1427,32 @@ const pRec = renderRecurring(pShell, { date: "2026-09-26", rows: [{ channel: "Sp
 t("a paused recurring channel shows as paused on the Recurring tab, with Resume", [pRec.includes('class="batch chpaused"'), pRec.includes("Paused since 9/26/2026"), pRec.includes('action="/channels/resume"')], [true, true, true]);
 t("…and leaves the day's count and the 'not open yet' count", [pRec.includes("2/5 uploads"), pRec.includes("Open the 1 channel")], [true, false]);
 t("the sidebar's Paused link counts paused channels too", renderList(pShell, "Queue", "", []).includes("Paused · 0 · 1 channel"), true);
+
+section("Where's the script? — attached, Story Lab, or the Scripts tab");
+setScriptIndex({
+  attached: [{ recordId: 70, title: "What If Gojo Was In Invincible?" }],
+  lab: [{ title: "Could Batman Stop The Purge" }],
+  delivered: [{ id: "t1", code: "VIDEO-031", title: "Thanos In The Boys", airDate: null, deadline: null, status: "SUBMITTED", role: "", delivered: ["https://docs.google.com/document/d/abc"], deliveredAt: null, discordUrl: null, needsReview: false },
+    { id: "t2", code: "VIDEO-032", title: "Not Delivered Yet", airDate: null, deadline: null, status: "PENDING", role: "", delivered: [], deliveredAt: null, discordUrl: null, needsReview: false }],
+});
+t("a script attached on the video's page is found by the video", scriptFor({ id: 70 })?.where, ["attached"]);
+t("…Story Lab's by its title, whatever the punctuation", scriptFor({ title: "Could Batman Stop the Purge?" })?.where, ["Story Lab"]);
+t("…the Scripts tab's by its code, linking to the delivered doc", [scriptFor({ code: "video-031" })?.where, scriptFor({ code: "VIDEO-031" })?.href], [["Scripts tab"], "https://docs.google.com/document/d/abc"]);
+t("…and nothing when it isn't delivered anywhere", [scriptFor({ code: "VIDEO-032", title: "Not Delivered Yet" }), scriptFor({ title: "Something Else" })], [null, null]);
+const withS = { ...plainRec, id: 70, title: "What If Gojo Was In Invincible?", noScriptAt: null } as typeof plainRec;
+const noS = { ...plainRec, id: 71, title: "Nothing Anywhere", code: null, noScriptAt: null } as typeof plainRec;
+const sList = renderList(shellFix, "Q", "", [withS, noS]);
+t("every video card says whether its script is somewhere", [/class="scriptmark has" href="\/r\/70#script" title="Script: attached"/.test(sList), sList.includes('class="scriptmark none"')], [true, true]);
+t("…a batch or a revision has none to show", renderList(shellFix, "Q", "", [revRec, batchRec]).includes("class=\"scriptmark"), false);
+t("…calendar cards carry it as an icon", renderWeek(shellFix, "2026-09-27", "posting", [{ date: "2026-09-28", list: [withS] }]).includes('class="scriptmark has icon"'), true);
+t("…and the video's page says where", renderRecord(shellFix, withS).includes("found: attached"), true);
+setScriptIndex({ attached: [], lab: [], delivered: [] });
+
+section("Nothing assigned — clear a day by hand");
+const gapShell2 = { ...shellFix, gaps: channelGaps("Specular Anime", 4, ["2026-09-24"], "2026-09-26") };
+const gapDash2 = renderDashboard({ ...gapShell2, active: "dashboard" }, { stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never, byDay: [], grouped: new Map(), channels: {}, gaps: gapShell2.gaps });
+t("each chip has × to clear its days", /action="\/gaps\/dismiss"[\s\S]*?name="days" value="2026-09-28,2026-10-02"/.test(gapDash2), true);
+t("…each calendar slot × clears its own day", [renderWeek(gapShell2, "2026-09-27", "posting", [{ date: "2026-09-28", list: [] }]).includes('name="days" value="2026-09-28"'), renderCalendar(gapShell2, "2026-10", "posting", [], [], []).includes('name="days" value="2026-10-02"')], [true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

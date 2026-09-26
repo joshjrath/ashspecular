@@ -20,8 +20,10 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     id: "2026-09-26-channel-pause-revision-rows",
-    title: "Pause a whole channel, and tidier revision cards",
+    title: "Pause a whole channel, script marks, and tidier revision cards",
     changes: [
+      { text: "Every video card shows whether its script is somewhere — attached on its page, in Story Lab, or delivered on the Scripts tab — green with a link when it is, dashed grey when not. Uploads marks the videos that have one.", href: "/queue" },
+      { text: "Nothing assigned: × on a dashboard chip or a calendar slot clears it when the channel isn't posting that day after all.", href: "/" },
       { text: "Pause production on a whole channel: its work comes off every deadline, the calendar and the bell, a recurring channel opens no new batches and shows as paused on the Recurring tab, and Uploads still shows it, marked Paused. Resume brings it all back.", href: "/paused" },
       { text: "Revision cards: every tag is the same size, and the due pill and the four buttons sit on one line.", href: "/revisions" },
     ],

@@ -66,7 +66,8 @@ import { STORIES_EVERY_DAYS, addDays, cadenceFor, dailyFor, dayOf, daysBetween }
 import { GAP_HORIZON_DAYS, uploadGaps, type UploadGap } from "./gaps.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
-import { boardOpenings, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
+import { boardOpenings, boardScripts, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
+import { setScriptIndex } from "./scriptindex.js";
 import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabIdea, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
@@ -77,7 +78,7 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
-import { pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
+import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
 import { channelMarks, getReview, pastForChannel, revisionHistory, saveReview, scoresFor, setChannelMark, videoKey } from "../db/revisions.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../revisions/comments.js";
 import { summarize } from "../revisions/summarize.js";
@@ -139,7 +140,22 @@ function cookieList(name: string): string[] {
  * The sidebar's numbers, fetched once per request. Every page carries them, so
  * the counts can never disagree between one page and the next.
  */
+/**
+ * Where every video's script is: attached on the board, in Story Lab, or
+ * delivered on the Scripts tab. Refreshed with each page (the Scripts tab is
+ * cached a minute), so every card can say.
+ */
+async function refreshScriptIndex(): Promise<void> {
+  const report = config.scriptsUrl ? await fetchScriptReport().catch(() => null) : null;
+  setScriptIndex({
+    attached: boardScripts().map((b) => ({ recordId: b.recordId, title: b.title })),
+    lab: corpus().filter((c) => !c.board),
+    delivered: report?.rows ?? [],
+  });
+}
+
 async function shell(active: string): Promise<Shell> {
+  await refreshScriptIndex().catch((err) => console.error("[scripts] index failed:", err));
   const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps, chPaused] = await Promise.all([
     categoryCounts(),
     listReviews(200),
@@ -239,10 +255,11 @@ async function currentGaps(): Promise<UploadGap[]> {
   if (gapCache && Date.now() - gapCache.at < 60_000) return gapCache.gaps;
   const today = dateIn(ORG_TZ);
   const from = addDays(today, -45);
-  const [uploads, aired, paused] = await Promise.all([
+  const [uploads, aired, paused, dismissed] = await Promise.all([
     listUploads(new Date(`${from}T00:00:00Z`)).catch(() => []),
     channelAirDays(from).catch(() => []),
     pausedChannels().catch(() => new Map<string, Date>()),
+    dismissedGaps(today).catch(() => new Set<string>()),
   ]);
   // A paused channel isn't expected to post.
   const channels = CHANNELS.map((c) => ({ channel: c.name, every: everyFor(c.name) ?? 0 }))
@@ -254,7 +271,8 @@ async function currentGaps(): Promise<UploadGap[]> {
         ...aired.filter((a) => a.channel === c.channel).map((a) => a.day),
       ],
     }));
-  const gaps = uploadGaps(channels, today);
+  // A day cleared by hand stays cleared; the chain still counts it as the expected day.
+  const gaps = uploadGaps(channels, today).filter((g) => !dismissed.has(`${g.channel}|${g.date}`));
   gapCache = { at: Date.now(), gaps };
   return gaps;
 }
@@ -1132,6 +1150,18 @@ export async function startWeb(): Promise<void> {
       await openBatchesFor(first);
     }
     return reply.redirect(`/recurring?day=${show}`);
+  });
+
+  // Clear a "Nothing assigned" day (or several): that channel isn't posting then after all.
+  app.post<{ Body: { channel?: string; days?: string | string[] } }>("/gaps/dismiss", async (request, reply) => {
+    const channel = CHANNELS.find((c) => c.name === request.body?.channel)?.name;
+    const raw = request.body?.days;
+    const days = (Array.isArray(raw) ? raw : String(raw ?? "").split(",")).map((d) => safeDate(d.trim())).filter((d): d is string => Boolean(d));
+    if (hasDatabase && channel && days.length) {
+      await dismissGaps(channel, days);
+      gapCache = null;
+    }
+    return reply.redirect(backTo(request.headers.referer, "/"));
   });
 
   // Pause production on a whole channel, or resume it.

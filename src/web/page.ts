@@ -30,6 +30,7 @@ import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
+import { scriptFor } from "./scriptindex.js";
 import type { RevisionReview } from "../db/revisions.js";
 import { severityOf, themeLabel } from "../revisions/score.js";
 import type { ChannelHistory, HistorySort } from "../revisions/history.js";
@@ -517,13 +518,19 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .gapchip.soon { border-style: solid; background: rgba(226,87,76,.16); }
 .gapchip.soon .first { color: #FF9C94; font-weight: 700; }
 .gapchip:hover { background: var(--line); }
+.gapchip > a { display: inline-flex; align-items: center; gap: 6px; color: inherit; }
+.gapx { display: inline-flex; margin: 0 0 0 auto; }
+.gapx button { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 6px; }
+.gapx button:hover { color: #FFB1AA; background: rgba(226,87,76,.2); }
+.gapchip .gapx { margin-left: 2px; }
+.cal .gapslot > a, .gapcard > a { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; color: inherit; overflow: hidden; }
+.gapcard > a { white-space: nowrap; text-overflow: ellipsis; }
 .cal .gapslot, .gapcard { display: flex; align-items: center; gap: 6px; border: 1px dashed rgba(226,87,76,.65); border-radius: 8px;
   color: #FFB1AA; font-size: 11.5px; font-weight: 600; padding: 2px 7px; background: rgba(226,87,76,.07); }
 .cal .gapslot i, .gapcard i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); flex: none; }
 .cal .gapslot .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gapbadge { margin-left: 6px; background: #E2574C; color: #1B0806; border-radius: 999px; padding: 0 7px; font-size: 11px; font-weight: 800; }
-.gapcard { padding: 7px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-.gapcard i { display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.gapcard { padding: 7px 8px 7px 10px; border-radius: 12px; font-size: 12px; }
 .offstrip { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin: 0 0 14px;
   padding: 10px 12px 10px 16px; border-radius: 18px; background: var(--card); color: var(--ink); font-size: 13px; }
 .offstrip.today { box-shadow: inset 0 0 0 1.5px rgba(42,169,216,.55); }
@@ -964,6 +971,15 @@ header.page .checknow button { white-space: nowrap; }
 .pchan a { font-weight: 700; color: var(--ink); }
 .pchan span { color: var(--ink3); font-size: 12px; }
 .pchans .pchan form.chpause { margin: 0 0 0 auto; }
+.scriptmark { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px 0 6px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.scriptmark svg { width: 11px; height: 11px; flex: none; }
+.scriptmark.has { background: rgba(60,203,132,.16); color: #8FE3B6; }
+.scriptmark.has:hover { background: rgba(60,203,132,.28); }
+.scriptmark.none { color: var(--ink3); box-shadow: inset 0 0 0 1px #3A3A42; background: none; }
+.scriptmark.none svg { opacity: .7; }
+.scriptmark.icon { padding: 0; width: 20px; justify-content: center; }
+.ut .scriptmark, .vt .scriptmark { margin-left: 6px; vertical-align: -3px; height: 17px; width: 17px; }
+.row.revision .meta .scriptmark { height: 22px; }
 .row.uploaded { background: rgba(47,182,115,.10); box-shadow: inset 3px 0 0 #2FB673; }
 .uploaded-tag { padding: 1px 8px; border-radius: 6px; background: rgba(47,182,115,.22); color: #9BEBC2; font-weight: 700; font-size: 11px; }
 .paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
@@ -2187,6 +2203,8 @@ function row(r: StoredRecord): string {
   const title = r.batchNo && r.channel ? r.channel : displayTitle(r);
 
   const meta: string[] = [];
+  const sm = scriptMark(r);
+  if (sm) meta.push(sm);
   if (r.code) meta.push(`<span class="code">${esc(r.code)}</span>`);
   if (r.channel && !r.batchNo) {
     meta.push(
@@ -2265,6 +2283,11 @@ function offToggle(day: string, off: boolean): string {
  * Nothing assigned: each upload a channel is expected to make in the next
  * eight days with no video on that day. A chip opens the day to fill it.
  */
+/** × on a "Nothing assigned" chip or slot: the channel isn't posting then after all. */
+function gapDismiss(channel: string, days: string[], label: string): string {
+  return `<form method="post" action="/gaps/dismiss" class="gapx"><input type="hidden" name="channel" value="${esc(channel)}"><input type="hidden" name="days" value="${esc(days.join(","))}"><button aria-label="${esc(label)}" title="${esc(label)} — it won't ask again">×</button></form>`;
+}
+
 function gapStrip(gaps: UploadGap[]): string {
   if (!gaps.length) return "";
   // One chip a channel, soonest first, naming each empty day.
@@ -2272,10 +2295,10 @@ function gapStrip(gaps: UploadGap[]): string {
   for (const g of gaps) byChannel.set(g.channel, [...(byChannel.get(g.channel) ?? []), g]);
   const when = (g: UploadGap) => (g.inDays === 0 ? "today" : g.inDays === 1 ? "tomorrow" : `${weekdayOf(g.date)} ${usDate(g.date).replace(/\/\d{4}$/, "")}`);
   const items = [...byChannel]
-    .map(([channel, list]) => `<a class="gapchip${list[0]!.inDays <= 2 ? " soon" : ""}" href="/day/${list[0]!.date}" style="--ch:${channelColour(channel)}" title="Last video ${esc(usDate(list[0]!.after))} · one every ${esc(String(everyFor(channel) ?? ""))} days">
-        <i></i><b>${esc(channel.replace(/^Specular /, ""))}</b> <span class="first">${esc(when(list[0]!))}</span>${
+    .map(([channel, list]) => `<span class="gapchip${list[0]!.inDays <= 2 ? " soon" : ""}" style="--ch:${channelColour(channel)}">
+        <a href="/day/${list[0]!.date}" title="Last video ${esc(usDate(list[0]!.after))} · one every ${esc(String(everyFor(channel) ?? ""))} days"><i></i><b>${esc(channel.replace(/^Specular /, ""))}</b> <span class="first">${esc(when(list[0]!))}</span>${
           list.length > 1 ? `<span>· ${list.slice(1).map((g) => esc(when(g))).join(" · ")}</span>` : ""
-        }</a>`)
+        }</a>${gapDismiss(channel, list.map((g) => g.date), list.length > 1 ? `Clear these ${list.length} days for ${channel}` : `Clear ${channel} on ${usDate(list[0]!.date)}`)}</span>`)
     .join("");
   return `<div class="gapstrip" role="alert">
       <span class="lbl"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="2" stroke-dasharray="2.2 1.8"/><path d="M10 9v3.4"/><circle cx="10" cy="14.6" r=".5" fill="currentColor"/></svg>Nothing assigned <b class="gapn">${gaps.length}</b></span>
@@ -2416,6 +2439,29 @@ export function channelPauseButton(shell: Shell, channel: string, size: "full" |
 export function channelPausedTag(shell: Shell, channel: string): string {
   const since = shell.pausedChannels?.[channel];
   return since ? `<span class="chpausetag" title="Production paused since ${esc(usDate(since))}">${PAUSE_ICON}Paused</span>` : "";
+}
+
+/**
+ * Whether a video has its script somewhere — attached on its page, in Story
+ * Lab, or delivered on the Scripts tab. Green with a link when it has; a
+ * dashed grey mark when nothing's found. Batches and revisions have no script.
+ */
+const SCRIPT_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4.2L9.5 3.8v6.7H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M4.6 5.6h3.2M4.6 7.4h3.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>`;
+function scriptMark(r: StoredRecord, iconOnly = false): string {
+  if (r.batchNo || r.kind === "review") return "";
+  const hit = scriptFor({ id: r.id, code: r.code, title: r.title });
+  if (hit) {
+    return `<a class="scriptmark has${iconOnly ? " icon" : ""}" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}${iconOnly ? "" : "Script"}</a>`;
+  }
+  // "No script · waiting" already says it louder.
+  if (r.noScriptAt && r.status === "open") return "";
+  return `<span class="scriptmark none${iconOnly ? " icon" : ""}" title="No script found — not attached, not in Story Lab, not delivered on the Scripts tab">${SCRIPT_ICON}${iconOnly ? "" : "Script"}</span>`;
+}
+
+/** An upload's script, when there is one: a small green mark beside its title. */
+function uploadScriptMark(title: string): string {
+  const hit = scriptFor({ title });
+  return hit ? `<span class="scriptmark has icon" title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}</span>` : "";
 }
 
 /** A revision score out of 10 as a colour: red at 5 or below, green at 8 and up. */
@@ -3086,6 +3132,10 @@ export function renderRecord(
   if (r.assignee) facts.push(["Assigned", r.assignee]);
   if (r.version) facts.push(["Version", `v${r.version}`]);
   if (r.pausedAt) facts.unshift(["Paused", `since ${usDate(dayOf(r.pausedAt))} · no deadline until it's resumed`]);
+  if (!r.batchNo && r.kind !== "review") {
+    const hit = scriptFor({ id: r.id, code: r.code, title: r.title });
+    facts.push(["Script", hit ? `found: ${hit.where.join(" · ")}` : "none found — not attached, not in Story Lab, not delivered on the Scripts tab"]);
+  }
   if (r.uploadedAt) facts.unshift(["Uploaded", `marked ${usDate(dayOf(r.uploadedAt))} · live on the channel`]);
   if (r.noScriptAt && r.status === "open") facts.unshift(["No script", `waiting on the script since ${usDate(dayOf(r.noScriptAt))}`]);
   facts.push(["Read by", r.parsedBy === "pattern" ? "pattern (no API call)" : r.parsedBy]);
@@ -3530,7 +3580,7 @@ function dayColumn(
 ): string {
   // Nothing assigned: a dashed slot for each channel expected to post this day.
   const holes = mode === "posting"
-    ? gaps.filter((g) => g.date === d).map((g) => `<a class="gapcard" href="/channel/${encodeURIComponent(g.channel)}" style="--ch:${channelColour(g.channel)}" title="Expected: its last video is ${esc(usDate(g.after))}"><i></i>Nothing assigned · ${esc(g.channel.replace(/^Specular /, ""))}</a>`).join("")
+    ? gaps.filter((g) => g.date === d).map((g) => `<div class="gapcard" style="--ch:${channelColour(g.channel)}"><a href="/channel/${encodeURIComponent(g.channel)}" title="Expected: its last video is ${esc(usDate(g.after))}"><i></i>Nothing assigned · ${esc(g.channel.replace(/^Specular /, ""))}</a>${gapDismiss(g.channel, [g.date], `Clear ${g.channel} on ${usDate(g.date)}`)}</div>`).join("")
     : "";
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(
     new Date(`${d}T12:00:00Z`),
@@ -3792,7 +3842,7 @@ export function renderCalendar(
         ${offToggle(day, off)}
         ${
           mode === "posting"
-            ? visibleGaps(shell.gaps, hide, chide).filter((g) => g.date === day).map((g) => `<a class="gapslot" href="/day/${day}${q}" style="--ch:${channelColour(g.channel)}" title="Nothing assigned — ${esc(g.channel)} is expected to post"><i></i><span class="t">${esc(g.channel.replace(/^Specular /, ""))} · nothing</span></a>`).join("")
+            ? visibleGaps(shell.gaps, hide, chide).filter((g) => g.date === day).map((g) => `<div class="gapslot" style="--ch:${channelColour(g.channel)}"><a href="/day/${day}${q}" title="Nothing assigned — ${esc(g.channel)} is expected to post"><i></i><span class="t">${esc(g.channel.replace(/^Specular /, ""))} · nothing</span></a>${gapDismiss(g.channel, [day], `Clear ${g.channel} on ${usDate(day)}`)}</div>`).join("")
             : ""
         }
         ${chips}${more}
@@ -4521,7 +4571,7 @@ function outlierPanel(
 
   const line = ({ u, j }: (typeof scored)[number]) => `<li><a href="${esc(u.url)}" target="_blank" rel="noreferrer">
       <span class="vm ${j.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(j.multiple))}</span>
-      <span class="vt">${esc(u.title)}</span>
+      <span class="vt">${esc(u.title)}${uploadScriptMark(u.title)}</span>
       <span class="vc">${esc(usDate(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${esc(compactViews(u.views))} views` : ""}</span></a></li>`;
   const byMultiple = [...scored].sort((a, b) => b.j.multiple - a.j.multiple);
 
@@ -4934,7 +4984,7 @@ export function renderUploads(
     .slice(0, 12)
     .map((u) => `<a class="ulatest" href="${esc(u.url)}" target="_blank" rel="noreferrer">
       <span class="cdot" style="--ch:${channelColour(u.channel)}"></span>
-      <span class="ut">${esc(u.title)}</span>
+      <span class="ut">${esc(u.title)}${uploadScriptMark(u.title)}</span>
       <span class="uc">${esc(u.channel)}</span>
       <span class="ud">${esc(usDate(dayOf(u.publishedAt)))} · ${esc(relativeDay(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${u.views.toLocaleString()} views` : ""}${verdictBadge(perf.get(u.videoId))}</span>
     </a>`)
@@ -5275,6 +5325,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
       <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>
       ${r.code ? `<span class="code">${esc(r.code)}</span>` : ""}
       ${bits.length ? `<span class="bits">${bits.join(" · ")}</span>` : ""}
+      ${scriptMark(r, true)}
       ${pinControl(r)}
     </div>
     <a class="t" href="/r/${r.id}">${
