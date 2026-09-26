@@ -47,7 +47,7 @@ as many as you like; the newest pin comes first. Press the tag to unpin.
 Both are on the Discord card too (*Pause*, *No script*), for when it's
 already known at intake, and on every record's own page.
 
-**The bell** — top right of the dashboard. Seven kinds, each with its own icon
+**The bell** — top right of the dashboard. Eight kinds, each with its own icon
 and colour:
 
 | | Kind | When it shows |
@@ -58,6 +58,7 @@ and colour:
 | ▭ green | **Airing** | a video airs today or tomorrow |
 | + purple | **New** | an assignment was filed in the last 3 days |
 | ☾ cyan | **Day off** | a day off brought a deadline forward (until that day passes) |
+| ▭ red | **Nothing assigned** | a channel's expected upload within 8 days has no video on it |
 | ☆ yellow | **What's new** | a change to the board itself went live (for 30 days) |
 
 A filter row picks one kind at a time (remembered in your browser), with a
@@ -65,6 +66,28 @@ count on each. The red badge counts what arrived since you last opened it.
 Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
+
+**Nothing assigned.** Every channel with a posting target (each Stories
+channel, one every four days) is expected to post again that many days after
+its last video, uploaded or scheduled. A channel already behind is expected
+today. When an expected day is within the next **8 days** (the VO's six-day
+buffer plus two to assign it) and no video is on it, you'll see it in four
+places:
+
+- a red **Nothing assigned** strip on the dashboard, one chip per channel
+  naming each empty day
+- a red count beside **Calendar** in the sidebar
+- a red ▭ kind in the bell
+- a dashed slot on that day in the calendar (Posting view; the category
+  toggles and the Channels dropdown apply to it too)
+
+Putting a video on the day, or on an earlier one, clears it. A channel with
+nothing in the last month and nothing ahead counts as resting.
+
+**Uploaded.** Every card except a revision has an upload button (↥), and each
+video's page has one too. It marks the video live on its channel and clears
+it. The card turns solid green on every calendar view, as does its chip on
+the month. Press it again to take the mark off.
 
 **What's new** (in the sidebar, and each yellow ☆ in the bell) lists every
 change to the board, newest first. Each change has a one-line title that

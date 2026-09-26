@@ -33,6 +33,7 @@ import {
   setPinned,
   setPaused,
   setNoScript,
+  setUploaded,
   listPaused,
   pausedCount,
   channelSchedule,
@@ -43,6 +44,8 @@ import {
   listOffShifted,
   type MoveSnapshot,
   type Notice,
+  type GapNotice,
+  channelAirDays,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -59,7 +62,8 @@ import {
 import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
 import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
-import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
+import { STORIES_EVERY_DAYS, addDays, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
+import { GAP_HORIZON_DAYS, uploadGaps, type UploadGap } from "./gaps.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
@@ -130,7 +134,7 @@ function cookieList(name: string): string[] {
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
@@ -141,10 +145,12 @@ async function shell(active: string): Promise<Shell> {
     behindCount().catch(() => null),
     pausedCount(),
     listDaysOff(),
+    currentGaps().catch(() => []),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
     active,
+    gaps,
     counts,
     nav: {
       reviews: reviews.length,
@@ -213,10 +219,55 @@ function safeMode(value: unknown): CalendarMode {
 /** When each release went live; set at start. */
 let releaseTimes = new Map<string, Date>();
 
+/**
+ * Upload slots with nothing on them in the next eight days, for every
+ * channel with a posting target (Stories, every four days). Worked out at
+ * most once a minute.
+ */
+let gapCache: { at: number; gaps: UploadGap[] } | null = null;
+async function currentGaps(): Promise<UploadGap[]> {
+  if (!hasDatabase) return [];
+  if (gapCache && Date.now() - gapCache.at < 60_000) return gapCache.gaps;
+  const today = dateIn(ORG_TZ);
+  const from = addDays(today, -45);
+  const [uploads, aired] = await Promise.all([
+    listUploads(new Date(`${from}T00:00:00Z`)).catch(() => []),
+    channelAirDays(from).catch(() => []),
+  ]);
+  const channels = CHANNELS.map((c) => ({ channel: c.name, every: everyFor(c.name) ?? 0 }))
+    .filter((c) => c.every > 1)
+    .map((c) => ({
+      ...c,
+      days: [
+        ...uploads.filter((u) => u.channel === c.channel).map((u) => dayOf(u.publishedAt)),
+        ...aired.filter((a) => a.channel === c.channel).map((a) => a.day),
+      ],
+    }));
+  const gaps = uploadGaps(channels, today);
+  gapCache = { at: Date.now(), gaps };
+  return gaps;
+}
+
+/** A gap is news from the day it comes within eight days (midnight ET). */
+export function gapNotices(gaps: UploadGap[]): GapNotice[] {
+  return gaps.map((gap) => ({
+    kind: "gap" as const,
+    at: new Date(Math.min(Date.now(), zonedMidnight(addDays(gap.date, -GAP_HORIZON_DAYS)).getTime())),
+    gap,
+  }));
+}
+
+/** Midnight at the start of a day, New York time. */
+function zonedMidnight(day: string): Date {
+  const noon = new Date(`${day}T12:00:00Z`);
+  const offset = Number(new Intl.DateTimeFormat("en-US", { timeZone: ORG_TZ, hour: "numeric", hourCycle: "h23" }).format(noon)) - 12;
+  return new Date(Date.parse(`${day}T00:00:00Z`) - offset * 3_600_000);
+}
+
 /** Everything for the bell, newest first. */
 async function allNotices(): Promise<Notice[]> {
-  const work = await listNotices(ORG_TZ);
-  return [...work, ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
+  const [work, gaps] = await Promise.all([listNotices(ORG_TZ), currentGaps()]);
+  return [...work, ...gapNotices(gaps), ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
 }
 
 export async function startWeb(): Promise<void> {
@@ -302,7 +353,7 @@ export async function startWeb(): Promise<void> {
       .type("text/html")
       .send(
         renderDashboard(s, {
-          stats: counters, byDay, grouped: columns, channels, notices, seen: noticesSeen(request), revisions,
+          stats: counters, byDay, grouped: columns, channels, notices, seen: noticesSeen(request), revisions, gaps: s.gaps,
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
           order: cookieList("dash_order"),
           hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels" || x === "revisions"),
@@ -339,6 +390,8 @@ export async function startWeb(): Promise<void> {
       items: notices.map((n) =>
         n.kind === "update"
           ? { id: n.release.id, kind: n.kind, at: n.at.getTime(), title: n.release.title, channel: null, href: `/whats-new#${n.release.id}` }
+          : n.kind === "gap"
+          ? { id: `${n.gap.channel}:${n.gap.date}`, kind: n.kind, at: n.at.getTime(), title: `Nothing assigned for ${usDate(n.gap.date)}`, channel: n.gap.channel, href: `/day/${n.gap.date}` }
           : { id: n.record.id, kind: n.kind, at: n.at.getTime(), title: noticeTitle(n.record), channel: n.record.channel, href: `/r/${n.record.id}` },
       ),
     });
@@ -1107,6 +1160,10 @@ export async function startWeb(): Promise<void> {
     // it as waiting on the writer. Neither touches its status.
     if (action === "pause" || action === "resume") {
       await setPaused(Number(id), action === "pause");
+      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+    }
+    if (action === "uploaded" || action === "notuploaded") {
+      await setUploaded(Number(id), action === "uploaded");
       return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
     }
     if (action === "noscript" || action === "script") {

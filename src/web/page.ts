@@ -29,6 +29,7 @@ import { corpus, learnsFrom, splitScript, type Norms } from "./stories/corpus.js
 import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
+import type { UploadGap } from "./gaps.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
@@ -497,6 +498,28 @@ button.clear.secondary:hover { background: var(--line); filter: none; }
 .off-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 6px;
   background: rgba(42,169,216,.16); color: #A8E0F5; font-weight: 700; font-size: 11px; white-space: nowrap; }
 .off-tag svg { width: 11px; height: 11px; }
+.gapstrip { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px;
+  border-radius: 16px; background: rgba(226,87,76,.10); box-shadow: inset 0 0 0 1.5px rgba(226,87,76,.45); }
+.gapstrip .lbl { display: inline-flex; align-items: center; gap: 7px; font-family: var(--display); font-weight: 700; color: #FFB1AA; }
+.gapstrip .lbl svg { width: 17px; height: 17px; }
+.gapstrip .gapn { background: #E2574C; color: #1B0806; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+.gapstrip .gapsub { color: var(--ink3); font-size: 12px; }
+.gapchips { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.gapchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: var(--sunk);
+  border: 1px dashed rgba(226,87,76,.6); font-size: 12.5px; color: var(--ink2); }
+.gapchip i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); }
+.gapchip b { color: var(--ink); }
+.gapchip span { color: var(--ink3); }
+.gapchip.soon { border-style: solid; background: rgba(226,87,76,.16); }
+.gapchip.soon .first { color: #FF9C94; font-weight: 700; }
+.gapchip:hover { background: var(--line); }
+.cal .gapslot, .gapcard { display: flex; align-items: center; gap: 6px; border: 1px dashed rgba(226,87,76,.65); border-radius: 8px;
+  color: #FFB1AA; font-size: 11.5px; font-weight: 600; padding: 2px 7px; background: rgba(226,87,76,.07); }
+.cal .gapslot i, .gapcard i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); flex: none; }
+.cal .gapslot .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gapbadge { margin-left: 6px; background: #E2574C; color: #1B0806; border-radius: 999px; padding: 0 7px; font-size: 11px; font-weight: 800; }
+.gapcard { padding: 7px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.gapcard i { display: inline-block; margin-right: 6px; vertical-align: 1px; }
 .offstrip { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin: 0 0 14px;
   padding: 10px 12px 10px 16px; border-radius: 18px; background: var(--card); color: var(--ink); font-size: 13px; }
 .offstrip.today { box-shadow: inset 0 0 0 1.5px rgba(42,169,216,.55); }
@@ -826,6 +849,17 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .noscript-tag { padding: 1px 8px; border-radius: 6px; background: rgba(226,79,203,.2); color: #F7B8EC; font-weight: 700; font-size: 11px; }
 .dcard.noscript { background: #2B1A28; box-shadow: inset 0 0 0 1.5px #E24FCB; }
 .chip.noscript { box-shadow: inset 3px 0 0 #E24FCB; }
+/* Uploaded: live on the channel — solid green, the one state that's finished for good. */
+.tick.uploaded button:hover { border-color: #3CCB84; color: #7BE3AE; }
+.tick.uploaded button.on { background: #2FB673; border-color: #2FB673; color: #06170E; }
+.cal .chip.uploaded { background: #1E7A4C; box-shadow: inset 3px 0 0 #3CCB84; }
+.cal .chip.uploaded .t, .cal .cell.today .chip.uploaded .t { color: #E6FFF1; text-decoration: none; }
+.dcard.uploaded { background: #133524; box-shadow: inset 0 0 0 1.5px #2FB673; }
+.dcard.uploaded .t, .dcard.uploaded .at { color: #CFF5E0; text-decoration: none; }
+.uploadbtn svg { width: 12px; height: 12px; vertical-align: -1px; }
+.uploadbtn.on { background: #2FB673 !important; color: #06170E !important; }
+.row.uploaded { background: rgba(47,182,115,.10); box-shadow: inset 3px 0 0 #2FB673; }
+.uploaded-tag { padding: 1px 8px; border-radius: 6px; background: rgba(47,182,115,.22); color: #9BEBC2; font-weight: 700; font-size: 11px; }
 .paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
 .row.paused .title a { color: var(--ink2); }
 .row .due.paused { background: rgba(141,155,242,.12); color: #B8C1F7; }
@@ -1566,6 +1600,8 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 export interface Shell {
   /** Which sidebar entry is lit. */
   active: string;
+  /** Upload slots in the next eight days with nothing assigned: a badge on Calendar, dashed slots on it. */
+  gaps?: UploadGap[];
   counts: Record<string, number>;
   nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null };
   lastIntake: Date | null;
@@ -1670,7 +1706,13 @@ function sidebar(s: Shell): string {
     }
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
-      ${item("/calendar", "Calendar", s.nav.calendar, "calendar")}
+      ${
+        off.has("calendar")
+          ? ""
+          : `<a class="${s.active === "calendar" ? "on" : ""}" href="/calendar">Calendar${
+              s.gaps?.length ? `<span class="gapbadge" title="${s.gaps.length} expected upload${s.gaps.length === 1 ? "" : "s"} in the next 8 days with nothing assigned">${s.gaps.length}</span>` : ""
+            }<span class="n">${s.nav.calendar}</span></a>`
+      }
       ${item("/revisions", "Revisions", s.nav.reviews, "reviews")}
       ${item("/queue", "Queue", s.nav.queue, "queue")}
       ${item("/recurring", "Recurring", s.nav.recurring, "recurring")}
@@ -1763,6 +1805,10 @@ const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; ico
     icon: `<path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/>`,
   },
   {
+    kind: "gap", label: "Nothing assigned", colour: "#E2574C",
+    icon: `<rect x="3.5" y="4.5" width="13" height="12" rx="2" stroke-dasharray="2.2 1.8"/><path d="M3.5 8.5h13M7 3v3M13 3v3"/><path d="M10 10.8v2.4"/><circle cx="10" cy="15" r=".5" fill="currentColor"/>`,
+  },
+  {
     kind: "update", label: "What's new", colour: "#E8C547",
     icon: `<path d="m10 3.2 2 4.3 4.6.5-3.4 3.1 1 4.6L10 13.4l-4.2 2.3 1-4.6L3.4 8l4.6-.5z"/>`,
   },
@@ -1785,6 +1831,7 @@ function bell(notices: Notice[], seen: number): string {
   const unread = notices.filter((n) => n.at.getTime() > seen).length;
   const what = (n: Notice): string => {
     if (n.kind === "update") return `What's new · ${n.release.changes.length} change${n.release.changes.length === 1 ? "" : "s"}`;
+    if (n.kind === "gap") return `Expected ${esc(relativeDay(n.gap.date))} · ${esc(n.gap.channel)}`;
     const r = n.record;
     switch (n.kind) {
       case "revision": return `Revision ready${r.version ? ` · v${r.version}` : ""}`;
@@ -1804,6 +1851,16 @@ function bell(notices: Notice[], seen: number): string {
   const items = notices
     .map((n) => {
       const isNew = n.at.getTime() > seen;
+      if (n.kind === "gap") {
+        return `<a class="notice gap${isNew ? " new-item" : ""}" data-kind="gap" href="/day/${n.gap.date}">
+        ${noticeIcon("gap")}
+        <span class="body">
+          <span class="nt">Nothing assigned for ${esc(usDate(n.gap.date))}</span>
+          <span class="ns">${what(n)}</span>
+        </span>
+        <span class="ago">${esc(n.gap.inDays === 0 ? "today" : `${n.gap.inDays}d`)}</span>
+      </a>`;
+      }
       if (n.kind === "update") {
         return `<a class="notice update${isNew ? " new-item" : ""}" data-kind="update" href="/whats-new#${esc(n.release.id)}">
         ${noticeIcon("update")}
@@ -1929,7 +1986,7 @@ function bell(notices: Notice[], seen: number): string {
           try { since = Number(localStorage.getItem("alertedTo")) || Date.now(); } catch (x) {}
           var now = Date.now(), fresh = data.items.filter(function (n) { return n.at > since && n.at <= now; });
           fresh.slice(0, 5).forEach(function (n) {
-            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment", dayoff: "Day off — due earlier", update: "What's new on the board" };
+            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment", dayoff: "Day off — due earlier", gap: "Nothing assigned", update: "What's new on the board" };
             var note = new Notification(heads[n.kind] || "Specular", {
               body: n.title + (n.channel ? " — " + n.channel : ""), tag: n.kind + ":" + n.id,
             });
@@ -1999,13 +2056,14 @@ function row(r: StoredRecord): string {
     );
   }
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
+  if (r.uploadedAt) meta.unshift(`<span class="uploaded-tag" title="Marked ${esc(usDate(dayOf(r.uploadedAt)))}">Uploaded</span>`);
   if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
   if (r.pausedAt) meta.unshift(`<span class="paused-tag" title="Paused ${esc(usDate(dayOf(r.pausedAt)))}">Paused</span>`);
   if (r.offFrom && r.status === "open" && !r.pausedAt) meta.unshift(offTag(r));
   // A revision says so first: it's a cut to review, not a video to voice.
   if (r.kind === "review") meta.unshift(`<span class="rev-tag">${REV_ICON}Revision${r.version ? ` v${r.version}` : ""}</span>`);
 
-  return `<div class="row${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
+  return `<div class="row${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.uploadedAt ? " uploaded" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(displayTitle(r))}">${
       r.batchNo && r.channel ? `<i class="chdot" style="--ch:${channelColour(r.channel)}"></i>` : ""
     }${esc(title)}</a>${pinControl(r)}</div>
@@ -2051,6 +2109,29 @@ function offToggle(day: string, off: boolean): string {
  * The dashboard's days off: each one coming up, what it moved and to when,
  * and a date box to add another.
  */
+/**
+ * Nothing assigned: each upload a channel is expected to make in the next
+ * eight days with no video on that day. A chip opens the day to fill it.
+ */
+function gapStrip(gaps: UploadGap[]): string {
+  if (!gaps.length) return "";
+  // One chip a channel, soonest first, naming each empty day.
+  const byChannel = new Map<string, UploadGap[]>();
+  for (const g of gaps) byChannel.set(g.channel, [...(byChannel.get(g.channel) ?? []), g]);
+  const when = (g: UploadGap) => (g.inDays === 0 ? "today" : g.inDays === 1 ? "tomorrow" : `${weekdayOf(g.date)} ${usDate(g.date).replace(/\/\d{4}$/, "")}`);
+  const items = [...byChannel]
+    .map(([channel, list]) => `<a class="gapchip${list[0]!.inDays <= 2 ? " soon" : ""}" href="/day/${list[0]!.date}" style="--ch:${channelColour(channel)}" title="Last video ${esc(usDate(list[0]!.after))} · one every ${esc(String(everyFor(channel) ?? ""))} days">
+        <i></i><b>${esc(channel.replace(/^Specular /, ""))}</b> <span class="first">${esc(when(list[0]!))}</span>${
+          list.length > 1 ? `<span>· ${list.slice(1).map((g) => esc(when(g))).join(" · ")}</span>` : ""
+        }</a>`)
+    .join("");
+  return `<div class="gapstrip" role="alert">
+      <span class="lbl"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="2" stroke-dasharray="2.2 1.8"/><path d="M10 9v3.4"/><circle cx="10" cy="14.6" r=".5" fill="currentColor"/></svg>Nothing assigned <b class="gapn">${gaps.length}</b></span>
+      <span class="gapsub">expected uploads in the next 8 days with no video on the day · ${byChannel.size} channel${byChannel.size === 1 ? "" : "s"}</span>
+      <div class="gapchips">${items}</div>
+    </div>`;
+}
+
 function daysOffStrip(days: string[], shifted: StoredRecord[]): string {
   const today = dateIn(ORG_TZ);
   const ahead = days.filter((d) => d >= today).slice(0, 8);
@@ -2158,6 +2239,7 @@ export function pinnedFirst(list: StoredRecord[]): StoredRecord[] {
 const PIN_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l-.75 4.5 2.5 2.5v1.25h-8.5V8.75l2.5-2.5z" fill="currentColor"/><path d="M8 10v4.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
 const PAUSE_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/><rect x="7.1" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/></svg>`;
+const UPLOAD_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 8.2V2.3M3.4 4.7 6 2.1l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.3 8.6v1.3h7.4V8.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const PLAY_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L9.6 6z" fill="currentColor"/></svg>`;
 const NOSCRIPT_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4.2L9.5 3.8v6.7H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6.2 4v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="8.6" r=".75" fill="currentColor"/></svg>`;
 
@@ -2177,7 +2259,13 @@ function actions(r: StoredRecord): string {
   const revision = r.kind === "review";
   const top = `${r.status === "done" ? button("open", "Reopen", "✓", "", true) : button("done", revision ? "Reviewed — clear it" : "Clear", "✓")}
     ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}`;
-  if (r.status === "done") return `<div class="acts">${top}</div>`;
+  // Uploaded: live on the channel. Green on the calendar; a revision has nothing to upload.
+  const upload = revision
+    ? ""
+    : r.uploadedAt
+      ? button("notuploaded", "Uploaded — take the mark off", UPLOAD_ICON, "uploaded", true)
+      : button("uploaded", "Uploaded — it's live on the channel", UPLOAD_ICON, "uploaded");
+  if (r.status === "done") return `<div class="acts">${top}${upload}</div>`;
   const pause = r.pausedAt
     ? button("resume", "Resume — its deadline comes back", PLAY_ICON, "resume", true)
     : button("pause", "Pause — off every deadline, late list and the calendar until resumed", PAUSE_ICON, "pause");
@@ -2187,7 +2275,7 @@ function actions(r: StoredRecord): string {
     : r.noScriptAt
       ? button("script", "Script arrived — clear the no-script mark", NOSCRIPT_ICON, "noscript", true)
       : button("noscript", "No script — the VO is needed but the script hasn't been sent", NOSCRIPT_ICON, "noscript");
-  return `<div class="acts">${top}${pause}${noScript}</div>`;
+  return `<div class="acts">${top}${pause}${noScript}${upload}</div>`;
 }
 
 /**
@@ -2439,6 +2527,8 @@ export function renderDashboard(
     shifted?: StoredRecord[];
     /** Open revisions, soonest review first — their own section, never in the columns. */
     revisions?: StoredRecord[];
+    /** Upload slots in the next eight days with nothing assigned. */
+    gaps?: UploadGap[];
   },
 ): string {
   const tiles = [
@@ -2521,6 +2611,7 @@ export function renderDashboard(
     shell,
     `${pageHeader("Dashboard", bell(data.notices ?? [], data.seen ?? 0))}
     <div class="stats">${tiles}</div>
+    ${gapStrip(data.gaps ?? [])}
     ${daysOffStrip(shell.daysOff ?? [], data.shifted ?? [])}
 
     <div class="split">
@@ -2759,6 +2850,7 @@ export function renderRecord(
   if (r.assignee) facts.push(["Assigned", r.assignee]);
   if (r.version) facts.push(["Version", `v${r.version}`]);
   if (r.pausedAt) facts.unshift(["Paused", `since ${usDate(dayOf(r.pausedAt))} · no deadline until it's resumed`]);
+  if (r.uploadedAt) facts.unshift(["Uploaded", `marked ${usDate(dayOf(r.uploadedAt))} · live on the channel`]);
   if (r.noScriptAt && r.status === "open") facts.unshift(["No script", `waiting on the script since ${usDate(dayOf(r.noScriptAt))}`]);
   facts.push(["Read by", r.parsedBy === "pattern" ? "pattern (no API call)" : r.parsedBy]);
 
@@ -2836,6 +2928,13 @@ export function renderRecord(
           ? ""
           : `<form class="inline" method="post" action="/r/${r.id}/${r.pinnedAt ? "unpin" : "pin"}" style="margin-right:8px">
                <button class="clear secondary">${r.pinnedAt ? "Unpin" : "Pin to top of category"}</button>
+             </form>`
+      }
+      ${
+        r.kind === "review" || r.status === "removed"
+          ? ""
+          : `<form class="inline" method="post" action="/r/${r.id}/${r.uploadedAt ? "notuploaded" : "uploaded"}" style="margin-right:8px">
+               <button class="clear secondary uploadbtn${r.uploadedAt ? " on" : ""}" title="${r.uploadedAt ? "Take the uploaded mark off" : "It's live on the channel — clears it and turns it green on the calendar"}">${UPLOAD_ICON} ${r.uploadedAt ? "Uploaded ✓" : "Uploaded"}</button>
              </form>`
       }
       <form class="inline" method="post" action="/r/${r.id}/${r.status === "open" ? "done" : "open"}">
@@ -3176,6 +3275,14 @@ export function weekStart(date: string): string {
 }
 
 /** One day as a column of cards: the day view's strip and the week's grid. */
+/** The gaps the calendar's category toggles and channel dropdown leave showing. */
+function visibleGaps(gaps: UploadGap[] | undefined, hide: string[], chide: string[]): UploadGap[] {
+  return (gaps ?? []).filter((g) => {
+    const ch = CHANNELS.find((c) => c.name === g.channel);
+    return !ch || (!hide.includes(ch.category) && !chide.includes(ch.id));
+  });
+}
+
 function dayColumn(
   d: string,
   list: StoredRecord[],
@@ -3183,7 +3290,12 @@ function dayColumn(
   q: string,
   cls: string,
   off = false,
+  gaps: UploadGap[] = [],
 ): string {
+  // Nothing assigned: a dashed slot for each channel expected to post this day.
+  const holes = mode === "posting"
+    ? gaps.filter((g) => g.date === d).map((g) => `<a class="gapcard" href="/channel/${encodeURIComponent(g.channel)}" style="--ch:${channelColour(g.channel)}" title="Expected: its last video is ${esc(usDate(g.after))}"><i></i>Nothing assigned · ${esc(g.channel.replace(/^Specular /, ""))}</a>`).join("")
+    : "";
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(
     new Date(`${d}T12:00:00Z`),
   );
@@ -3197,8 +3309,8 @@ function dayColumn(
       ${offToggle(d, off)}
       <span class="cnt">${list.length}</span>
     </header>
-    <div class="daybody">${
-      list.map((r) => dayCard(r, mode)).join("") ||
+    <div class="daybody">${holes}${
+      list.length || holes ? list.map((r) => dayCard(r, mode)).join("") :
       `<div class="dayempty">${
         off && mode === "deadlines" ? "Day off — nothing can be due." : `Nothing ${mode === "posting" ? "airing" : "due"}.`
       }</div>`
@@ -3423,7 +3535,7 @@ export function renderCalendar(
       const chips = list
         .slice(0, CHIPS_PER_CELL)
         .map(
-          (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}${e.record.noScriptAt && e.record.status === "open" ? " noscript" : ""}" draggable="true" data-id="${e.record.id}"
+          (e) => `<a class="chip${e.record.status === "done" ? " done" : ""}${e.record.uploadedAt ? " uploaded" : ""}${e.record.noScriptAt && e.record.status === "open" ? " noscript" : ""}" draggable="true" data-id="${e.record.id}"
             style="--c:${colourOf(e.record.category)};--ch:${channelColour(e.record.channel)}"
             href="/r/${e.record.id}" title="${esc(displayTitle(e.record))} — drag to move">
             <span class="dot"></span><span class="t">${esc(titleOnDay(e.record))}</span>
@@ -3442,6 +3554,11 @@ export function renderCalendar(
           isToday ? `<span class="tag">today</span>` : ""
         }</a>
         ${offToggle(day, off)}
+        ${
+          mode === "posting"
+            ? visibleGaps(shell.gaps, hide, chide).filter((g) => g.date === day).map((g) => `<a class="gapslot" href="/day/${day}${q}" style="--ch:${channelColour(g.channel)}" title="Nothing assigned — ${esc(g.channel)} is expected to post"><i></i><span class="t">${esc(g.channel.replace(/^Specular /, ""))} · nothing</span></a>`).join("")
+            : ""
+        }
         ${chips}${more}
       </div>`;
     })
@@ -4734,7 +4851,7 @@ export function renderDay(
 
   const columns = days
     .map(({ date: d, list }) =>
-      dayColumn(d, list, mode, q, `${d === today ? " today" : ""}${d === date ? " focus" : ""}`, off.has(d)),
+      dayColumn(d, list, mode, q, `${d === today ? " today" : ""}${d === date ? " focus" : ""}`, off.has(d), visibleGaps(shell.gaps, hide, chide)),
     )
     .join("");
 
@@ -4884,7 +5001,7 @@ export function renderWeek(
       } — the channel's later videos follow; Shift-drop moves just the one.</span>
     </div>
     <div class="weekgrid${span === 4 ? " span4" : ""}">${days
-      .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : "", off.has(d)))
+      .map(({ date: d, list }) => dayColumn(d, list, mode, q, d === today ? " today" : "", off.has(d), visibleGaps(shell.gaps, hide, chide)))
       .join("")}</div>
     ${columnDragScript(mode)}`,
   );
@@ -4906,7 +5023,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
 
   if (r.offFrom && r.status === "open" && mode === "deadlines") bits.push(offTag(r));
 
-  return `<article class="dcard${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
+  return `<article class="dcard${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.uploadedAt ? " uploaded" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
       style="--c:${colourOf(r.category)}">
     <div class="top">
       <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>

@@ -56,6 +56,7 @@ import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
 import { esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
+import { channelGaps, uploadGaps } from "../src/web/gaps.js";
 
 let pass = 0;
 let fail = 0;
@@ -496,7 +497,7 @@ t("no separate pinned section", pages.dashboard.includes("group pinned"), false)
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
 t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
-t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 8);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 9);
 t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
 t("bell: each kind has its own icon colour",
   [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
@@ -1258,6 +1259,42 @@ t("…counted as unread like any other", /id="bellcount">1</.test(dashNew), true
 const newPage = renderWhatsNew(shellFix, RELEASES.map((r) => ({ ...r, at: relTimes.get(r.id) ?? null })));
 t("the What's new page lists every release, newest first, each change a line", [newPage.indexOf(`id="${RELEASES[0]!.id}"`) < newPage.indexOf(`id="${RELEASES[1]!.id}"`), (newPage.match(/<li>/g) ?? []).length], [true, RELEASES.reduce((n, r) => n + r.changes.length, 0)]);
 t("the sidebar links to it", pages.week.includes('href="/whats-new"'), true);
+
+section("Nothing assigned — an expected upload with no video on the day");
+const gd = (list: ReturnType<typeof channelGaps>) => list.map((g) => [g.date, g.inDays]);
+t("every four days from the last video: the empty days in the next eight", gd(channelGaps("A", 4, ["2026-09-24"], "2026-09-26")), [["2026-09-28", 2], ["2026-10-02", 6]]);
+t("a video scheduled on (or before) the day fills it", gd(channelGaps("B", 4, ["2026-09-24", "2026-09-28", "2026-10-02"], "2026-09-26")), []);
+t("posting early moves the next one earlier", gd(channelGaps("B", 4, ["2026-09-24", "2026-09-27"], "2026-09-26")), [["2026-10-01", 5]]);
+t("a channel already behind is expected today", gd(channelGaps("C", 4, ["2026-09-16"], "2026-09-26"))[0], ["2026-09-26", 0]);
+t("a channel quiet for over a month with nothing ahead is resting", channelGaps("D", 4, ["2026-08-01"], "2026-09-26"), []);
+t("…each gap says the last video before it", channelGaps("A", 4, ["2026-09-24"], "2026-09-26")[1]!.after, "2026-09-24");
+t("every channel, soonest first", uploadGaps([{ channel: "Z", every: 4, days: ["2026-09-23"] }, { channel: "A", every: 4, days: ["2026-09-24"] }], "2026-09-26").map((g) => `${g.channel} ${g.date}`), ["Z 2026-09-27", "A 2026-09-28", "Z 2026-10-01", "A 2026-10-02"]);
+const gapShell = { ...shellFix, gaps: channelGaps("Specular Anime", 4, ["2026-09-24"], "2026-09-26") };
+const gapDash = renderDashboard({ ...gapShell, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [], grouped: new Map(), channels: {}, gaps: gapShell.gaps,
+  notices: [{ kind: "gap", at: new Date(), gap: gapShell.gaps[0]! }],
+});
+t("the dashboard warns, with a count and a chip a channel naming each day", [gapDash.includes('class="gapstrip"'), /class="gapn">2</.test(gapDash), (gapDash.match(/class="gapchip[ "]/g) ?? []).length, gapDash.includes("Fri 10/2")], [true, true, 1, true]);
+t("…the sidebar's Calendar carries the count", /Calendar<span class="gapbadge"[^>]*>2</.test(gapDash), true);
+t("…and the bell has its own kind for it", [/class="notice gap/.test(gapDash), /data-f="gap"[^>]*><i><\/i>Nothing assigned<span>1</.test(gapDash)], [true, true]);
+const gapWeek = renderWeek(gapShell, "2026-09-27", "posting", [0, 1, 2, 3, 4, 5, 6].map((n) => ({ date: shiftDate("2026-09-27", n), list: [] })));
+t("the calendar shows a dashed slot on each empty day", (gapWeek.match(/class="gapcard"/g) ?? []).length, 2);
+t("…but not in Deadlines, and not for a hidden channel", [
+  renderWeek(gapShell, "2026-09-27", "deadlines", [{ date: "2026-09-28", list: [] }]).includes('class="gapcard"'),
+  renderWeek(gapShell, "2026-09-27", "posting", [{ date: "2026-09-28", list: [] }], [], [], ["anime"]).includes('class="gapcard"'),
+], [false, false]);
+t("a month cell gets its slot", renderCalendar(gapShell, "2026-10", "posting", [], [], []).includes('class="gapslot"'), true);
+
+section("Uploaded — live on the channel, green on the calendar");
+const upRec = { ...plainRec, id: 60, status: "done", uploadedAt: new Date("2026-09-26T15:00:00Z"), airDate: "2026-09-28" } as typeof plainRec;
+const upList = renderList(shellFix, "Queue", "", [upRec, plainRec]);
+t("every card has the Uploaded button", [upList.includes("/r/60/notuploaded"), upList.includes("/r/8/uploaded")], [true, true]);
+t("…lit once it's uploaded, with a tag", [/class="tick uploaded"[^>]*>\s*<button[^>]*class="on"/.test(upList), upList.includes('class="uploaded-tag"')], [true, true]);
+t("a revision has nothing to upload", renderList(shellFix, "R", "", [revRec]).includes("/uploaded"), false);
+const upCal = renderCalendar(shellFix, "2026-09", "posting", [{ day: "2026-09-28", record: upRec } as never], [], []);
+t("the calendar shows it green", upCal.includes('class="chip done uploaded"'), true);
+t("…and so does its card", renderWeek(shellFix, "2026-09-27", "posting", [{ date: "2026-09-28", list: [upRec] }]).includes("dcard cleared uploaded"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

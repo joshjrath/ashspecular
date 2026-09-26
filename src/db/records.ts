@@ -41,6 +41,8 @@ export interface StoredRecord extends DerivedRecord {
   pausedAt: Date | null;
   /** When it was marked "no script" — the VO is waiting on a script; null when it isn't. */
   noScriptAt: Date | null;
+  /** When it was marked uploaded — live on its channel; null when it isn't. */
+  uploadedAt: Date | null;
   /**
    * The deadline as it was set, when a day off brought it forward. The
    * deadline fields themselves (voDue, deadline, scriptDue) are always the
@@ -297,6 +299,32 @@ export async function setNoScript(id: number, on: boolean): Promise<void> {
   );
 }
 
+/**
+ * Mark a video uploaded — live on its channel, so it's cleared too — or take
+ * the mark off again (it stays cleared).
+ */
+export async function setUploaded(id: number, on: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE records SET uploaded_at = CASE WHEN $2 THEN COALESCE(uploaded_at, now()) END,
+       status = CASE WHEN $2 THEN 'done' ELSE status END,
+       no_script_at = CASE WHEN $2 THEN NULL ELSE no_script_at END,
+       paused_at = CASE WHEN $2 THEN NULL ELSE paused_at END,
+       updated_at = now() WHERE id = $1`,
+    [id, on],
+  );
+  if (on) await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+}
+
+/** Each channel's days with a video on (an air date), from a day on — for the upload gaps. Paused and removed work doesn't count. */
+export async function channelAirDays(from: string): Promise<Array<{ channel: string; day: string }>> {
+  const { rows } = await pool.query<{ channel: string; day: string }>(
+    `SELECT DISTINCT channel, to_char(air_date, 'YYYY-MM-DD') AS day FROM records
+      WHERE channel IS NOT NULL AND air_date >= $1::date AND status <> 'removed' AND paused_at IS NULL`,
+    [from],
+  );
+  return rows;
+}
+
 /** Everything paused, most recently paused first. */
 export async function listPaused(limit = 200): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
@@ -384,6 +412,7 @@ interface Row {
   pinned_at: Date | null;
   paused_at: Date | null;
   no_script_at: Date | null;
+  uploaded_at: Date | null;
   off_from?: Date | null;
   created_at: Date;
 }
@@ -422,6 +451,7 @@ function hydrate(r: Row): StoredRecord {
     pinnedAt: r.pinned_at ?? null,
     pausedAt: r.paused_at ?? null,
     noScriptAt: r.no_script_at ?? null,
+    uploadedAt: r.uploaded_at ?? null,
     offFrom: r.off_from ?? null,
     createdAt: r.created_at,
   };
@@ -450,7 +480,7 @@ const COLUMNS = `id, kind, category, channel, code, title, tag, stage,
   air_date, ${standing("script_due")} AS script_due, ${standing("vo_due")} AS vo_due, vo_source,
   ${standing("deadline")} AS deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at,
+  source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, uploaded_at,
   CASE WHEN ${DUE} IS DISTINCT FROM ${SET_DUE} THEN ${SET_DUE} END AS off_from, created_at`;
 
 const SELECT = `SELECT ${COLUMNS} FROM records`;
@@ -732,10 +762,10 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
  * the last time the bell was opened. Recurring batches are left out: they
  * fall due every evening and would drown the rest.
  */
-export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "update";
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "gap" | "update";
 /** Something about one piece of work. */
 export interface RecordNotice {
-  kind: Exclude<NoticeKind, "update">;
+  kind: Exclude<NoticeKind, "update" | "gap">;
   at: Date;
   record: StoredRecord;
 }
@@ -745,7 +775,13 @@ export interface UpdateNotice {
   at: Date;
   release: { id: string; title: string; changes: Array<{ text: string; href?: string }> };
 }
-export type Notice = RecordNotice | UpdateNotice;
+/** A channel expected to post with nothing on that day, within eight days. */
+export interface GapNotice {
+  kind: "gap";
+  at: Date;
+  gap: { channel: string; date: string; inDays: number; after: string };
+}
+export type Notice = RecordNotice | UpdateNotice | GapNotice;
 
 export async function listNotices(zone: string, limit = 60): Promise<RecordNotice[]> {
   const q = (where: string, order: string) =>
