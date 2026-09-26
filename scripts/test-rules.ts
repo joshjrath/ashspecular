@@ -39,7 +39,8 @@ import { formatOfTitle } from "../src/web/stories/formats.js";
 import { readTitle } from "../src/web/stories/lore.js";
 import { blueprint } from "../src/web/stories/blueprint.js";
 import { checkDraft } from "../src/web/stories/check.js";
-import { keyOfTitle, labIdeas } from "../src/web/stories/lab.js";
+import { keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
+import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
 import { renderStoryLab } from "../src/web/page.js";
 
 let pass = 0;
@@ -824,6 +825,20 @@ const withData = labIdeas(
 );
 const deadpoolIdea = withData.find((x) => x.hero?.id === "deadpool");
 t("a hero whose uploads do well rises", deadpoolIdea ? deadpoolIdea.reasons.some((r) => r.text.startsWith("Deadpool:") && r.lift > 1) : false, true);
+const pubVids = [
+  { title: "Could Spider-Man Survive World War Z", url: "https://youtu.be/a", channel: "Specular Studios" },
+  { title: "What If Iron Man Was In The Boys?", url: "https://youtu.be/b", channel: "Specular Gaming" },
+  { title: "What If YOU Were In Chainsaw Man?", url: "https://youtu.be/c", channel: "Specular FNAF" },
+];
+const heldOut: typeof pubVids = [];
+const labsPub = labIdeas([], new Date("2026-09-25"), 60, pubVids, heldOut);
+t("a public video's idea is never suggested", labsPub.some((x) => x.title === "What If Iron Man Was In The Boys?"), false);
+t("…in any format: the same character and world is the same idea", labsPub.some((x) => x.hero?.id === "spiderman" && x.world?.id === "wwz"), false);
+t("…from any channel, and for YOU stories too", labsPub.some((x) => x.format === "you" && x.world?.id === "csm"), false);
+t("the page can say what was held back", heldOut.some((v) => v.url === "https://youtu.be/b"), true);
+t("a reworded title is still the same video", publicMatch({ hero: HERO_BY_ID.get("spiderman"), world: WORLD_BY_ID.get("wwz"), title: "How Long Would Spider-Man Last In World War Z?" }, pubVids)?.url, "https://youtu.be/a");
+t("a different pairing is fine", publicMatch({ hero: HERO_BY_ID.get("spiderman"), world: WORLD_BY_ID.get("re"), title: "Could Spider-Man Survive Resident Evil?" }, pubVids), null);
+t("titles the lore can't read are caught by their words", publicMatch({ title: "What If Spider-Man Had Roblox Physics?" }, [{ title: "What If Spider Man Had Roblox Physics", url: "u", channel: "c" }])?.url, "u");
 const labPage = renderStoryLab(shellFix, {
   scripts: cps.length, words: 446_000, matched: 0,
   ideas: labs.slice(0, 3).map((idea) => ({ idea, blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id }) })),

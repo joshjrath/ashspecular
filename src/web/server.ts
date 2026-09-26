@@ -49,7 +49,7 @@ import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { corpus, normsFor } from "./stories/corpus.js";
-import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, type LabVideo } from "./stories/lab.js";
+import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
 import { FORMATS, type FormatId } from "./stories/formats.js";
@@ -588,7 +588,10 @@ export async function startWeb(): Promise<void> {
     const stories = all.filter((u) => channels.includes(u.channel));
     const videos: LabVideo[] = stories.map((u) => ({ title: u.title, multiple: perf.get(u.videoId)?.multiple ?? null, publishedAt: u.publishedAt }));
     const scripts = corpus();
-    const ideas = labIdeas(videos, now).map((idea) => ({
+    // Every video already public, on any channel — Stories ideas never repeat one.
+    const published: PublicVideo[] = all.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
+    const heldBack: PublicVideo[] = [];
+    const ideas = labIdeas(videos, now, 24, published, heldBack).map((idea) => ({
       idea,
       blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id }),
     }));
@@ -602,6 +605,7 @@ export async function startWeb(): Promise<void> {
     const built = query.hero || query.world || query.power
       ? blueprint({ format: picked.format as FormatId, hero: picked.hero || null, world: picked.world || null, power: picked.power || null, target: picked.target || null })
       : null;
+    const builtRepeats = built ? publicMatch({ hero: built.hero, world: built.world, power: built.power, target: built.target, title: built.title }, published) : null;
     const results = matchScripts(videos);
     // Coverage: heroes who lead a script or a top idea, against every world.
     const done = new Set<string>();
@@ -613,6 +617,9 @@ export async function startWeb(): Promise<void> {
       matched: results.length,
       ideas,
       blueprint: built,
+      builtRepeats,
+      heldBack: heldBack.length,
+      publicCount: published.length,
       picked,
       check: check ? { ...check, result: checkDraft(check.text, check.title) } : null,
       contrast: contrast(results),

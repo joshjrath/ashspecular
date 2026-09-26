@@ -273,7 +273,12 @@ What's on the page:
   with that hero, world and format did against their channel's usual, whether
   the world rewards that kind of hero, how often the writers have come back to
   it, and whether it's been done in another format. Nothing already written
-  or uploaded is suggested. Open one for its **blueprint**:
+  is suggested, and **nothing already public is ever suggested**. Every idea
+  is checked against every video on every channel. The same character with
+  the same world, power or opponent counts as the same idea in any wording or
+  format, so "Could Spider-Man Survive World War Z" rules out every
+  Spider-Man × World War Z idea. Titles the lore can't read are caught by
+  their words. The panel says how many were left out. Open one for its **blueprint**:
   - title options and the version lock
   - an intro drafted in the house voice, with the three moves it makes
   - every part: what it has to do, with this hero's abilities and this
@@ -281,7 +286,8 @@ What's on the page:
     script it's modelled on
   - the outro, the caveats to stay honest about, and the format's rules
 - **Build any blueprint**: pick a format, hero, world, power or target.
-  Every "+" in the coverage map opens one too.
+  Every "+" in the coverage map opens one too. If the combination is already
+  public, a red note links to the video.
 - **Check a draft**: paste it with its INTRO / PART / OUTRO headers and it's
   measured against the scripts of the same format. It checks:
   - part count and length, intro length and how it ends, and the version lock

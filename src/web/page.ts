@@ -21,7 +21,7 @@ import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
 import type { Blueprint, PlannedPart } from "./stories/blueprint.js";
-import type { LabIdea, Contrast, ScriptResult } from "./stories/lab.js";
+import type { LabIdea, Contrast, PublicVideo, ScriptResult } from "./stories/lab.js";
 import type { DraftCheck } from "./stories/check.js";
 import type { Norms } from "./stories/corpus.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
@@ -1011,6 +1011,8 @@ header.page a.clear { align-self: center; }
 .labcta b { font-family: var(--display); font-size: 18px; letter-spacing: -0.02em; }
 .labcta span { color: var(--ink2); font-size: 13px; }
 .labcta:hover { filter: brightness(1.12); }
+.labrepeat { background: #3A1E1D; color: #FFC2BC; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin: 0 0 12px; }
+.labrepeat a { color: #fff; text-decoration: underline; }
 .labsub { color: var(--ink2); font-size: 13.5px; line-height: 1.6; margin: -4px 0 14px; max-width: 900px; }
 .labform { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .labform label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
@@ -4072,6 +4074,11 @@ export interface StoryLabData {
   matched: number;
   ideas: Array<{ idea: LabIdea; blueprint: Blueprint | null }>;
   blueprint: Blueprint | null;
+  /** The public video the built blueprint would repeat, if any. */
+  builtRepeats?: PublicVideo | null;
+  /** How many ideas were held back because they're already public, out of how many public videos. */
+  heldBack?: number;
+  publicCount?: number;
   picked: { format: string; hero: string; world: string; power: string; target: string };
   check: { title: string; text: string; result: DraftCheck | null } | null;
   contrast: Contrast[] | null;
@@ -4203,12 +4210,18 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     <p class="labsub">Learned from ${d.scripts} Stories scripts (${Math.round(d.words / 1000)}K words): how each format is built part by part, how every world's institution, roster and apex are used, and each hero's ability ladder. Ideas are ranked on the channel's own results${d.matched ? ` (${d.matched} scripts matched to their uploads)` : ""}, fit and freshness.</p>
     ${
       d.blueprint
-        ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${blueprintHtml(d.blueprint)}</div>`
+        ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${
+            d.builtRepeats
+              ? `<p class="labrepeat">Already on YouTube: <a href="${esc(d.builtRepeats.url)}" target="_blank" rel="noreferrer">${esc(d.builtRepeats.title)}</a> (${esc(d.builtRepeats.channel)}). This would repeat it — pick a different world or format.</p>`
+              : ""
+          }${blueprintHtml(d.blueprint)}</div>`
         : d.picked.format && d.picked.hero
           ? `<div class="panel" id="blueprint"><p class="hint">That combination needs a ${d.picked.format === "power" ? "power" : d.picked.format === "hunt" || d.picked.format === "versus" ? "target" : "world"} too.</p></div>`
           : ""
     }
-    <div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint</span></h2>
+    <div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint${
+      d.publicCount ? ` · checked against ${d.publicCount.toLocaleString("en-US")} public videos${d.heldBack ? `, ${d.heldBack} already done and left out` : ""}` : ""
+    }</span></h2>
       <ul class="isugg">${d.ideas.map(ideaCard).join("")}</ul></div>
     <div class="panel ideas"><h2>Build any blueprint</h2>${builder}</div>
     <div class="panel ideas" id="check"><h2>Check a draft <span class="sub">— against the ${d.scripts} scripts, format by format</span></h2>${checker}</div>

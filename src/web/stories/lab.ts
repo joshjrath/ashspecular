@@ -123,7 +123,60 @@ const FORMAT_NAME: Record<FormatId, string> = {
   game: "game videos",
 };
 
-export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24): LabIdea[] {
+/** A video already on YouTube, on any channel. */
+export interface PublicVideo {
+  title: string;
+  url: string;
+  channel: string;
+}
+
+const FILLER = new Set("what if could would how the a an in of to vs was were is be had has got with his her their you your survive catch join joined".split(" "));
+const wordsOf = (t: string) => new Set(norm(t).split(" ").filter((w) => w && !FILLER.has(w)));
+
+/**
+ * The public video an idea would repeat, if any: the same character with
+ * the same world, power or opponent in any format ("Could Spider-Man Survive
+ * World War Z" rules out every Spider-Man × World War Z idea), or a title
+ * that's nearly the same words.
+ */
+export function publicMatch(
+  idea: { hero?: Hero | null; world?: World | null; power?: Power | null; target?: Hero | null; title: string },
+  published: PublicVideo[],
+  index = indexPublic(published),
+): PublicVideo | null {
+  const other = idea.world?.id ?? idea.power?.id ?? idea.target?.id;
+  const pairs = [idea.hero && other ? `${idea.hero.id}|${other}` : null, !idea.hero && other ? `you|${other}` : null].filter(Boolean) as string[];
+  for (const p of pairs) {
+    const hit = index.pairs.get(p);
+    if (hit) return hit;
+  }
+  const mine = wordsOf(idea.title);
+  if (mine.size >= 2) {
+    for (const v of index.words) {
+      let shared = 0;
+      for (const w of mine) if (v.words.has(w)) shared += 1;
+      if (shared / new Set([...mine, ...v.words]).size >= 0.75) return v.video;
+    }
+  }
+  return null;
+}
+
+export function indexPublic(published: PublicVideo[]): { pairs: Map<string, PublicVideo>; words: Array<{ words: Set<string>; video: PublicVideo }> } {
+  const pairs = new Map<string, PublicVideo>();
+  for (const v of published) {
+    const k = keyOfTitle(v.title);
+    for (const p of k.pairs) if (!p.startsWith("|") && !p.endsWith("|") && !pairs.has(p)) pairs.set(p, v);
+    // "What If YOU …" titles pair the viewer with the world or power.
+    if (/^what if you\b|^how i'?d/i.test(v.title.trim())) {
+      const r = readTitle(v.title);
+      for (const x of [...r.worlds.map((w) => w.id), ...r.powers.map((pw) => pw.id)]) if (!pairs.has(`you|${x}`)) pairs.set(`you|${x}`, v);
+    }
+  }
+  return { pairs, words: published.map((v) => ({ words: wordsOf(v.title), video: v })) };
+}
+
+export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24, published: PublicVideo[] = [], held: PublicVideo[] = []): LabIdea[] {
+  const pub = indexPublic(published);
   const perf = perfStats(videos);
   const scripts = corpus();
 
@@ -147,6 +200,12 @@ export function labIdeas(videos: LabVideo[], now: Date = new Date(), limit = 24)
   const consider = (format: FormatId, hero: Hero | null, world: World | null, power: Power | null, target: Hero | null, title: string) => {
     const key = keyOf(format, hero?.id, world?.id, power?.id, target?.id);
     if (doneKeys.has(key)) return;
+    // Already on YouTube in any shape, on any channel: never suggested.
+    const already = publicMatch({ hero, world, power, target, title }, published, pub);
+    if (already) {
+      if (!held.some((h) => h.url === already.url)) held.push(already);
+      return;
+    }
     const reasons: LabIdea["reasons"] = [];
     let score = 1;
 
