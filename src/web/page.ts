@@ -131,6 +131,27 @@ aside .removed-link {
   font-size: 12px; color: var(--dim);
 }
 aside .removed-link:hover, aside .removed-link.on { color: #fff; background: #222225; }
+aside .settings-link { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 14px; border-radius: 14px;
+  font-size: 12.5px; color: #9A9AA3; }
+aside .settings-link svg { width: 15px; height: 15px; flex: none; }
+aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #222225; }
+.settings { display: grid; gap: 14px; max-width: 980px; }
+.setgroup h2 { margin: 0 0 4px; }
+.setgroup .sub { color: var(--dim); font-weight: 500; font-size: 13px; font-family: var(--ui); letter-spacing: 0; }
+.setgroup p.hint { margin: 10px 0 0; }
+.setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 18px; margin-top: 12px; }
+.setcols fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.setcols legend { padding: 0 10px 6px; color: var(--ink3); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.setcols label, .setrow label { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px;
+  color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer; }
+.setcols label:hover, .setrow label:hover { background: var(--sunk); }
+.setcols input, .setrow input { width: 17px; height: 17px; margin: 0; accent-color: var(--yellow); flex: none; }
+.setcols i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+.setrow { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; }
+.setsave { display: flex; align-items: center; gap: 14px; }
+.setsave .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
+.settings .offstrip { margin: 12px 0 0; padding: 0; background: none; }
+.settings .offstrip .lbl { display: none; }
 aside .live .pulse {
   width: 7px; height: 7px; border-radius: 50%; background: #35D399; flex: none;
   box-shadow: 0 0 0 3px rgba(53,211,153,.16);
@@ -1368,6 +1389,8 @@ export interface Shell {
   scripts?: boolean;
   /** Every day marked off, YYYY-MM-DD. */
   daysOff?: string[];
+  /** Sidebar items switched off in Settings (RAIL_ITEMS keys). */
+  railHide?: string[];
 }
 
 function layout(title: string, shell: Shell | null, body: string): string {
@@ -1402,27 +1425,58 @@ function layout(title: string, shell: Shell | null, body: string): string {
   </script></body></html>`;
 }
 
-function sidebar(s: Shell): string {
-  const item = (href: string, label: string, n: number | null, key: string) =>
-    `<a class="${s.active === key ? "on" : ""}" href="${href}">${esc(label)}${
-      n === null ? "" : `<span class="n">${n}</span>`
-    }</a>`;
+/**
+ * Everything on the sidebar that Settings can switch off. Settings itself
+ * can't be: it's the way back.
+ */
+export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "Categories" | "Also" }> = [
+  { key: "dashboard", label: "Dashboard", group: "Pages" },
+  { key: "calendar", label: "Calendar", group: "Pages" },
+  { key: "reviews", label: "Revisions", group: "Pages" },
+  { key: "queue", label: "Queue", group: "Pages" },
+  { key: "recurring", label: "Recurring", group: "Pages" },
+  { key: "scripts", label: "Scripts", group: "Pages" },
+  { key: "uploads", label: "Uploads", group: "Pages" },
+  { key: "storylab", label: "Story Lab", group: "Pages" },
+  ...CATEGORIES.map((c) => ({ key: `cat-${c.id}`, label: c.label, group: "Categories" as const })),
+  { key: "search", label: "Search box", group: "Also" },
+  { key: "live", label: "#intake · last message", group: "Also" },
+  { key: "paused", label: "Paused", group: "Also" },
+  { key: "removed", label: "Removed", group: "Also" },
+];
 
-  const cats = CATEGORIES.map(
-    (c) => `<a class="cat" style="--c:${c.color}" href="/category/${c.id}">
+const GEAR_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2 4.8 4.8"/></svg>`;
+
+function sidebar(s: Shell): string {
+  const off = new Set(s.railHide ?? []);
+  const item = (href: string, label: string, n: number | null, key: string) =>
+    off.has(key)
+      ? ""
+      : `<a class="${s.active === key ? "on" : ""}" href="${href}">${esc(label)}${
+          n === null ? "" : `<span class="n">${n}</span>`
+        }</a>`;
+
+  const cats = CATEGORIES.filter((c) => !off.has(`cat-${c.id}`))
+    .map(
+      (c) => `<a class="cat" style="--c:${c.color}" href="/category/${c.id}">
       <span class="dot"></span>${esc(c.label)}<span class="n">${s.counts[c.id] ?? 0}</span>
     </a>`,
-  ).join("");
+    )
+    .join("");
 
   // "Live" is only honest if it says when, so it says when.
   const ago = s.lastIntake ? timeAgo(s.lastIntake) : "nothing yet";
 
   return `<aside><div class="inner">
     <a class="mark" href="/">Specular</a>
-    <form class="search" method="get" action="/search" role="search">
+    ${
+      off.has("search")
+        ? ""
+        : `<form class="search" method="get" action="/search" role="search">
       <input type="search" name="q" placeholder="Search…" value="${esc(s.query ?? "")}"
         aria-label="Search everything">
-    </form>
+    </form>`
+    }
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
       ${item("/calendar", "Calendar", s.nav.calendar, "calendar")}
@@ -1433,19 +1487,19 @@ function sidebar(s: Shell): string {
       ${item("/uploads", "Uploads", s.nav.behind ?? null, "uploads")}
       ${item("/story-lab", "Story Lab", null, "storylab")}
     </nav>
-    <h3>Categories</h3>
-    <div class="cats">${cats}</div>
-    <div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>
+    ${cats ? `<h3>Categories</h3>\n    <div class="cats">${cats}</div>` : ""}
+    ${off.has("live") ? "" : `<div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>`}
     ${
-      s.paused
+      s.paused && !off.has("paused")
         ? `<a class="removed-link paused-link${s.active === "paused" ? " on" : ""}" href="/paused">Paused · ${s.paused}</a>`
         : ""
     }
     ${
-      s.removed
+      s.removed && !off.has("removed")
         ? `<a class="removed-link${s.active === "removed" ? " on" : ""}" href="/removed">Removed · ${s.removed}</a>`
         : ""
     }
+    <a class="settings-link${s.active === "settings" ? " on" : ""}" href="/settings">${GEAR_ICON}Settings</a>
   </div></aside>`;
 }
 
@@ -4649,6 +4703,56 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     <div class="panel ideas"><h2>What the best-performing scripts did differently</h2>${contrast}${results}</div>
     <div class="panel ideas"><h2>The formats <span class="sub">— how each one is actually built</span></h2><ul class="isugg labformats">${formats}</ul></div>
     <div class="panel ideas"><h2>What's been done <span class="sub">— ● written · + opens a blueprint</span></h2>${coverage}</div>`,
+  );
+}
+
+/**
+ * Settings: what the sidebar shows, what the dashboard shows, and the days
+ * off. Kept in this browser (cookies), like the dashboard's own choices.
+ */
+export function renderSettings(
+  shell: Shell,
+  data: { railHide: string[]; dashHide: string[]; daysOff: string[]; shifted: StoredRecord[]; saved: boolean; scripts: boolean },
+): string {
+  const off = new Set(data.railHide);
+  const dash = new Set(data.dashHide);
+  const box = (key: string, label: string, colour = "") =>
+    `<label><input type="checkbox" name="show" value="${esc(key)}"${off.has(key) ? "" : " checked"}>${
+      colour ? `<i style="--c:${colour}"></i>` : ""
+    }${esc(label)}</label>`;
+  const groups = (["Pages", "Categories", "Also"] as const)
+    .map((g) => {
+      const items = RAIL_ITEMS.filter((i) => i.group === g && (i.key !== "scripts" || data.scripts));
+      return `<fieldset><legend>${g}</legend>${items
+        .map((i) => box(i.key, i.label, i.key.startsWith("cat-") ? CATEGORIES.find((c) => `cat-${c.id}` === i.key)?.color ?? "" : ""))
+        .join("")}</fieldset>`;
+    })
+    .join("");
+  return layout(
+    "Settings",
+    shell,
+    `${pageHeader("Settings")}
+    <form class="settings" method="post" action="/settings">
+      <input type="hidden" name="form" value="1">
+      <section class="panel setgroup">
+        <h2>Sidebar <span class="sub">— untick anything you don't use. Settings always stays at the bottom.</span></h2>
+        <div class="setcols">${groups}</div>
+      </section>
+      <section class="panel setgroup">
+        <h2>Dashboard</h2>
+        <div class="setrow">
+          <label><input type="checkbox" name="dash" value="unsorted"${dash.has("unsorted") ? "" : " checked"}> Unsorted list</label>
+          <label><input type="checkbox" name="dash" value="channels"${dash.has("channels") ? "" : " checked"}> Channels list</label>
+        </div>
+        <p class="hint">Which categories are columns, and their order, are in the dashboard's <b>Columns</b> menu —
+          or drag a column by the ⠿ beside its name.</p>
+      </section>
+      <div class="setsave"><button class="clear">Save</button>${data.saved ? `<span class="saved" role="status">Saved.</span>` : ""}</div>
+    </form>
+    <section class="panel setgroup settings" style="margin-top:14px">
+      <h2>Days off <span class="sub">— no work that day: anything due on it is due the working day before</span></h2>
+      ${daysOffStrip(data.daysOff, data.shifted)}
+    </section>`,
   );
 }
 

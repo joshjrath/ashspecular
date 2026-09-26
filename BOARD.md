@@ -19,6 +19,12 @@ The board uses the whole width of the window. The button beside each page's
 title — or the `[` key — puts the sidebar away, and it stays away until you
 bring it back.
 
+**Settings** (⚙ at the foot of the sidebar) switches off anything on the
+sidebar you don't use — any page, any category, the search box, the #intake
+line, Paused, Removed — and the dashboard's Unsorted and Channels lists, and
+lists the days off. Settings itself always stays, so everything can come
+back. The choices are kept in this browser, like the dashboard's columns.
+
 **Pins** — point at any row and a pin appears beside its title. Pinned, the
 row turns cream, carries a black *Pinned* tag, and sits at the top of its own
 category — on the dashboard and on the category page, whatever the sort. Pin

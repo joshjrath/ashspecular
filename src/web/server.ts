@@ -66,6 +66,7 @@ import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { FORMATS, type FormatId } from "./stories/formats.js";
 import { HEROES, WORLDS } from "./stories/lore.js";
 import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
@@ -74,7 +75,7 @@ import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { DAY_SPAN, SORTS, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, RAIL_ITEMS, SORTS, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -84,6 +85,7 @@ import {
   renderEmptyState,
   renderList,
   renderPaused,
+  renderSettings,
   renderLogin,
   renderRecurring,
   renderScripts,
@@ -95,6 +97,18 @@ import {
 } from "./page.js";
 
 const PUBLIC = new Set(["/login", "/healthz"]);
+
+/**
+ * The request's cookies, for code deep in a page (the sidebar's switched-off
+ * items) without handing the request down through every route.
+ */
+const requestCookies = new AsyncLocalStorage<Record<string, string | undefined>>();
+
+/** A cookie that lists ids with dots, as the dashboard's own do. */
+function cookieList(name: string): string[] {
+  const raw = requestCookies.getStore()?.[name] ?? "";
+  return raw === "none" ? [] : raw.split(".").filter(Boolean);
+}
 
 /**
  * The sidebar's numbers, fetched once per request. Every page carries them, so
@@ -128,6 +142,7 @@ async function shell(active: string): Promise<Shell> {
     removed,
     paused,
     daysOff,
+    railHide: cookieList("rail_hide"),
     scripts: Boolean(config.scriptsUrl || config.scriptsUrlRaw),
   };
 }
@@ -192,6 +207,10 @@ export async function startWeb(): Promise<void> {
   const app = Fastify({ logger: false, trustProxy: true });
   await app.register(cookie);
   await app.register(formbody);
+  // Everything after this runs with the request's cookies to hand.
+  app.addHook("onRequest", (request, _reply, done) => {
+    requestCookies.run(request.cookies, done);
+  });
 
   app.addHook("onRequest", async (request, reply) => {
     if (PUBLIC.has(request.url.split("?")[0] ?? "")) return;
@@ -246,8 +265,8 @@ export async function startWeb(): Promise<void> {
         renderDashboard(s, {
           stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request),
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
-          order: (request.cookies.dash_order ?? "").split(".").filter(Boolean),
-          hideParts: (request.cookies.dash_hide ?? "").split(".").filter((x) => x === "unsorted" || x === "channels"),
+          order: cookieList("dash_order"),
+          hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels"),
         }),
       );
   });
@@ -953,6 +972,33 @@ export async function startWeb(): Promise<void> {
     const date = safeDate(request.body?.date);
     if (date) await setDayOff(date, true);
     return reply.redirect(backTo(request.headers.referer, "/"));
+  });
+
+  // Settings: the sidebar's items, the dashboard's lists, the days off.
+  app.get<{ Querystring: { saved?: string } }>("/settings", async (request, reply) => {
+    const [s, shifted] = await Promise.all([shell("settings"), listOffShifted()]);
+    return reply.type("text/html").send(
+      renderSettings(s, {
+        railHide: s.railHide ?? [],
+        dashHide: cookieList("dash_hide"),
+        daysOff: s.daysOff ?? [],
+        shifted: shifted.map((x) => x.record),
+        saved: request.query.saved === "1",
+        scripts: Boolean(s.scripts),
+      }),
+    );
+  });
+  app.post<{ Body: { show?: string | string[]; dash?: string | string[] } }>("/settings", async (request, reply) => {
+    const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v : v ? [v] : []);
+    const show = new Set(list(request.body?.show));
+    const dash = new Set(list(request.body?.dash));
+    const railHide = RAIL_ITEMS.map((i) => i.key).filter((k) => !show.has(k) && (k !== "scripts" || config.scriptsUrl || config.scriptsUrlRaw));
+    const dashHide = ["unsorted", "channels"].filter((k) => !dash.has(k));
+    // Not httpOnly: the dashboard's own switches write dash_hide from the page.
+    const keep = { path: "/", sameSite: "lax" as const, maxAge: 60 * 60 * 24 * 365, httpOnly: false };
+    reply.setCookie("rail_hide", railHide.join(".") || "none", keep);
+    reply.setCookie("dash_hide", dashHide.join(".") || "none", keep);
+    return reply.redirect("/settings?saved=1");
   });
 
   // Put a move back: the dragged video and everything that went with it.

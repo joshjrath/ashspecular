@@ -44,7 +44,7 @@ import { blueprint } from "../src/web/stories/blueprint.js";
 import { checkDraft } from "../src/web/stories/check.js";
 import { keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
 import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
-import { renderStoryLab, renderPaused } from "../src/web/page.js";
+import { renderStoryLab, renderPaused, renderSettings, RAIL_ITEMS } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
 import { cascadeText, planCascade } from "../src/web/cascade.js";
 import { renderRecord } from "../src/web/page.js";
@@ -986,6 +986,25 @@ t("the day view shows it too", /class="daycol[^"]* off"/.test(offDayView) && off
 const offIcs = buildIcs([], [], parseFeedOptions({}), "https://board.example", new Date("2026-09-26T12:00:00Z"), ["2026-09-28"]);
 t("the Google Calendar feed carries days off as all-day events", offIcs.includes("DTSTART;VALUE=DATE:20260928") && offIcs.includes("SUMMARY:🌙 Day off"), true);
 t("the dashboard's scripts still compile", [...offDash.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+
+// ── settings ──────────────────────────────────────────────────────────────
+section("Settings — hide anything on the sidebar");
+const railOf = (html: string) => html.slice(html.indexOf("<aside>"), html.indexOf("</aside>"));
+const slim = railOf(renderList({ ...shellFix, removed: 2, paused: 1, railHide: ["queue", "cat-gaming", "live", "search", "removed"] }, "Queue", "", []));
+t("a switched-off page leaves the sidebar", slim.includes('href="/queue"'), false);
+t("…a category too", [slim.includes("/category/gaming"), slim.includes("/category/stories")], [false, true]);
+t("…and the search box, the #intake line and Removed", [slim.includes('role="search"'), slim.includes("#intake"), slim.includes('href="/removed"')], [false, false, false]);
+t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="/paused"')], [true, true]);
+t("Settings is always there", slim.includes('href="/settings"'), true);
+const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
+t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 8 + CATEGORIES.length + 4);
+const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
+t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
+t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
+t("…the dashboard's lists", [/value="channels">/.test(setPage), /value="unsorted" checked>/.test(setPage)], [true, true]);
+t("…the days off", setPage.includes('action="/days-off"'), true);
+t("…and says when it's saved", setPage.includes("Saved."), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
