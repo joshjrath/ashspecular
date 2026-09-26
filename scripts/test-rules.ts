@@ -1519,6 +1519,8 @@ t("the next episode, its title and when it's due at its pace", [byName.get("Skyb
 t("a series gone quiet is resting, and says when it was strong", [byName.get("Roblox Doors")!.live, byName.get("Roblox Doors")!.advice.includes("worth bringing back with Day 4")], [false, true]);
 const nu = nextUp(gs.series, gNow);
 t("what to make next: the growing one first, the resting hit after, the fading one left out", nu.map((n) => n.title), ["Skyblock #7", "Roblox Doors Day 4"]);
+const weak = gamingSeries([0.5, 0.6, 0.5].map((m, i) => gv(mc, `Bedwars Part ${i + 1}`, shiftDate("2026-09-18", i * 3), m)), gNow).series;
+t("…and one running well below the channel's usual isn't suggested either", [weak[0]!.live, weak[0]!.trend, nextUp(weak, gNow).length], [true, null, 0]);
 t("a single numbered episode this month starts a series; an old one is a one-off", [gamingSeries([gv(mc, "Bedwars Ep 1", "2026-09-20", null)], gNow).series.length, gamingSeries([gv(mc, "Bedwars Ep 1", "2026-05-20", null)], gNow).oneOffs], [1, 1]);
 t("the Ideas engine reads gaming titles' shapes", ["Minecraft Hardcore Ep 4", "I Survived 100 Days in Minecraft", "Minecraft But Every Block Is TNT Challenge", "Roblox Tower Of Hell Obby", "Minecraft Speedrun", "What If Gojo Joined The Avengers?"].map(formatOf),
   ["Series episode", "100 Days", "Ranked", "Obby / Escape", "Speedrun", "What If"]);
@@ -1543,6 +1545,11 @@ const gNone = renderUploads(shellFix, {
   channels: ["Specular Roblox"], links: [{ ...gLink, channel: "Specular Roblox", title: "Specular Roblox" }], uploads: [], cadence: [cadenceFor("Specular Roblox", [], gNow, 36_500)],
   range: 90, hasKey: false, category: "gaming", focus: { channel: "Specular Roblox", all: [], series: [], next: [] },
 }, gNow);
+const gWeak = renderUploads(shellFix, {
+  channels: [mc], links: [gLink], uploads: gUps, cadence: [cadenceFor(mc, gUps.map((u) => u.publishedAt), gNow, 3)],
+  range: 90, hasKey: false, category: "gaming", focus: { channel: mc, all: gUps, series: weak, next: [] },
+}, gNow);
+t("…and when every running series is weak, it says so rather than 'no series'", [gWeak.includes("Nothing to go on with"), gWeak.includes("No series running yet")], [true, false]);
 t("…and with no series yet says how one starts", [gNone.includes("No series running yet"), gNone.includes("held to its own usual pace once it has four uploads")], [true, true]);
 setOwnPaces(new Map());
 

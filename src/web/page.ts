@@ -4842,8 +4842,8 @@ function gamingNextPanel(f: ChannelFocus, now: Date): string {
     })
     .join("");
   return `<div class="panel ideas chlab">
-    <h2>What ${esc(f.channel)} could make next <span class="sub">— the next episode of each series worth going on with, best first; a fading series is left to the Series panel below</span></h2>
-    ${items ? `<ul class="isugg">${items}</ul>` : `<p class="hint">No series running yet. A title with an episode number — Ep 3, Part 2, Day 5, #4 — starts one.</p>`}
+    <h2>What ${esc(f.channel)} could make next <span class="sub">— the next episode of each series worth going on with, best first; a fading or weak one is left to the Series panel below</span></h2>
+    ${items ? `<ul class="isugg">${items}</ul>` : f.series?.some((s) => s.live) ? `<p class="hint">Nothing to go on with: every running series is fading or well below the channel's usual. See why in <a href="#series">Series</a> below.</p>` : `<p class="hint">No series running yet. A title with an episode number — Ep 3, Part 2, Day 5, #4 — starts one.</p>`}
   </div>`;
 }
 

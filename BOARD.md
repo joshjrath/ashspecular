@@ -507,7 +507,8 @@ shows, for each series, live first:
   least), with a nudge to bring it back if it did 1.2× the usual or better
 
 **What to make next** on each Gaming channel's page: the next episode of
-every running series that isn't fading, titled and ready ("Skyblock #8"),
+every running series that isn't fading or well below the channel's usual
+(0.7× or less), titled and ready ("Skyblock #8"),
 best first, then any resting series worth bringing back. Each says why:
 how its episodes do, whether it's growing, when it's due.
 

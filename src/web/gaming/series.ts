@@ -262,15 +262,16 @@ export interface NextUp {
 
 /**
  * What a channel could make next, best first: the next episode of every live
- * series that isn't fading, then any resting series that did well enough to
- * bring back. A fading series is left to the series panel, which says so.
+ * series that isn't fading or well below the channel's usual (0.7× or less),
+ * then any resting series that did well enough to bring back. The rest are
+ * left to the series panel, which says why.
  */
 export function nextUp(series: Series[], now: Date = new Date()): NextUp[] {
   const today = dayOf(now);
   const out: NextUp[] = [];
   for (const s of series) {
     const med = s.median ?? 1;
-    if (s.live && s.trend !== "fading") {
+    if (s.live && s.trend !== "fading" && !(s.median !== null && s.median <= 0.7)) {
       const why: string[] = [];
       if (s.median !== null) why.push(`its episodes do ${times(s.median)} the channel's usual`);
       if (s.trend === "rising") why.push(`up ${Math.round((s.change! - 1) * 100)}% lately`);
