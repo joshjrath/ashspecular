@@ -95,7 +95,7 @@ function line(r: StoredRecord): string {
   const when = r.voDue
     ? `VO ${renderIn(r.voDue, ORG_TZ, "ET")}`
     : r.deadline
-      ? `due ${renderIn(r.deadline, ORG_TZ, "ET")}`
+      ? `${r.kind === "review" ? "review by" : "due"} ${renderIn(r.deadline, ORG_TZ, "ET")}`
       : "no deadline";
   const derived = r.voSource === "calculated" ? ` *(${VO_BUFFER_DAYS} days before air)*` : "";
   const where = r.channel ? ` · ${r.channel}` : "";

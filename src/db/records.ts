@@ -75,7 +75,8 @@ export async function saveRecord(record: DerivedRecord, source: Source): Promise
        code = EXCLUDED.code, title = EXCLUDED.title, tag = EXCLUDED.tag,
        stage = EXCLUDED.stage, air_date = EXCLUDED.air_date,
        script_due = EXCLUDED.script_due, vo_due = EXCLUDED.vo_due,
-       vo_source = EXCLUDED.vo_source, deadline = EXCLUDED.deadline,
+       vo_source = EXCLUDED.vo_source,
+       deadline = CASE WHEN EXCLUDED.kind = 'review' THEN COALESCE(records.deadline, EXCLUDED.deadline) ELSE EXCLUDED.deadline END,
        word_count = EXCLUDED.word_count, assignee = EXCLUDED.assignee,
        version = EXCLUDED.version, links = EXCLUDED.links, brief = EXCLUDED.brief,
        note = EXCLUDED.note, parsed_by = EXCLUDED.parsed_by,
@@ -474,9 +475,23 @@ export async function listVoQueue(limit = 50): Promise<StoredRecord[]> {
 }
 
 /** Everything carrying a Frame.io link — the thing that used to live in DMs. */
+/**
+ * Open revisions — new cuts to review, soonest deadline first. Their own
+ * thing: not in the category columns or counts, and never a VO.
+ */
 export async function listReviews(limit = 50): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${LIVE}
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND kind = 'review'
+     ORDER BY ${DUE} ASC NULLS LAST, created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map(hydrate);
+}
+
+/** Other open work that carries a Frame.io link — assignments sent with a cut to watch. */
+export async function listFrameioWork(limit = 50): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND kind <> 'review'
        AND links @> '[{"kind":"frameio"}]'::jsonb
      ORDER BY created_at DESC LIMIT $1`,
     [limit],
@@ -496,7 +511,7 @@ export async function listByChannel(channel: string, limit = 100): Promise<Store
 
 export async function listByCategory(category: string, limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE category = $1 AND status = 'open' AND ${LIVE} ORDER BY created_at DESC LIMIT $2`,
+    `${SELECT} WHERE category = $1 AND status = 'open' AND ${LIVE} AND kind <> 'review' ORDER BY created_at DESC LIMIT $2`,
     [category, limit],
   );
   return rows.map(hydrate);
@@ -510,7 +525,7 @@ export async function getRecord(id: number): Promise<StoredRecord | null> {
 /** Open count per category, for the four tiles across the top. */
 export async function categoryCounts(): Promise<Record<string, number>> {
   const { rows } = await pool.query<{ category: string; n: string }>(
-    `SELECT category, COUNT(*) AS n FROM records WHERE status = 'open' AND ${LIVE} GROUP BY category`,
+    `SELECT category, COUNT(*) AS n FROM records WHERE status = 'open' AND ${LIVE} AND kind <> 'review' GROUP BY category`,
   );
   return Object.fromEntries(rows.map((r) => [r.category, Number(r.n)]));
 }

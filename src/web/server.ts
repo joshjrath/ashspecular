@@ -16,6 +16,7 @@ import {
   listBatchesOn,
   search,
   listReviews,
+  listFrameioWork,
   openByCategory,
   setStatus,
   stats,
@@ -92,6 +93,7 @@ import {
   renderEmptyState,
   renderList,
   renderPaused,
+  renderRevisions,
   renderSettings,
   renderLogin,
   renderRecurring,
@@ -272,14 +274,19 @@ export async function startWeb(): Promise<void> {
       listOffShifted(),
     ]);
 
+    // Revisions get their own section; the columns are the work to voice.
+    const revisions = [...grouped.values()].flat().filter((r) => r.kind === "review");
+    const due = (r: StoredRecord) => (r.deadline ?? r.voDue ?? r.scriptDue)?.getTime() ?? Infinity;
+    revisions.sort((a, b) => Number(Boolean(b.pinnedAt)) - Number(Boolean(a.pinnedAt)) || due(a) - due(b));
+    const columns = new Map([...grouped].map(([k, list]) => [k, list.filter((r) => r.kind !== "review")] as const));
     return reply
       .type("text/html")
       .send(
         renderDashboard(s, {
-          stats: counters, byDay, grouped, channels, notices, seen: noticesSeen(request),
+          stats: counters, byDay, grouped: columns, channels, notices, seen: noticesSeen(request), revisions,
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
           order: cookieList("dash_order"),
-          hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels"),
+          hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels" || x === "revisions"),
         }),
       );
   });
@@ -481,12 +488,8 @@ export async function startWeb(): Promise<void> {
   });
 
   app.get("/revisions", async (request, reply) => {
-    const [s, list] = await Promise.all([shell("reviews"), listReviews(100)]);
-    return reply
-      .type("text/html")
-      .send(
-        renderList(s, "Revisions", "No Frame.io links yet. Forward one into the intake channel.", list, listSort(request, reply)),
-      );
+    const [s, list, others] = await Promise.all([shell("reviews"), listReviews(200), listFrameioWork(100)]);
+    return reply.type("text/html").send(renderRevisions(s, list, others, listSort(request, reply)));
   });
 
   app.get("/queue", async (request, reply) => {
@@ -980,7 +983,7 @@ export async function startWeb(): Promise<void> {
       return reply.redirect(`/r/${id}`);
     }
     const result = await classify({ content: current.raw });
-    const fresh = derive(result.extraction, result.raw);
+    const fresh = derive(result.extraction, result.raw, current.createdAt);
     if (!fresh.channel && current.channel) {
       fresh.channel = current.channel;
       fresh.category = current.category;
@@ -1155,7 +1158,7 @@ export async function startWeb(): Promise<void> {
     const show = new Set(list(request.body?.show));
     const dash = new Set(list(request.body?.dash));
     const railHide = RAIL_ITEMS.map((i) => i.key).filter((k) => !show.has(k) && (k !== "scripts" || config.scriptsUrl || config.scriptsUrlRaw));
-    const dashHide = ["unsorted", "channels"].filter((k) => !dash.has(k));
+    const dashHide = ["revisions", "unsorted", "channels"].filter((k) => !dash.has(k));
     // Not httpOnly: the dashboard's own switches write dash_hide from the page.
     const keep = { path: "/", sameSite: "lax" as const, maxAge: 60 * 60 * 24 * 365, httpOnly: false };
     reply.setCookie("rail_hide", railHide.join(".") || "none", keep);

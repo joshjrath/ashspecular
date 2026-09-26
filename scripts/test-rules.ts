@@ -47,7 +47,7 @@ import { HERO_BY_ID, WORLD_BY_ID, HEROES, WORLDS, POWERS } from "../src/web/stor
 import { DICE_HEROES, DICE_POWERS, DICE_SHAPES, DICE_TARGETS, DICE_WORLDS } from "../src/web/stories/dice.js";
 import { SHAPES, applyAdditions, currentAdditions } from "../src/web/stories/added.js";
 import { diceCard, diceLeft, rollDice } from "../src/web/stories/roll.js";
-import { renderStoryLab, renderPaused, renderSettings, RAIL_ITEMS } from "../src/web/page.js";
+import { renderStoryLab, renderPaused, renderSettings, renderRevisions, RAIL_ITEMS } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
 import { cascadeText, planCascade } from "../src/web/cascade.js";
 import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels } from "../src/jobs/avatars.js";
@@ -1159,6 +1159,30 @@ const labWithDice = renderStoryLab(shellFix, {
 t("the Story Lab page has the dice, an Add, and what's been added", [labWithDice.includes('id="dice"'), labWithDice.includes('action="/story-lab/add"'), labWithDice.includes('action="/story-lab/remove"')], [true, true, true]);
 t("…escaped", labWithDice.includes("My <Hero> Academia"), false);
 t("…and its scripts compile", [...labWithDice.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+
+// ── revisions ─────────────────────────────────────────────────────────────
+section("Revisions — their own card, their own deadline, their own place");
+const filed = new Date("2026-09-26T14:00:00Z");
+const revExtraction = { ...base, kind: "review", stage: "review", version: 3, vo_due: "2026-09-17T23:59:00-04:00", script_due: null } as unknown as Extraction;
+const revDerived = derive(revExtraction, "https://app.frame.io/reviews/abc v3", filed);
+t("a revision never gets a VO deadline or an air date", [revDerived.voDue, revDerived.voSource, revDerived.airDate], [null, "none", null]);
+t("…it's due for review twelve hours after it came in", revDerived.deadline?.toISOString(), "2026-09-27T02:00:00.000Z");
+t("…unless its message gives a deadline", derive({ ...revExtraction, deadline: "2026-09-26T18:00:00-04:00" } as Extraction, "", filed).deadline?.toISOString(), "2026-09-26T22:00:00.000Z");
+t("an assignment still gets its VO from the air date", derive(base, "").voSource, "calculated");
+const revRec = { ...plainRec, id: 40, kind: "review", version: 3, voDue: null, airDate: null, createdAt: filed,
+  deadline: new Date(filed.getTime() + 12 * 3_600_000), links: [{ kind: "frameio", url: "https://f.io/x", label: "" }] } as unknown as typeof plainRec;
+const revCard = renderList(shellFix, "Revisions", "", [revRec]);
+t("a revision is its own kind of card", [/class="row revision"/.test(revCard), revCard.includes('class="rev-tag"'), revCard.includes("Revision v3")], [true, true, true]);
+t("…its pill says Review, not VO", [/<b>Review<\/b>/.test(revCard), /<b>VO<\/b>/.test(revCard)], [true, false]);
+t("…its tick says reviewed, and there's no script to wait on", [revCard.includes("Reviewed — clear it"), revCard.includes("/r/40/noscript")], [true, false]);
+const dashRev = renderDashboard({ ...shellFix, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [], grouped: new Map([["stories", [plainRec]]]), channels: {}, revisions: [revRec],
+});
+t("the dashboard gives revisions their own section", [dashRev.includes('class="panel revpanel dashpart" data-part="revisions"'), dashRev.includes("/r/40\"")], [true, true]);
+t("…switchable like Unsorted and Channels", dashRev.includes('data-part="revisions" checked'), true);
+const revPage = renderRevisions(shellFix, [revRec], [plainRec]);
+t("the Revisions page lists revisions, then other Frame.io work", [revPage.indexOf("/r/40\"") < revPage.indexOf("Other work with a Frame.io link"), revPage.includes("/r/8\"")], [true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

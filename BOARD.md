@@ -111,9 +111,16 @@ incomplete work; press LATE for everything past its time.
 worked out rather than read is marked *air date − 6 days* in orange, so a
 derived time never reads as a stated one.
 
-**Revisions** — everything carrying a Frame.io link, including f.io short
-links. This is the thing that used
-to mean scrolling back through DMs.
+**Revisions** — every Frame.io revision posted into the intake channel,
+with its own card and its own place: a blue *Revision v3* tag, the Frame.io
+link as a button, and a **Review** pill instead of a VO one. A revision is a
+cut to look at, not a video to voice, so it never gets a VO deadline or an
+air date; it's due for review **12 hours after it comes in** (a deadline in
+its message wins; `REVIEW_HOURS` changes the 12). Revisions sit in their own
+section on the dashboard above the columns — switch it off under *Also show*
+like Unsorted and Channels — and on the Revisions page, soonest first, with
+other work that carries a Frame.io link listed below them. They're not in
+the category columns or counts. ✓ marks one reviewed.
 
 **Everything else** — open records that aren't in either list above.
 

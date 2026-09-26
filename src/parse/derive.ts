@@ -12,6 +12,9 @@ export const VO_BUFFER_DAYS = Number(process.env.VO_BUFFER_DAYS ?? 6);
 /** Time of day a derived deadline lands on, matching the 11:59 PM ET convention. */
 export const DEADLINE_TIME = process.env.DEADLINE_TIME?.trim() || "23:59";
 
+/** A revision that comes in without a deadline is due for review this many hours after it's filed. */
+export const REVIEW_HOURS = Number(process.env.REVIEW_HOURS ?? 12);
+
 // ── timezone helpers ──────────────────────────────────────────────────────
 
 /** UTC offset in effect in `zone` at `at`, e.g. "-04:00". */
@@ -147,8 +150,12 @@ export interface DerivedRecord {
  * Applies the rules that are ours, not the model's: channel matching, category
  * inference, the VO buffer, and link reconciliation. Keeping these here rather
  * than in the prompt means they are testable and never hallucinated.
+ *
+ * A revision is a new cut to look at, not a video to voice: it never gets a
+ * VO deadline or an air date (the video it belongs to has those), and unless
+ * the message states one it's due for review REVIEW_HOURS after `filedAt`.
  */
-export function derive(extraction: Extraction, raw: string): DerivedRecord {
+export function derive(extraction: Extraction, raw: string, filedAt: Date = new Date()): DerivedRecord {
   const warnings: string[] = [];
 
   // Channel drives category — a named channel is more trustworthy than the
@@ -168,13 +175,14 @@ export function derive(extraction: Extraction, raw: string): DerivedRecord {
     warnings.push(`channel "${extraction.channel}" is not in the catalog`);
   }
 
-  const airDate = normaliseDate(extraction.air_date);
-  if (extraction.air_date && !airDate) {
+  const revision = extraction.kind === "review";
+  const airDate = revision ? null : normaliseDate(extraction.air_date);
+  if (extraction.air_date && !airDate && !revision) {
     warnings.push(`could not read air date "${extraction.air_date}"`);
   }
 
-  const scriptDue = parseTimestamp(extraction.script_due);
-  const statedVo = parseTimestamp(extraction.vo_due);
+  const scriptDue = revision ? null : parseTimestamp(extraction.script_due);
+  const statedVo = revision ? null : parseTimestamp(extraction.vo_due);
 
   let voDue = statedVo;
   let voSource: VoSource = statedVo ? "stated" : "none";
@@ -202,7 +210,9 @@ export function derive(extraction: Extraction, raw: string): DerivedRecord {
     scriptDue,
     voDue,
     voSource,
-    deadline: parseTimestamp(extraction.deadline),
+    deadline:
+      parseTimestamp(extraction.deadline) ??
+      (revision ? new Date(filedAt.getTime() + REVIEW_HOURS * 3_600_000) : null),
     version: extraction.version,
     links: reconcileLinks(raw, extraction.links),
     brief: extraction.brief?.trim() || null,

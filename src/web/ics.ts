@@ -147,7 +147,7 @@ export function buildIcs(
     for (const r of due.filter(keep)) {
       const at = r.voDue ?? r.deadline ?? r.scriptDue;
       if (!at) continue;
-      const what = r.voDue ? "VO" : r.deadline ? "Due" : "Script";
+      const what = r.kind === "review" ? "Review" : r.voDue ? "VO" : r.deadline ? "Due" : "Script";
       const done = r.status === "done" ? "✓ " : "";
       event(`due-${r.id}`, [
         `DTSTART:${stamp(new Date(at.getTime() - 30 * 60_000))}`,

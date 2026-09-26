@@ -11,7 +11,7 @@
  * belongs to.
  */
 import { CATEGORIES, CHANNELS, channelInk, contrastRatio, isLongFormRecurring, type CategoryId } from "../catalog.js";
-import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
+import { ORG_TZ, REVIEW_HOURS, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
@@ -771,6 +771,25 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 /* No script: the whole card turns magenta, so a card waiting on its script
    reads at a glance — a colour no other state uses (pinned is yellow, late
    red, due-soon orange, cleared green, Frame.io blue). */
+.revpanel { margin: 14px 0 0; padding: 18px 20px 16px; }
+.revpanel .revhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.revpanel h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.revpanel h2 svg { width: 13px; height: 13px; color: #8E9BF7; }
+.revpanel .sub { color: var(--ink3); font-size: 12.5px; }
+.revpanel .sub .late { color: #FF9C94; }
+.revpanel .seeall { margin-left: auto; padding: 0; }
+.revpanel .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 6px 12px; }
+/* Each cell is its own container, so a card stacks like the columns' do. */
+.revcell { container-type: inline-size; min-width: 0; }
+@media (max-width: 760px) { .revpanel .rows { grid-template-columns: minmax(0, 1fr); } }
+.row.revision { background: rgba(91,108,240,.09); box-shadow: inset 3px 0 0 #7D8AF5; }
+.row.revision:hover { background: rgba(91,108,240,.14); }
+.rev-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 6px;
+  background: rgba(91,108,240,.24); color: #C9CFFB; font-weight: 700; font-size: 11px; white-space: nowrap; }
+.rev-tag svg { width: 9px; height: 9px; }
+.row.revision .meta .lnk.frameio { background: #5B6CF0; color: #fff; }
+.row.revision .meta .lnk.frameio:hover { background: #6E7DF5; }
+.dcard.revision { box-shadow: inset 3px 0 0 #7D8AF5; }
 .row.noscript { background: rgba(226,79,203,.10); box-shadow: inset 3px 0 0 #E24FCB; }
 .row.noscript:hover { background: rgba(226,79,203,.15); }
 .noscript-tag { padding: 1px 8px; border-radius: 6px; background: rgba(226,79,203,.2); color: #F7B8EC; font-weight: 700; font-size: 11px; }
@@ -1910,8 +1929,10 @@ function row(r: StoredRecord): string {
   if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
   if (r.pausedAt) meta.unshift(`<span class="paused-tag" title="Paused ${esc(usDate(dayOf(r.pausedAt)))}">Paused</span>`);
   if (r.offFrom && r.status === "open" && !r.pausedAt) meta.unshift(offTag(r));
+  // A revision says so first: it's a cut to review, not a video to voice.
+  if (r.kind === "review") meta.unshift(`<span class="rev-tag">${REV_ICON}Revision${r.version ? ` v${r.version}` : ""}</span>`);
 
-  return `<div class="row${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
+  return `<div class="row${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}${r.pausedAt ? " paused" : ""}" style="--c:${c}">
     <div class="title"><span class="swatch"></span><a href="/r/${r.id}" title="${esc(displayTitle(r))}">${
       r.batchNo && r.channel ? `<i class="chdot" style="--ch:${channelColour(r.channel)}"></i>` : ""
     }${esc(title)}</a>${pinControl(r)}</div>
@@ -1920,6 +1941,9 @@ function row(r: StoredRecord): string {
     ${actions(r)}
   </div>`;
 }
+
+/** A play mark, as the bell's revisions wear it. */
+const REV_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L9.8 6z" fill="currentColor"/></svg>`;
 
 const MOON_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/></svg>`;
 
@@ -2002,7 +2026,7 @@ function duePill(r: StoredRecord): string {
   if (r.pausedAt)
     return `<span class="due paused" title="${esc(at ? `Was due ${renderIn(at, ORG_TZ, "ET")} — back when it's resumed` : "No deadline")}"><b>Paused</b>no deadline</span>`;
   if (!at) return `<span class="due none">no deadline</span>`;
-  const label = r.voDue ? "VO" : r.deadline ? "Due" : "Script";
+  const label = r.kind === "review" ? "Review" : r.voDue ? "VO" : r.deadline ? "Due" : "Script";
   const ms = at.getTime() - Date.now();
   const open = r.status === "open";
   const state = !open ? "" : ms < 0 ? " late" : ms < 86_400_000 ? " soon" : "";
@@ -2016,6 +2040,9 @@ function duePill(r: StoredRecord): string {
     `${label} ${renderIn(at, ORG_TZ, "ET")}`,
     renderIn(at, TEAM_TZ, "IST"),
     r.voDue && r.voSource === "calculated" ? `set ${VO_BUFFER_DAYS} days before air` : "",
+    r.kind === "review" && r.deadline && Math.abs(r.deadline.getTime() - r.createdAt.getTime() - REVIEW_HOURS * 3_600_000) < 60_000
+      ? `${REVIEW_HOURS} hours after it came in`
+      : "",
     r.offFrom ? `was ${renderIn(r.offFrom, ORG_TZ, "ET")}, a day off` : "",
   ]
     .filter(Boolean)
@@ -2074,14 +2101,15 @@ function actions(r: StoredRecord): string {
 
   if (r.status === "removed") return `<div class="acts">${button("open", "Restore", "↺", "restore")}</div>`;
 
-  const top = `${r.status === "done" ? button("open", "Reopen", "✓", "", true) : button("done", "Clear", "✓")}
+  const revision = r.kind === "review";
+  const top = `${r.status === "done" ? button("open", "Reopen", "✓", "", true) : button("done", revision ? "Reviewed — clear it" : "Clear", "✓")}
     ${button("remove", "Remove — doesn't count as cleared", "×", "remove")}`;
   if (r.status === "done") return `<div class="acts">${top}</div>`;
   const pause = r.pausedAt
     ? button("resume", "Resume — its deadline comes back", PLAY_ICON, "resume", true)
     : button("pause", "Pause — off every deadline, late list and the calendar until resumed", PAUSE_ICON, "pause");
-  // A daily batch has no script to wait on.
-  const noScript = r.batchNo
+  // A daily batch has no script to wait on, and neither does a revision.
+  const noScript = r.batchNo || revision
     ? ""
     : r.noScriptAt
       ? button("script", "Script arrived — clear the no-script mark", NOSCRIPT_ICON, "noscript", true)
@@ -2282,6 +2310,31 @@ function group(id: string, list: StoredRecord[], sub = ""): string {
   </div>`;
 }
 
+/**
+ * Revisions on the dashboard: their own section, each due for review
+ * REVIEW_HOURS after it came in unless its message said otherwise, soonest
+ * first. The columns below are the work to voice.
+ */
+function revisionsSection(list: StoredRecord[], hidden: boolean): string {
+  const late = list.filter((r) => {
+    const at = r.deadline ?? r.voDue ?? r.scriptDue;
+    return at !== null && at.getTime() < Date.now();
+  }).length;
+  const shown = list.slice(0, 8);
+  return `<section class="panel revpanel dashpart" data-part="revisions"${hidden ? " hidden" : ""}>
+    <div class="revhead">
+      <h2>${REV_ICON}Revisions</h2>
+      <span class="sub">${
+        list.length
+          ? `${list.length} to review${late ? ` · <b class="late">${late} past ${late === 1 ? "its" : "their"} time</b>` : ""} · each due ${REVIEW_HOURS} hours after it comes in`
+          : `nothing to review · each new one is due ${REVIEW_HOURS} hours after it comes in`
+      }</span>
+      ${list.length > shown.length ? `<a class="seeall" href="/revisions">See all ${list.length} →</a>` : ""}
+    </div>
+    ${shown.length ? `<div class="rows">${shown.map((r) => `<div class="revcell">${row(r)}</div>`).join("")}</div>` : ""}
+  </section>`;
+}
+
 /** The dashboard's columns until you pick your own. */
 export const DEFAULT_DASH_COLS = ["stories", "gaming", "bits"];
 
@@ -2311,6 +2364,8 @@ export function renderDashboard(
     hideParts?: string[];
     /** Open work a day off brought forward. */
     shifted?: StoredRecord[];
+    /** Open revisions, soonest review first — their own section, never in the columns. */
+    revisions?: StoredRecord[];
   },
 ): string {
   const tiles = [
@@ -2373,6 +2428,7 @@ export function renderDashboard(
       <p class="colhint">Drag a column by its ⠿, or use the arrows. First is leftmost.</p>
       <div class="colparts">
         <b>Also show</b>
+        <label><input type="checkbox" data-part="revisions"${hideParts.has("revisions") ? "" : " checked"}> Revisions</label>
         <label><input type="checkbox" data-part="unsorted"${hideParts.has("unsorted") ? "" : " checked"}> Unsorted</label>
         <label><input type="checkbox" data-part="channels"${hideParts.has("channels") ? "" : " checked"}> Channels</label>
       </div>
@@ -2409,6 +2465,8 @@ export function renderDashboard(
         ${todayLines}
       </div>
     </div>
+
+    ${revisionsSection(data.revisions ?? [], hideParts.has("revisions"))}
 
     <div class="colbar">
       <h2 class="section-title">Open work</h2>
@@ -4620,7 +4678,7 @@ export function renderWeek(
 function dayCard(r: StoredRecord, mode: CalendarMode): string {
   const ch = r.channel ? channelColour(r.channel) : null;
   const at = mode === "deadlines" ? r.voDue ?? r.deadline ?? r.scriptDue : r.voDue;
-  const label = r.voDue ? "VO" : r.deadline ? "due" : "script";
+  const label = r.kind === "review" ? "review" : r.voDue ? "VO" : r.deadline ? "due" : "script";
   const over = at && r.status === "open" && at.getTime() < Date.now();
 
   const bits: string[] = [];
@@ -4632,7 +4690,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
 
   if (r.offFrom && r.status === "open" && mode === "deadlines") bits.push(offTag(r));
 
-  return `<article class="dcard${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
+  return `<article class="dcard${r.kind === "review" ? " revision" : ""}${r.status === "done" ? " cleared" : ""}${r.pinnedAt ? " pinned" : ""}${r.noScriptAt && r.status === "open" ? " noscript" : ""}" draggable="true" data-id="${r.id}"
       style="--c:${colourOf(r.category)}">
     <div class="top">
       <span class="swatch" title="${esc(LABELS[r.category] ?? "unsorted")}"></span>
@@ -5210,6 +5268,7 @@ export function renderSettings(
       <section class="panel setgroup">
         <h2>Dashboard</h2>
         <div class="setrow">
+          <label><input type="checkbox" name="dash" value="revisions"${dash.has("revisions") ? "" : " checked"}> Revisions</label>
           <label><input type="checkbox" name="dash" value="unsorted"${dash.has("unsorted") ? "" : " checked"}> Unsorted list</label>
           <label><input type="checkbox" name="dash" value="channels"${dash.has("channels") ? "" : " checked"}> Channels list</label>
         </div>
@@ -5268,6 +5327,31 @@ function colourSettings(rows: ColourRow[], saved: string): string {
       ${saved ? `<span class="saved" role="status">${esc(saved)}</span>` : ""}
     </div>
   </form>`;
+}
+
+/**
+ * Revisions: every cut waiting for review, soonest first, each due
+ * REVIEW_HOURS after it came in unless its message said otherwise. Below,
+ * other open work that carries a Frame.io link, so a link never goes missing.
+ */
+export function renderRevisions(shell: Shell, revisions: StoredRecord[], others: StoredRecord[], sort?: SortState): string {
+  const shown = sort ? sortRecords(revisions, sort.key, sort.dir) : revisions;
+  return layout(
+    "Revisions",
+    shell,
+    `${pageHeader("Revisions")}
+    <p class="labsub">Each revision is due for review ${REVIEW_HOURS} hours after it comes in, unless its message gives a
+      deadline. ✓ marks it reviewed. Revisions have their own place — here and on the dashboard — and never carry a VO deadline.</p>
+    ${revisions.length > 1 ? sortBar(sort) : ""}
+    ${rows(shown, "No revisions waiting. Forward a Frame.io link into the intake channel.")}
+    ${
+      others.length
+        ? `<h2 class="section-title" style="margin-top:28px">Other work with a Frame.io link</h2>
+           <p class="hint">Assignments sent with a cut to watch — they stay with their category's work.</p>
+           ${rows(others, "")}`
+        : ""
+    }`,
+  );
 }
 
 /** Everything paused — out of the workflow with no deadline — and the way back. */

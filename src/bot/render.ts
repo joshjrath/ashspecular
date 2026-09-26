@@ -65,7 +65,8 @@ export function recordEmbed(record: DerivedRecord): EmbedBuilder {
 
   if (record.deadline) {
     const { org, team } = renderBothZones(record.deadline);
-    fields.push({ name: "Deadline", value: `${org}\n${team}` });
+    // A revision's deadline is for reviewing the cut — never a VO.
+    fields.push({ name: record.kind === "review" ? "Review by" : "Deadline", value: `${org}\n${team}` });
   }
 
   if (record.links.length) {
