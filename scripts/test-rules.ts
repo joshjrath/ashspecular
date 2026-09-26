@@ -27,7 +27,7 @@ import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
 import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed, readShortsFeed } from "../src/jobs/youtube.js";
-import { cadenceFor, dailyFor } from "../src/web/cadence.js";
+import { cadenceFor, dailyFor, usualGap } from "../src/web/cadence.js";
 import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from "../src/web/ideas.js";
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
@@ -35,7 +35,8 @@ import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf, typicalSh
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
 import { batchDay as ownDay } from "../src/jobs/batches.js";
-import { everyFor, describeTarget } from "../src/web/targets.js";
+import { everyFor, describeTarget, isOwnPace, ownPaceChannels, setOwnPaces } from "../src/web/targets.js";
+import { episodeOf, gamingSeries, nextUp, seriesKey, type SeriesVideo } from "../src/web/gaming/series.js";
 import { isLongFormRecurring } from "../src/catalog.js";
 import { boardOpenings, corpus, setBoardScripts, splitScript } from "../src/web/stories/corpus.js";
 import { docId, readDoc } from "../src/web/gdoc.js";
@@ -1468,6 +1469,82 @@ const longRev = { ...revRec, id: 42, title: "A Much Longer Revision Title That W
 const colDash = renderDashboard({ ...shellFix, active: "dashboard" }, { stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never, byDay: [], grouped: new Map(), channels: {}, revisions: [shortRev, longRev] });
 t("revisions sit in the top row, between the chart and today", /class="split withrev"[\s\S]*?Work due by day[\s\S]*?class="panel revpanel dashpart"[\s\S]*?class="panel today"/.test(colDash), true);
 t("…each card the same shape: title, chips, then the time and the buttons", (colDash.match(/<article class="revmini[^"]*">\s*<a class="rt"[\s\S]*?<div class="rchips">[\s\S]*?<div class="rfoot"><span class="rwhen/g) ?? []).length, 2);
+
+section("Gaming — series, episodes and each channel's own pace");
+const ep = (title: string) => {
+  const m = episodeOf(title);
+  return m ? [m.series, m.episode] : null;
+};
+t("an episode number after the series", ep("Minecraft Hardcore Ep 4: The Nether"), ["Minecraft Hardcore", 4]);
+t("…before it, across a bar", ep("Episode 4 | Minecraft Hardcore"), ["Minecraft Hardcore", 4]);
+t("…in brackets after a title of its own", ep("I Built a Castle (Minecraft Hardcore #3)"), ["Minecraft Hardcore", 3]);
+t("…as a day, a part or a season", [ep("Day 5 of Roblox Doors"), ep("Roblox Doors Part 2"), ep("SMP S2 E5: Betrayal")], [["Roblox Doors", 5], ["Roblox Doors", 2], ["SMP Season 2", 5]]);
+t("a count isn't an episode, nor is a #1 fan", [ep("I Survived 100 Days in Minecraft"), ep("Roblox #1 Fan Reacts"), ep("Top 10 Minecraft Seeds")], [null, null, null]);
+t("the same series in any word order", seriesKey("Hardcore Minecraft") === seriesKey("Minecraft Hardcore"), true);
+
+const gAt = (d: string) => new Date(`${d}T15:00:00-04:00`);
+const threeDays = ["2026-08-20", "2026-08-23", "2026-08-26", "2026-08-29", "2026-09-01", "2026-09-04"].map(gAt);
+t("a channel's own pace is its usual gap over 90 days", usualGap(threeDays, gAt("2026-09-06")), 3);
+t("…with fewer than three gaps there's none to go on", usualGap(threeDays.slice(0, 3), gAt("2026-09-06")), null);
+t("…and uploads older than 90 days don't count", usualGap(threeDays, gAt("2027-01-01")), null);
+t("Gaming channels are held to their own pace", [ownPaceChannels(), isOwnPace("Specular FNAF"), isOwnPace("Specular Gaming Bits")], [["Specular Minecraft", "Specular Roblox"], false, false]);
+setOwnPaces(new Map());
+t("…with no target until it's read", everyFor("Specular Minecraft"), null);
+setOwnPaces(new Map([["Specular Minecraft", 3], ["Specular Roblox", null]]));
+t("…then its usual gap, like a Stories channel's four days", [everyFor("Specular Minecraft"), everyFor("Specular Roblox"), everyFor("Specular FNAF")], [3, null, 4]);
+t("…so a gap past it is late, and an empty day is Nothing assigned", [cadenceFor("Specular Minecraft", [gAt("2026-09-20")], gAt("2026-09-25"), everyFor("Specular Minecraft")!).state, channelGaps("Specular Minecraft", everyFor("Specular Minecraft")!, ["2026-09-24"], "2026-09-26").map((g) => g.date)], ["behind", ["2026-09-27", "2026-09-30", "2026-10-03"]]);
+t("Gaming says what it's held to", describeTarget("gaming").includes("its own usual gap"), true);
+
+const gv = (channel: string, title: string, day: string, multiple: number | null): SeriesVideo =>
+  ({ title, channel, publishedAt: gAt(day), url: `https://youtu.be/${encodeURIComponent(title)}`, views: 1000, multiple });
+const gNow = gAt("2026-09-26");
+const mc = "Specular Minecraft";
+const gVideos = [
+  // A series losing its audience: 2× down to under half.
+  ...[2.1, 1.9, 2.0, 1.6, 0.8, 0.6, 0.5].map((m, i) => gv(mc, `Minecraft Hardcore Ep ${i + 1}`, shiftDate("2026-09-06", i * 3), m)),
+  // One finding it: each episode better than the last.
+  ...[0.7, 0.8, 0.9, 1.4, 1.6, 1.8].map((m, i) => gv(mc, `Skyblock #${i + 1}`, shiftDate("2026-09-10", i * 3), m)),
+  // One that did well and stopped two months ago.
+  ...[1.6, 1.5, 1.8].map((m, i) => gv(mc, `Day ${i + 1} of Roblox Doors`, shiftDate("2026-07-01", i * 4), m)),
+  gv(mc, "I Survived 100 Days in Minecraft", "2026-09-20", 1.1),
+  gv(mc, "Top 10 Minecraft Seeds", "2026-09-18", 0.9),
+];
+const gs = gamingSeries(gVideos, gNow);
+const byName = new Map(gs.series.map((x) => [x.name, x]));
+t("every numbered series, the one-offs counted apart", [gs.series.length, gs.oneOffs, gs.episodes], [3, 2, 16]);
+t("live first, latest first", gs.series.map((x) => [x.name, x.live]), [["Skyblock", true], ["Minecraft Hardcore", true], ["Roblox Doors", false]]);
+t("a series whose latest episodes draw less is fading", [byName.get("Minecraft Hardcore")!.trend, byName.get("Minecraft Hardcore")!.advice.startsWith("The latest episodes are drawing")], ["fading", true]);
+t("…one whose latest draw more is growing", byName.get("Skyblock")!.trend, "rising");
+t("the next episode, its title and when it's due at its pace", [byName.get("Skyblock")!.next, byName.get("Skyblock")!.draft, byName.get("Skyblock")!.gap, byName.get("Skyblock")!.nextDue], [7, "Skyblock #7", 3, "2026-09-28"]);
+t("a series gone quiet is resting, and says when it was strong", [byName.get("Roblox Doors")!.live, byName.get("Roblox Doors")!.advice.includes("worth bringing back with Day 4")], [false, true]);
+const nu = nextUp(gs.series, gNow);
+t("what to make next: the growing one first, the resting hit after, the fading one left out", nu.map((n) => n.title), ["Skyblock #7", "Roblox Doors Day 4"]);
+t("a single numbered episode this month starts a series; an old one is a one-off", [gamingSeries([gv(mc, "Bedwars Ep 1", "2026-09-20", null)], gNow).series.length, gamingSeries([gv(mc, "Bedwars Ep 1", "2026-05-20", null)], gNow).oneOffs], [1, 1]);
+t("the Ideas engine reads gaming titles' shapes", ["Minecraft Hardcore Ep 4", "I Survived 100 Days in Minecraft", "Minecraft But Every Block Is TNT Challenge", "Roblox Tower Of Hell Obby", "Minecraft Speedrun", "What If Gojo Joined The Avengers?"].map(formatOf),
+  ["Series episode", "100 Days", "Ranked", "Obby / Escape", "Speedrun", "What If"]);
+
+const gLink = { channel: mc, input: "@x", youtubeId: "UC0000000000000000000009", title: mc, error: null, checkedAt: new Date() };
+const gUps = gVideos.map((v, i) => ({ videoId: `g${i}`, channel: v.channel, title: v.title, publishedAt: v.publishedAt, url: v.url, views: v.views }));
+const gCat = renderUploads(shellFix, {
+  channels: [mc, "Specular Roblox"], links: [gLink], uploads: gUps,
+  cadence: [cadenceFor(mc, gUps.map((u) => u.publishedAt), gNow, 3), cadenceFor("Specular Roblox", [], gNow, 36_500)],
+  range: 90, hasKey: false, category: "gaming", series: gs,
+}, gNow);
+t("the Gaming tab: its pace and its series", [gCat.includes("each channel's own usual pace"), gCat.includes('id="series"'), (gCat.match(/class="srow[ "]/g) ?? []).length, gCat.includes("▼ Fading"), gCat.includes("▲ Growing"), gCat.includes("Resting")], [true, true, 3, true, true, true]);
+t("…each series links its channel's own page, and its episodes carry their numbers", [gCat.includes('href="/uploads/channel/minecraft"'), gCat.includes("Ep 7 · Minecraft Hardcore Ep 7")], [true, true]);
+t("…and its scripts compile", [...gCat.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+const gCh = renderUploads(shellFix, {
+  channels: [mc], links: [gLink], uploads: gUps, cadence: [cadenceFor(mc, gUps.map((u) => u.publishedAt), gNow, 3)],
+  range: 90, hasKey: false, category: "gaming", focus: { channel: mc, all: gUps, series: gs.series, next: nu },
+}, gNow);
+t("a Gaming channel's page: what it could make next, and its series", [gCh.includes("What Specular Minecraft could make next"), gCh.includes("<b>Skyblock #7</b>"), gCh.includes("<b>Roblox Doors Day 4</b>") && gCh.includes("Bring it back"), gCh.includes('id="series"')], [true, true, true, true]);
+t("…held to its own usual pace, and says so", gCh.includes("every 3 days — its own usual pace over 90 days"), true);
+const gNone = renderUploads(shellFix, {
+  channels: ["Specular Roblox"], links: [{ ...gLink, channel: "Specular Roblox", title: "Specular Roblox" }], uploads: [], cadence: [cadenceFor("Specular Roblox", [], gNow, 36_500)],
+  range: 90, hasKey: false, category: "gaming", focus: { channel: "Specular Roblox", all: [], series: [], next: [] },
+}, gNow);
+t("…and with no series yet says how one starts", [gNone.includes("No series running yet"), gNone.includes("held to its own usual pace once it has four uploads")], [true, true]);
+setOwnPaces(new Map());
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

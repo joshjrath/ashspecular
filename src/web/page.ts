@@ -16,7 +16,8 @@ import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
 import { compactViews, formatMultiple, type Performance } from "./performance.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor, isOwnPace } from "./targets.js";
+import type { NextUp, Series } from "./gaming/series.js";
 import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
@@ -1409,6 +1410,35 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .chlab .isugg b { font-family: var(--display); font-size: 15px; letter-spacing: -0.02em; }
 .chlab .lf { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #B5BEF7; }
 .chlab .why { color: var(--ink3); font-size: 12px; line-height: 1.5; }
+.chlab .lf.ep { color: #8FE3B6; }
+.chlab .isugg .due { color: #F8C58F; } .chlab .isugg .due.late { color: #FF9C94; }
+.series { position: relative; margin-bottom: 14px; }
+.series .utiles { margin: 12px 0 14px; }
+.series .utile { background: var(--sunk); padding: 16px 18px; }
+.series .utile .n { font-size: 30px; }
+.slist { display: flex; flex-direction: column; }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 132px 64px 150px; gap: 14px; align-items: center;
+  padding: 11px 8px; border-top: 1px solid #26262C; font-size: 13px; }
+.srow.resting { opacity: 1; }
+.srow.resting .sn { color: var(--ink2); }
+.srow .sname { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.srow .sn { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .sch { color: var(--ink3); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.srow .sadv { color: var(--ink2); font-size: 12px; line-height: 1.45; }
+.srow .seps { color: var(--ink2); white-space: nowrap; }
+.srow .seps small { display: block; color: var(--ink3); font-size: 11.5px; }
+.srow .smed { font-family: var(--display); font-weight: 800; font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink2); }
+.srow .smed.up { color: #8FE3B6; } .srow .smed.down { color: #FF9C94; }
+.srow .snext { white-space: nowrap; font-size: 12.5px; }
+.srow .snext b { display: block; color: var(--ink); font-weight: 700; }
+.srow .snext small { color: var(--ink3); } .srow .snext small.late { color: #FF9C94; } .srow .snext small.soon { color: #F8C58F; }
+.strend { display: inline-flex; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--raised); color: var(--ink2); width: fit-content; }
+.strend.rising { background: rgba(86,201,144,.14); color: #8FE3B6; }
+.strend.fading { background: rgba(242,104,94,.14); color: #FF9C94; }
+.strend.resting { background: var(--raised); color: var(--ink3); }
+.spark { display: block; width: 132px; height: 32px; overflow: visible; }
+.spark .mid { stroke: #3A3A42; stroke-width: 1; }
+.spark rect { fill: #6E6E78; } .spark rect.up { fill: #8FE3B6; } .spark rect.down { fill: #FF7A70; } .spark rect.na { fill: #3A3A42; }
 @media (max-width: 760px) {
   .outliers .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .evrow { grid-template-columns: 50px minmax(0, 1fr) auto; row-gap: 2px; }
@@ -1417,6 +1447,10 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .evrow .evv { grid-column: 3; grid-row: 2; }
   .evrow .evm { grid-row: span 2; }
   .evrow .evtier { display: none; }
+  .srow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .srow .sname { grid-column: 1 / 3; }
+  .srow .spark { grid-row: 2; }
+  .srow .seps, .srow .smed { display: none; }
   .chswitch { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .chswitch a { flex: none; }
 }
@@ -4569,6 +4603,9 @@ export interface ChannelFocus {
   all: Upload[];
   /** Stories only: Story Lab ideas ranked by how well they fit this channel, and why. */
   lab?: Array<{ idea: LabIdea; fit: string[] }>;
+  /** Gaming only: every series on the channel, and the next episode of each worth making. */
+  series?: Series[];
+  next?: NextUp[];
 }
 
 /** A channel's own Uploads page. */
@@ -4789,6 +4826,98 @@ function channelLabPanel(f: ChannelFocus): string {
   </div>`;
 }
 
+/** Gaming: what a channel could make next — the next episode of each series worth going on with. */
+function gamingNextPanel(f: ChannelFocus, now: Date): string {
+  const today = dayOf(now);
+  const items = (f.next ?? [])
+    .slice(0, 6)
+    .map((n) => {
+      const due = n.series.nextDue;
+      const dueCls = due && due < today ? "due late" : due && daysBetween(today, due) <= 1 ? "due" : "";
+      return `<li><a href="#series-${esc(n.series.key.replace(/\s+/g, "-"))}">
+        <b>${esc(n.title)}</b>
+        <span class="lf ep">${n.series.live ? `Next episode · ${n.series.episodes.length} up so far` : "Bring it back"}</span>
+        ${n.why.length ? `<span class="why">${n.why.map((w) => (dueCls && /^due/.test(w) ? `<span class="${dueCls}">${esc(w)}</span>` : esc(w))).join(" · ")}</span>` : ""}
+      </a></li>`;
+    })
+    .join("");
+  return `<div class="panel ideas chlab">
+    <h2>What ${esc(f.channel)} could make next <span class="sub">— the next episode of each series worth going on with, best first; a fading series is left to the Series panel below</span></h2>
+    ${items ? `<ul class="isugg">${items}</ul>` : `<p class="hint">No series running yet. A title with an episode number — Ep 3, Part 2, Day 5, #4 — starts one.</p>`}
+  </div>`;
+}
+
+/** A series' episodes as bars round the channel's usual: up is above it, down below. */
+function seriesSpark(s: Series): string {
+  const eps = s.episodes.slice(-20);
+  const W = 132, H = 32, mid = H / 2;
+  const step = W / Math.max(eps.length, 6);
+  const bars = eps
+    .map((e, i) => {
+      const x = (i * step + 1).toFixed(1);
+      const w = Math.max(2, step - 2).toFixed(1);
+      const tip = `${s.marker === "#" ? "#" : `${s.marker} `}${e.episode} · ${e.title} · ${usDate(dayOf(e.publishedAt))}${e.views !== null ? ` · ${e.views.toLocaleString()} views` : ""}${e.multiple !== null ? ` · ${formatMultiple(e.multiple)} usual` : " · not judged yet"}`;
+      if (e.multiple === null) return `<rect x="${x}" y="${mid - 1}" width="${w}" height="2" class="na" data-tip="${esc(tip)}"/>`;
+      const h = Math.max(1.5, (Math.min(2, Math.abs(Math.log2(e.multiple))) / 2) * (mid - 1));
+      const up = e.multiple >= 1;
+      return `<rect x="${x}" y="${(up ? mid - h : mid).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" class="${e.multiple >= 1.2 ? "up" : e.multiple <= 0.8 ? "down" : ""}" data-tip="${esc(tip)}"/>`;
+    })
+    .join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${s.name}: each episode against the channel's usual`)}"><line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="mid"/>${bars}</svg>`;
+}
+
+/**
+ * Gaming's series: every numbered series read from the titles, live first,
+ * with how its episodes are holding the audience and when the next is due.
+ */
+function seriesPanel(list: Series[], opts: { oneOffs: number; single: boolean }, now: Date): string {
+  const today = dayOf(now);
+  const live = list.filter((s) => s.live);
+  const fading = live.filter((s) => s.trend === "fading").length;
+  const growing = live.filter((s) => s.trend === "rising").length;
+  const episodes = list.reduce((n, s) => n + s.episodes.length, 0);
+  const tiles = [
+    { n: String(live.length), l: "series running", cls: "" },
+    { n: String(growing), l: "growing", cls: growing ? "t-ok" : "" },
+    { n: String(fading), l: "fading", cls: fading ? "t-late" : "" },
+    { n: episodes + opts.oneOffs ? `${Math.round((episodes / (episodes + opts.oneOffs)) * 100)}%` : "—", l: "of uploads are episodes", cls: "" },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+  const rowsHtml = list
+    .map((s) => {
+      const first = s.episodes[0]!.episode;
+      const trend = !s.live
+        ? `<span class="strend resting">Resting</span>`
+        : s.trend
+          ? `<span class="strend ${s.trend}">${s.trend === "rising" ? "▲ Growing" : s.trend === "fading" ? "▼ Fading" : "Holding"}</span>`
+          : "";
+      const due = s.nextDue;
+      const dueNote = !s.live
+        ? `<small>last ${esc(usDate(s.lastDay))} · ${esc(relativeDay(s.lastDay))}</small>`
+        : due
+          ? `<small class="${due < today ? "late" : daysBetween(today, due) <= 1 ? "soon" : ""}">due ${esc(usDate(due))} · ${esc(relativeDay(due))}</small>`
+          : `<small>last ${esc(relativeDay(s.lastDay))}</small>`;
+      return `<div class="srow${s.live ? "" : " resting"}" id="series-${esc(s.key.replace(/\s+/g, "-"))}">
+        <div class="sname"><span class="sn" title="${esc(s.name)}">${esc(s.name)}</span>
+          ${opts.single ? "" : `<a class="sch chlink" href="${chanHref(s.channel)}"><span class="cdot" style="--ch:${channelColour(s.channel)}"></span>${esc(s.channel)}</a>`}
+          ${trend}<span class="sadv">${esc(s.advice)}</span></div>
+        <div class="seps">${first === s.latest ? `${esc(s.marker === "#" ? "#" : `${s.marker} `)}${s.latest}` : `${esc(s.marker === "#" ? "#" : `${s.marker} `)}${first}–${s.latest}`}<small>${s.episodes.length} up${s.gap ? ` · every ${s.gap === 1 ? "day" : `${s.gap}d`}` : ""}</small></div>
+        ${seriesSpark(s)}
+        <div class="smed ${s.median === null ? "" : s.median >= 1.2 ? "up" : s.median <= 0.8 ? "down" : ""}" title="The median episode against the channel's usual">${s.median === null ? "—" : esc(formatMultiple(s.median))}</div>
+        <div class="snext"><b>${esc(s.live ? `Next: ${s.draft.replace(s.name, "").trim()}` : s.draft.replace(s.name, "").trim() + " to bring it back")}</b>${dueNote}</div>
+      </div>`;
+    })
+    .join("");
+  return `<div class="panel ideas series" id="series">
+    <h2>Series <span class="sub">— every numbered series, read from the titles (Ep 3, Part 2, Day 5, #4): whether each is holding the audience its first episodes found, and when the next is due at its pace</span></h2>
+    <div class="utiles">${tiles}</div>
+    ${rowsHtml ? `<div class="slist">${rowsHtml}</div>` : `<p class="hint">No numbered series yet — ${opts.oneOffs} upload${opts.oneOffs === 1 ? "" : "s"}, all one-offs. A title with an episode number (Ep 3, Part 2, Day 5, #4) starts one.</p>`}
+    <p class="hint">Each bar is an episode against the channel's usual at the same age: up is above it, down below. A series is running while its latest episode is within twice its usual gap (two weeks at least); after that it's resting. <b>Growing</b> and <b>Fading</b> compare the latest episodes with the earlier ones, once four are judged.</p>
+    <div class="uptip" hidden></div>
+  </div>`;
+}
+
 /**
  * The Uploads tab: whether each Stories channel is keeping to one long-form
  * upload every four days. Tiles for the headline, a timeline lane per channel
@@ -4826,6 +4955,8 @@ export function renderUploads(
     hooks?: Map<string, string>;
     /** One channel on its own page: every upload it has, and Story Lab ideas that fit it. */
     focus?: ChannelFocus;
+    /** Gaming: every numbered series across the category, and how many uploads are one-offs. */
+    series?: { series: Series[]; oneOffs: number };
   },
   now = new Date(),
 ): string {
@@ -4843,6 +4974,8 @@ export function renderUploads(
   // One target shared by every channel reads as a heading; a mix doesn't.
   const uniform = everyValues.length === 1 && targeted.length === data.channels.length;
   const everyText = (d: number) => (d === 1 ? "one a day" : `every ${d} days`);
+  // Gaming is held to each channel's own usual gap, and says so.
+  const ownNote = targeted.some(isOwnPace) ? " — each channel's own usual pace" : "";
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "Stories";
   const q = (extra = "") => `/uploads?cat=${category}${extra}`;
@@ -5005,7 +5138,7 @@ export function renderUploads(
 
   const timeline = `<div class="panel uplanes">
     <div class="uphead">
-      <h2>${focus ? (hasTarget ? `${cap(everyText(every))} · every upload and the gaps between` : "Every upload and the gaps between") : uniform ? `${cap(everyText(every))}, per channel` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}` : "Uploads per channel"}</h2>
+      <h2>${focus ? (hasTarget ? `${cap(everyText(every))} · every upload and the gaps between` : "Every upload and the gaps between") : uniform ? `${cap(everyText(every))}, per channel${ownNote}` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}${ownNote}` : "Uploads per channel"}</h2>
       <div class="ulegend" aria-label="Legend">
         <span><i class="lg-dot"></i>Upload</span>
         ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace${uniform ? ` (≤${every}d)` : ""}</span>
@@ -5143,7 +5276,9 @@ export function renderUploads(
           .join("")}
       </nav>
       <div class="usub">${channelPausedTag(shell, focus.channel)}<span class="cdot" style="--ch:${channelColour(focus.channel)}"></span>${esc(catLabel)} · ${esc(
-        everyOf(focus.channel) !== null ? everyText(everyOf(focus.channel)!) : target.kind === "daily" ? `${describeTarget(category)}` : "no target"
+        everyOf(focus.channel) !== null
+          ? `${everyText(everyOf(focus.channel)!)}${isOwnPace(focus.channel) ? " — its own usual pace over 90 days" : ""}`
+          : target.kind === "daily" ? `${describeTarget(category)}` : isOwnPace(focus.channel) ? "no target yet — held to its own usual pace once it has four uploads in 90 days" : "no target"
       )}${focusLink?.youtubeId ? ` · <a href="https://www.youtube.com/channel/${esc(focusLink.youtubeId)}" target="_blank" rel="noreferrer">${esc(focusLink.title ?? "on YouTube")} ↗</a>` : ""}${
         checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
       }</div>`
@@ -5176,6 +5311,9 @@ export function renderUploads(
     ${focus && linked.length ? outlierPanel(focus, perf, data.shorts?.scores ?? null, typical.get(focus.channel) ?? null, now) : ""}
     ${focus && linked.length ? everyVideoPanel(focus, perf, data.shorts?.scores ?? null, now) : ""}
     ${focus?.lab ? channelLabPanel(focus) : ""}
+    ${focus?.next ? gamingNextPanel(focus, now) : ""}
+    ${focus?.series && linked.length ? seriesPanel(focus.series, { oneOffs: focus.all.length - focus.series.reduce((n, s) => n + s.episodes.length, 0), single: true }, now) : ""}
+    ${!focus && data.series && linked.length ? seriesPanel(data.series.series, { oneOffs: data.series.oneOffs, single: false }, now) : ""}
     ${category === "stories" && !focus ? `<a class="labcta" href="/story-lab"><b>Story Lab</b><span>What to write next, with a part-by-part blueprint for each — learned from the Stories scripts →</span></a>` : ""}
     ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.hooks) : ""}
     ${latest && !focus ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}

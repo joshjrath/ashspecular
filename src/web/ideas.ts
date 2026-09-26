@@ -86,10 +86,19 @@ const FORMATS: Array<[string, RegExp]> = [
   ["Why …", /^\s*why\b/i],
   ["Explained / Theory", /\b(explained|theory|lore|origin|story of)\b/i],
   ["Top / Best", /^\s*(top\s*\d+|the\s+best|best|worst)\b/i],
+  // Gaming's own shapes, after the rest so a Stories title reads as it always has.
+  ["Series episode", /\b(episode|ep|part|pt|day)\.?\s*#?\d{1,4}\b|(?:^|\s)#\d{1,4}(?=\s*(?:$|[|:)\]–—-]))/i],
+  ["100 Days", /\b\d+\s+(days|hours|years)\b/i],
+  ["Challenge", /\b(challenge|but\s+(every|i|you|it)|only\s+one|can'?t\s+touch)\b/i],
+  ["Hardcore / Survival", /\b(hardcore|survival)\b/i],
+  ["Speedrun", /\bspeed\s?runn?(ing|er|s)?\b/i],
+  ["Manhunt / Hunters", /\b(manhunt|hunters|hide and seek)\b/i],
+  ["Build / Tycoon", /\b(build|built|building|tycoon)\b/i],
+  ["Obby / Escape", /\b(obby|parkour|escape|maze)\b/i],
 ];
 
 const STOP = new Set(
-  "What If Could Can Would Should How Why When Where Who Which The A An And Or Of In On At To For With From Into Vs Versus Is Are Was Were Be Been Every Ranked Explained Theory Top Best Worst Than Then Their They He She It His Her Its This That These Those Actually Really Ever Real Life Only All Most More Most New Your You We Our I My Me Do Does Did Has Have Had Not No Yes Survive Beat Kill Joined Join Build Built Fought Fight Were Become Became Was Went Got Get Part Episode Ep Full Movie Video Short Shorts Work Works Worked Train Trained Happen Happens Happened Look Looks Make Makes Made Go Goes Went Know Knew Win Won Lose Lost Die Died Dies Live Lived Take Took Save Saved Stop Stopped Meet Met Find Found Turn Turned Actually Truly Secretly Just Still Now Again Ever Never Always".split(" "),
+  "What If Could Can Would Should How Why When Where Who Which The A An And Or Of In On At To For With From Into Vs Versus Is Are Was Were Be Been Every Ranked Explained Theory Top Best Worst Than Then Their They He She It His Her Its This That These Those Actually Really Ever Real Life Only All Most More Most New Your You We Our I My Me Do Does Did Has Have Had Not No Yes Survive Beat Kill Joined Join Build Built Fought Fight Were Become Became Was Went Got Get Part Episode Ep Pt Day Days Hours Full Movie Video Short Shorts Work Works Worked Train Trained Happen Happens Happened Look Looks Make Makes Made Go Goes Went Know Knew Win Won Lose Lost Die Died Dies Live Lived Take Took Save Saved Stop Stopped Meet Met Find Found Turn Turned Actually Truly Secretly Just Still Now Again Ever Never Always".split(" "),
 );
 
 /** The format a title follows, or "Other". */

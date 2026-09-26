@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
-import { CATEGORIES, CHANNELS, type CategoryId } from "../catalog.js";
+import { CATEGORIES, CHANNELS, isLongFormRecurring, type CategoryId } from "../catalog.js";
 import { ORG_TZ, dateIn } from "../parse/derive.js";
 import {
   calendarRange,
@@ -61,10 +61,11 @@ import {
 } from "../parse/derive.js";
 import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
-import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
-import { STORIES_EVERY_DAYS, addDays, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
+import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads, type Upload } from "../jobs/youtube.js";
+import { addDays, cadenceFor, dailyFor, dayOf, daysBetween, usualGap } from "./cadence.js";
 import { GAP_HORIZON_DAYS, uploadGaps, type UploadGap } from "./gaps.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, ownPaceChannels, perDayFor, setOwnPaces } from "./targets.js";
+import { gamingSeries, nextUp, type SeriesVideo } from "./gaming/series.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, boardScripts, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
 import { setScriptIndex } from "./scriptindex.js";
@@ -192,16 +193,42 @@ async function shell(active: string): Promise<Shell> {
   };
 }
 
-/** How many linked Stories channels are past the four-day pace — for the rail. */
+/**
+ * Each Gaming channel's own usual gap, read from its uploads — what everyFor
+ * holds it to. Read again at most every ten minutes.
+ */
+let ownPaces: { at: number; read: Promise<void> } | null = null;
+function refreshOwnPaces(): Promise<void> {
+  if (!hasDatabase || !ownPaceChannels().length) return Promise.resolve();
+  // Everyone asking at once waits on the same read, so none sees the paces unread.
+  if (ownPaces && Date.now() - ownPaces.at < 600_000) return ownPaces.read;
+  const now = new Date();
+  const read = listUploads(new Date(now.getTime() - 100 * 86_400_000)).then(
+    (uploads) => setOwnPaces(new Map(ownPaceChannels().map((name) => [name, usualGap(uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now)] as const))),
+    (err) => {
+      ownPaces = null;
+      console.error("[uploads] couldn't read the Gaming channels' pace:", err);
+    },
+  );
+  ownPaces = { at: now.getTime(), read };
+  return read;
+}
+
+/**
+ * How many linked channels are past their pace — for the rail: Stories every
+ * four days, Specular one a day, each Gaming channel its own usual gap.
+ * Channels with no long-form target (the daily Shorts, Specular Sleep) sit out.
+ */
 async function behindCount(): Promise<number | null> {
+  await refreshOwnPaces();
   const [links, latest, paused] = await Promise.all([listChannelLinks(), latestUploads(), pausedChannels().catch(() => new Map<string, Date>())]);
   // A paused channel isn't behind: it isn't meant to be posting.
-  const linked = links.filter((l) => l.youtubeId && !paused.has(l.channel));
+  const linked = links.filter((l) => l.youtubeId && !paused.has(l.channel) && everyFor(l.channel) !== null);
   if (!linked.length) return null;
   const today = dateIn(ORG_TZ);
   return linked.filter((l) => {
     const last = latest.get(l.channel);
-    return !last || daysBetween(dayOf(last), today) > STORIES_EVERY_DAYS;
+    return !last || daysBetween(dayOf(last), today) > everyFor(l.channel)!;
   }).length;
 }
 
@@ -241,18 +268,24 @@ function safeMode(value: unknown): CalendarMode {
   return value === "deadlines" ? "deadlines" : "posting";
 }
 
+/** Uploads as the series reader takes them, each with how it did against its channel's usual. */
+function seriesVideos(uploads: Upload[], perf: Map<string, { multiple: number }>): SeriesVideo[] {
+  return uploads.map((u) => ({ title: u.title, channel: u.channel, publishedAt: u.publishedAt, url: u.url, views: u.views, multiple: perf.get(u.videoId)?.multiple ?? null }));
+}
+
 /** When each release went live; set at start. */
 let releaseTimes = new Map<string, Date>();
 
 /**
  * Upload slots with nothing on them in the next eight days, for every
- * channel with a posting target (Stories, every four days). Worked out at
- * most once a minute.
+ * channel with a posting target (Stories, every four days; each Gaming
+ * channel, its own usual gap). Worked out at most once a minute.
  */
 let gapCache: { at: number; gaps: UploadGap[] } | null = null;
 async function currentGaps(): Promise<UploadGap[]> {
   if (!hasDatabase) return [];
   if (gapCache && Date.now() - gapCache.at < 60_000) return gapCache.gaps;
+  await refreshOwnPaces();
   const today = dateIn(ORG_TZ);
   const from = addDays(today, -45);
   const [uploads, aired, paused, dismissed] = await Promise.all([
@@ -261,9 +294,10 @@ async function currentGaps(): Promise<UploadGap[]> {
     pausedChannels().catch(() => new Map<string, Date>()),
     dismissedGaps(today).catch(() => new Set<string>()),
   ]);
-  // A paused channel isn't expected to post.
-  const channels = CHANNELS.map((c) => ({ channel: c.name, every: everyFor(c.name) ?? 0 }))
-    .filter((c) => c.every > 1 && !paused.has(c.channel))
+  // A paused channel isn't expected to post; a daily batch channel (Specular) has its batch instead.
+  const channels = CHANNELS.filter((c) => !isLongFormRecurring(c))
+    .map((c) => ({ channel: c.name, every: everyFor(c.name) ?? 0 }))
+    .filter((c) => c.every > 0 && !paused.has(c.channel))
     .map((c) => ({
       ...c,
       days: [
@@ -745,7 +779,8 @@ export async function startWeb(): Promise<void> {
     const channels = channelsIn(category);
     const now = new Date();
     const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
-    const [s, links, allUploads, allViews] = await Promise.all([
+    await refreshOwnPaces();
+    const [s, links, allUploads, allViews, history] = await Promise.all([
       shell("uploads"),
       listChannelLinks(),
       listUploads(since),
@@ -753,6 +788,8 @@ export async function startWeb(): Promise<void> {
       // Twenty earlier videos to compare with: a year and more for long form,
       // a couple of months for Shorts at five a day.
       loadVideoViews(new Date(now.getTime() - (target.kind === "daily" ? 75 : 400) * 86_400_000), channels),
+      // Gaming: every upload, so a series that's resting still shows.
+      category === "gaming" ? listUploads(new Date(0)) : Promise.resolve(null),
     ]);
     const inCat = new Set(channels);
     const uploads = allUploads.filter((u) => inCat.has(u.channel));
@@ -788,6 +825,7 @@ export async function startWeb(): Promise<void> {
       now,
     );
     const ideaTitle = (query.idea ?? "").trim().slice(0, 200);
+    const series = history ? gamingSeries(seriesVideos(history.filter((u) => inCat.has(u.channel)), perf), now) : undefined;
 
     // Each video's opening, from its script, for the idea details.
     const openings = new Map([
@@ -815,6 +853,7 @@ export async function startWeb(): Promise<void> {
               }
             : undefined,
           hooks,
+          series,
         },
         now,
       );
@@ -841,6 +880,7 @@ export async function startWeb(): Promise<void> {
       const range = ranges.includes(Number(request.query.range)) ? Number(request.query.range) : ranges[1]!;
       const now = new Date();
       const name = ch.name;
+      await refreshOwnPaces();
       const [s, links, everything, views] = await Promise.all([
         shell("uploads"),
         listChannelLinks(),
@@ -874,6 +914,8 @@ export async function startWeb(): Promise<void> {
         const published: PublicVideo[] = everything.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
         lab = channelLab(name, mine.map((u) => u.title), labIdeas(videos, now, 5000, published, [], false));
       }
+      // Gaming: its series, and the next episode of each worth making.
+      const series = category === "gaming" ? gamingSeries(seriesVideos(mine, perf), now).series : undefined;
 
       return reply.type("text/html").send(
         renderUploads(
@@ -890,7 +932,7 @@ export async function startWeb(): Promise<void> {
                   slots: postingSlots(views.filter((v) => now.getTime() - v.publishedAt.getTime() < 30 * 86_400_000), shortScores),
                 }
               : undefined,
-            focus: { channel: name, all, lab },
+            focus: { channel: name, all, lab, series, next: series ? nextUp(series, now) : undefined },
           },
           now,
         ),

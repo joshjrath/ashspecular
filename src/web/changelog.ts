@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-26-gaming-series-and-pace",
+    title: "Gaming: its own pace, and every series read from the titles",
+    changes: [
+      { text: "Each Gaming channel is held to its own usual gap between uploads (the median over 90 days): late gaps turn red, the next one is due, and the rail's behind count includes it.", href: "/uploads?cat=gaming" },
+      { text: "Nothing assigned covers Gaming too: an expected upload in the next 8 days with no video on it shows on the dashboard, the calendar and in the bell.", href: "/" },
+      { text: "Series: every numbered series (Ep 3, Part 2, Day 5, #4) with a bar per episode against the channel's usual, whether it's growing, holding or fading, and when the next episode is due.", href: "/uploads?cat=gaming#series" },
+      { text: "Each Gaming channel's page says what it could make next: the next episode of every series worth going on with, and any resting series that did well enough to bring back.", href: "/uploads/channel/minecraft" },
+      { text: "The Ideas panel reads gaming titles' own shapes: series episodes, 100 Days, challenges, hardcore, speedruns, manhunts, builds and obbies.", href: "/uploads?cat=gaming" },
+    ],
+  },
+  {
     id: "2026-09-26-revision-column-batches-never-late",
     title: "Revisions in their own column; daily batches are never late",
     changes: [

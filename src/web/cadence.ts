@@ -93,6 +93,22 @@ export function cadenceFor(
   };
 }
 
+/**
+ * A channel's own usual gap between long-form uploads, in whole days: the
+ * median over the last 90 days, once there are three gaps to go on. It's
+ * what a channel with no set target (Gaming) is held to — its own pace, so a
+ * gap is late when it runs longer than the channel usually leaves.
+ */
+export function usualGap(uploads: Date[], now: Date = new Date()): number | null {
+  const since = addDays(dayOf(now), -90);
+  const days = [...new Set(uploads.map(dayOf))].filter((d) => d >= since).sort();
+  const gaps = days.slice(1).map((d, i) => daysBetween(days[i]!, d)).sort((a, b) => a - b);
+  if (gaps.length < 3) return null;
+  const mid = Math.floor(gaps.length / 2);
+  const med = gaps.length % 2 ? gaps[mid]! : (gaps[mid - 1]! + gaps[mid]!) / 2;
+  return Math.max(1, Math.round(med));
+}
+
 // ── daily categories (Bits, Reading) ──────────────────────────────────────
 
 export interface DailyCadence {
