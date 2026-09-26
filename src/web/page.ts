@@ -28,6 +28,7 @@ import type { DraftCheck } from "./stories/check.js";
 import { corpus, learnsFrom, splitScript, type Norms } from "./stories/corpus.js";
 import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
+import type { Release } from "./changelog.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
@@ -747,11 +748,11 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .notice { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-radius: 14px; }
 .notice:hover { background: var(--sunk); }
 .notice[hidden] { display: none; }
-.notice .ico {
+.notice .ico, .release .ico {
   width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center;
   color: #fff; background: var(--nc);
 }
-.notice .ico svg { width: 19px; height: 19px; }
+.notice .ico svg, .release .ico svg { width: 19px; height: 19px; }
 .nfilters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 8px 10px; }
 .nf {
   display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer; border-radius: 999px;
@@ -1361,6 +1362,12 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .sacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .sacts form { display: inline; margin: 0; }
 .sacts button { font-size: 12px; padding: 6px 12px; }
+.release { padding: 16px 18px; margin-bottom: 12px; }
+.release .relhead { display: flex; gap: 12px; align-items: center; }
+.release h2 { margin: 0; font-size: 17px; }
+.release .reldate { font-size: 12px; color: var(--ink3); margin-top: 2px; }
+.relchanges { margin: 12px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 13.5px; line-height: 1.55; color: var(--ink2); }
+.relchanges a { color: var(--nc); font-weight: 700; white-space: nowrap; }
 .scripterr { background: #3A1D1D; color: #FFB4B4; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
 .sform .or { font-size: 12px; color: var(--ink3); text-align: center; }
 .shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
@@ -1626,6 +1633,7 @@ export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "C
   { key: "live", label: "#intake · last message", group: "Also" },
   { key: "paused", label: "Paused", group: "Also" },
   { key: "removed", label: "Removed", group: "Also" },
+  { key: "whatsnew", label: "What's new", group: "Also" },
 ];
 
 const GEAR_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2 4.8 4.8"/></svg>`;
@@ -1682,6 +1690,7 @@ function sidebar(s: Shell): string {
         ? `<a class="removed-link${s.active === "removed" ? " on" : ""}" href="/removed">Removed · ${s.removed}</a>`
         : ""
     }
+    ${off.has("whatsnew") ? "" : `<a class="removed-link${s.active === "whatsnew" ? " on" : ""}" href="/whats-new">What's new</a>`}
     <a class="settings-link${s.active === "settings" ? " on" : ""}" href="/settings">${GEAR_ICON}Settings</a>
   </div></aside>`;
 }
@@ -1753,6 +1762,10 @@ const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; ico
     kind: "dayoff", label: "Day off", colour: "#2AA9D8",
     icon: `<path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/>`,
   },
+  {
+    kind: "update", label: "What's new", colour: "#E8C547",
+    icon: `<path d="m10 3.2 2 4.3 4.6.5-3.4 3.1 1 4.6L10 13.4l-4.2 2.3 1-4.6L3.4 8l4.6-.5z"/>`,
+  },
 ];
 
 const noticeIcon = (kind: NoticeKind) => {
@@ -1771,6 +1784,7 @@ const noticeIcon = (kind: NoticeKind) => {
 function bell(notices: Notice[], seen: number): string {
   const unread = notices.filter((n) => n.at.getTime() > seen).length;
   const what = (n: Notice): string => {
+    if (n.kind === "update") return `What's new · ${n.release.changes.length} change${n.release.changes.length === 1 ? "" : "s"}`;
     const r = n.record;
     switch (n.kind) {
       case "revision": return `Revision ready${r.version ? ` · v${r.version}` : ""}`;
@@ -1789,8 +1803,18 @@ function bell(notices: Notice[], seen: number): string {
   };
   const items = notices
     .map((n) => {
-      const r = n.record;
       const isNew = n.at.getTime() > seen;
+      if (n.kind === "update") {
+        return `<a class="notice update${isNew ? " new-item" : ""}" data-kind="update" href="/whats-new#${esc(n.release.id)}">
+        ${noticeIcon("update")}
+        <span class="body">
+          <span class="nt">${esc(n.release.title)}</span>
+          <span class="ns">${what(n)}</span>
+        </span>
+        <span class="ago">${esc(timeAgo(n.at))}</span>
+      </a>`;
+      }
+      const r = n.record;
       return `<a class="notice ${n.kind}${isNew ? " new-item" : ""}" data-kind="${n.kind}" href="/r/${r.id}">
         ${noticeIcon(n.kind)}
         <span class="body">
@@ -1824,7 +1848,7 @@ function bell(notices: Notice[], seen: number): string {
         <button type="button" class="alerts" id="alerts">Desktop alerts</button>
       </div>
       ${filters}
-      <div class="nlist">${items || `<div class="nempty">Nothing yet. Revisions, deadlines and air dates show up here.</div>`}</div>
+      <div class="nlist">${items || `<div class="nempty">Nothing yet. Revisions, deadlines, air dates and what's new on the board show up here.</div>`}</div>
       <div class="nempty nfiltered" hidden>Nothing of this kind right now.</div>
     </div>
   </div>
@@ -1905,11 +1929,11 @@ function bell(notices: Notice[], seen: number): string {
           try { since = Number(localStorage.getItem("alertedTo")) || Date.now(); } catch (x) {}
           var now = Date.now(), fresh = data.items.filter(function (n) { return n.at > since && n.at <= now; });
           fresh.slice(0, 5).forEach(function (n) {
-            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment", dayoff: "Day off — due earlier" };
+            var heads = { revision: "Revision ready", overdue: "Overdue", upcoming: "Due soon", airing: "Airing soon", "new": "New assignment", dayoff: "Day off — due earlier", update: "What's new on the board" };
             var note = new Notification(heads[n.kind] || "Specular", {
               body: n.title + (n.channel ? " — " + n.channel : ""), tag: n.kind + ":" + n.id,
             });
-            note.onclick = function () { window.focus(); location.href = "/r/" + n.id; };
+            note.onclick = function () { window.focus(); location.href = n.href || "/r/" + n.id; };
           });
           try { localStorage.setItem("alertedTo", String(now)); } catch (x) {}
         })
@@ -5572,6 +5596,29 @@ export function renderRevisions(shell: Shell, revisions: StoredRecord[], others:
 }
 
 /** Everything paused — out of the workflow with no deadline — and the way back. */
+/** What's new: every change to the board, newest first, as its notification summed it up. */
+export function renderWhatsNew(shell: Shell, releases: Array<Release & { at: Date | null }>): string {
+  const k = NOTICE_KINDS.find((n) => n.kind === "update")!;
+  const items = releases
+    .map(
+      (r) => `<section class="panel release" id="${esc(r.id)}" style="--nc:${k.colour}">
+      <div class="relhead">${noticeIcon("update")}<div><h2>${esc(r.title)}</h2>
+        <div class="reldate">${r.at ? `${esc(usDate(dayOf(r.at)))} · ${esc(timeAgo(r.at))}` : "not live yet"}</div></div></div>
+      <ul class="relchanges">${r.changes
+        .map((c) => `<li>${esc(c.text)}${c.href ? ` <a href="${esc(c.href)}">Open →</a>` : ""}</li>`)
+        .join("")}</ul>
+    </section>`,
+    )
+    .join("");
+  return layout(
+    "What's new",
+    shell,
+    `${pageHeader("What's new")}
+    <p class="labsub">Every change to the board, newest first. Each one also arrives in the bell as its own kind of notification, <b>What's new</b>.</p>
+    ${items}`,
+  );
+}
+
 export function renderPaused(shell: Shell, list: StoredRecord[]): string {
   return layout(
     "Paused",

@@ -42,6 +42,7 @@ import {
   setDayOff,
   listOffShifted,
   type MoveSnapshot,
+  type Notice,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -71,6 +72,8 @@ import { diceCard, diceLeft, rollDice } from "./stories/roll.js";
 import { addLabAddition, listLabAdditions, removeLabAddition } from "../db/lab.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
+import { RELEASES, releaseNotices } from "./changelog.js";
+import { markReleases } from "../db/releases.js";
 
 const DICE_KINDS: DiceKind[] = ["shape", "hero", "world", "power", "target"];
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
@@ -96,6 +99,7 @@ import {
   renderList,
   renderPaused,
   renderRevisions,
+  renderWhatsNew,
   renderSettings,
   renderLogin,
   renderRecurring,
@@ -206,6 +210,15 @@ function safeMode(value: unknown): CalendarMode {
   return value === "deadlines" ? "deadlines" : "posting";
 }
 
+/** When each release went live; set at start. */
+let releaseTimes = new Map<string, Date>();
+
+/** Everything for the bell, newest first. */
+async function allNotices(): Promise<Notice[]> {
+  const work = await listNotices(ORG_TZ);
+  return [...work, ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
+}
+
 export async function startWeb(): Promise<void> {
   if (!config.dashboardPassword) {
     console.error("[web] DASHBOARD_PASSWORD is not set.");
@@ -221,6 +234,8 @@ export async function startWeb(): Promise<void> {
     applyAdditions(await listLabAdditions().catch(() => []));
     // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
     setBoardScripts(await listScripts().catch(() => []));
+    // What's new: each change is announced from the first start that ships it.
+    releaseTimes = await markReleases(RELEASES).catch(() => new Map());
   }
 
   const app = Fastify({ logger: false, trustProxy: true });
@@ -274,7 +289,7 @@ export async function startWeb(): Promise<void> {
       dueByDay(ORG_TZ, 14),
       openByCategory(),
       channelCounts(),
-      listNotices(ORG_TZ),
+      allNotices(),
       listOffShifted(),
     ]);
 
@@ -318,17 +333,20 @@ export async function startWeb(): Promise<void> {
   // desktop alerts, what came in.
   app.get("/notifications.json", async (request, reply) => {
     const seen = noticesSeen(request);
-    const notices = await listNotices(ORG_TZ);
+    const notices = await allNotices();
     return reply.send({
       unread: notices.filter((n) => n.at.getTime() > seen).length,
-      items: notices.map((n) => ({
-        id: n.record.id,
-        kind: n.kind,
-        at: n.at.getTime(),
-        title: noticeTitle(n.record),
-        channel: n.record.channel,
-      })),
+      items: notices.map((n) =>
+        n.kind === "update"
+          ? { id: n.release.id, kind: n.kind, at: n.at.getTime(), title: n.release.title, channel: null, href: `/whats-new#${n.release.id}` }
+          : { id: n.record.id, kind: n.kind, at: n.at.getTime(), title: noticeTitle(n.record), channel: n.record.channel, href: `/r/${n.record.id}` },
+      ),
     });
+  });
+
+  app.get("/whats-new", async (_request, reply) => {
+    const s = await shell("whatsnew");
+    return reply.type("text/html").send(renderWhatsNew(s, RELEASES.map((r) => ({ ...r, at: releaseTimes.get(r.id) ?? null }))));
   });
 
   app.get<{ Params: { ym?: string }; Querystring: { mode?: string } }>(

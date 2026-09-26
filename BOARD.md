@@ -47,7 +47,7 @@ as many as you like; the newest pin comes first. Press the tag to unpin.
 Both are on the Discord card too (*Pause*, *No script*), for when it's
 already known at intake, and on every record's own page.
 
-**The bell** — top right of the dashboard. Six kinds, each with its own icon
+**The bell** — top right of the dashboard. Seven kinds, each with its own icon
 and colour:
 
 | | Kind | When it shows |
@@ -58,12 +58,20 @@ and colour:
 | ▭ green | **Airing** | a video airs today or tomorrow |
 | + purple | **New** | an assignment was filed in the last 3 days |
 | ☾ cyan | **Day off** | a day off brought a deadline forward (until that day passes) |
+| ☆ yellow | **What's new** | a change to the board itself went live (for 30 days) |
 
 A filter row picks one kind at a time (remembered in your browser), with a
 count on each. The red badge counts what arrived since you last opened it.
 Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
+
+**What's new** (in the sidebar, and each yellow ☆ in the bell) lists every
+change to the board, newest first. Each change has a one-line title that
+sums it up, a line per change, and a link to where it is. Each change is one
+entry at the top of `src/web/changelog.ts`, written when it ships. The first
+server start that carries an entry records when it went live, and that is
+when its notification arrives.
 
 Categories are always listed **Stories first** (then Gaming, Reading, Bits,
 Movies): the sidebar, the dashboard columns and channel list, the calendar

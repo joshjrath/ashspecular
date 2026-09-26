@@ -732,14 +732,22 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
  * the last time the bell was opened. Recurring batches are left out: they
  * fall due every evening and would drown the rest.
  */
-export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff";
-export interface Notice {
-  kind: NoticeKind;
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "update";
+/** Something about one piece of work. */
+export interface RecordNotice {
+  kind: Exclude<NoticeKind, "update">;
   at: Date;
   record: StoredRecord;
 }
+/** A change to the board itself: "What's new". */
+export interface UpdateNotice {
+  kind: "update";
+  at: Date;
+  release: { id: string; title: string; changes: Array<{ text: string; href?: string }> };
+}
+export type Notice = RecordNotice | UpdateNotice;
 
-export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
+export async function listNotices(zone: string, limit = 60): Promise<RecordNotice[]> {
   const q = (where: string, order: string) =>
     pool.query<Row>(`${SELECT} WHERE ${where} ORDER BY ${order} LIMIT 30`).then((r) => r.rows.map(hydrate));
   const open = "status = 'open' AND batch_no IS NULL AND paused_at IS NULL";
@@ -763,7 +771,7 @@ export async function listNotices(zone: string, limit = 60): Promise<Notice[]> {
     d.setUTCDate(d.getUTCDate() - 1);
     return new Date(`${d.toISOString().slice(0, 10)}T04:00:00Z`);
   };
-  const notices: Notice[] = [
+  const notices: RecordNotice[] = [
     ...revisions.map((record) => ({ kind: "revision" as const, at: record.createdAt, record })),
     ...overdue.map((record) => ({ kind: "overdue" as const, at: due(record), record })),
     ...upcoming.map((record) => ({ kind: "upcoming" as const, at: new Date(due(record).getTime() - 86_400_000), record })),

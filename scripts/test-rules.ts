@@ -54,7 +54,8 @@ import { cascadeText, planCascade } from "../src/web/cascade.js";
 import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels } from "../src/jobs/avatars.js";
 import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
-import { renderRecord } from "../src/web/page.js";
+import { esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
+import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 
 let pass = 0;
 let fail = 0;
@@ -495,7 +496,7 @@ t("no separate pinned section", pages.dashboard.includes("group pinned"), false)
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
 t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
-t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 7);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 8);
 t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
 t("bell: each kind has its own icon colour",
   [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
@@ -1005,7 +1006,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 8 + CATEGORIES.length + 4);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 8 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -1236,6 +1237,27 @@ t("a script that couldn't be read says why", renderRecord(shellFix, plainRec, { 
 t("a revision has no script box", renderRecord(shellFix, revRec, { scripts: [] }).includes('id="script"'), false);
 setBoardScripts([]);
 t("…and removing them puts the Drive's back", corpus().length, driveCount);
+
+section("What's new — every change to the board, in its own kind of notification");
+const relNow = new Date("2026-09-26T15:00:00Z");
+t("every release has an id, a title and at least one change", RELEASES.every((r) => r.id && r.title && r.changes.length), true);
+t("…and no two share an id", new Set(RELEASES.map((r) => r.id)).size, RELEASES.length);
+const relTimes = new Map([[RELEASES[0]!.id, new Date(relNow.getTime() - 3_600_000)], [RELEASES[1]!.id, new Date(relNow.getTime() - 40 * 86_400_000)]]);
+const updates = releaseNotices(relTimes, relNow);
+t("a release live in the last month is a notification; an older one isn't", updates.map((u) => u.release.id), [RELEASES[0]!.id]);
+t("…one not yet live isn't either", releaseNotices(new Map(), relNow).length, 0);
+const dashNew = renderDashboard({ ...shellFix, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [], grouped: new Map(), channels: {},
+  notices: [...updates, { kind: "overdue", at: new Date(relNow.getTime() - 7_200_000), record: pinnedRec }],
+  seen: relNow.getTime() - 5_400_000,
+});
+t("…it has its own kind in the bell, with its own filter", [/class="notice update new-item" data-kind="update"/.test(dashNew), /data-f="update"[^>]*><i><\/i>What's new<span>1</.test(dashNew)], [true, true]);
+t("…summed up in its title, and linking to the full list", [dashNew.includes(esc(RELEASES[0]!.title)), dashNew.includes(`href="/whats-new#${RELEASES[0]!.id}"`)], [true, true]);
+t("…counted as unread like any other", /id="bellcount">1</.test(dashNew), true);
+const newPage = renderWhatsNew(shellFix, RELEASES.map((r) => ({ ...r, at: relTimes.get(r.id) ?? null })));
+t("the What's new page lists every release, newest first, each change a line", [newPage.indexOf(`id="${RELEASES[0]!.id}"`) < newPage.indexOf(`id="${RELEASES[1]!.id}"`), (newPage.match(/<li>/g) ?? []).length], [true, RELEASES.reduce((n, r) => n + r.changes.length, 0)]);
+t("the sidebar links to it", pages.week.includes('href="/whats-new"'), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
