@@ -16,6 +16,7 @@ import {
   listBatchesOn,
   search,
   listReviews,
+  listReviewed,
   openByCategory,
   setStatus,
   stats,
@@ -68,7 +69,7 @@ import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, every
 import { gamingSeries, nextUp, type SeriesVideo } from "./gaming/series.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, boardScripts, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
-import { setScriptIndex } from "./scriptindex.js";
+import { scriptFor, setScriptIndex } from "./scriptindex.js";
 import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabIdea, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
@@ -683,7 +684,9 @@ export async function startWeb(): Promise<void> {
   app.get<{ Querystring: { view?: string; ch?: string; sort?: string } }>("/revisions", async (request, reply) => {
     const [s, list] = await Promise.all([shell("reviews"), listReviews(200)]);
     if (request.query.view === "history") {
-      const [points, marks] = hasDatabase ? await Promise.all([revisionHistory(), channelMarks()]) : [[], new Map<string, "flag" | "trophy">()];
+      const [points, marks, reviewed] = hasDatabase
+        ? await Promise.all([revisionHistory(), channelMarks(), listReviewed().then(withScores)])
+        : [[], new Map<string, "flag" | "trophy">(), []];
       const sort = (["attention", "best", "name"] as const).find((x) => x === request.query.sort) ?? "attention";
       const channels = channelHistories(
         points.map((p) => ({ recordId: p.recordId, title: p.title, version: p.version, score: p.score, at: p.at, channel: p.channel })),
@@ -697,6 +700,7 @@ export async function startWeb(): Promise<void> {
           all: channels.map((c) => c.channel).sort((a, b) => a.localeCompare(b)),
           ch,
           sort,
+          reviewed: (ch ? reviewed.filter((r) => (r.channel ?? "No channel") === ch) : reviewed) as Array<StoredRecord & { reviewedAt: Date | null }>,
         }),
       );
     }
@@ -947,6 +951,8 @@ export async function startWeb(): Promise<void> {
     roll?: string; dice?: string; added?: string;
     /** Why a script couldn't be added. */
     scripterr?: string;
+    /** Unassigned videos: open the list; the title just linked, or why it couldn't be. */
+    open?: string; linked?: string; linkerr?: string;
   };
   const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
     const channels = channelsIn("stories");
@@ -1060,6 +1066,17 @@ export async function startWeb(): Promise<void> {
       shapes: [...SHAPES],
       dice,
       writeNext: writeNextData,
+      // Every Stories upload with no script anywhere — attached, in Story Lab or delivered on the Scripts tab.
+      unassigned: {
+        videos: stories
+          .filter((u) => !scriptFor({ title: u.title }))
+          .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+          .map((u) => ({ title: u.title, channel: u.channel, url: u.url, publishedAt: u.publishedAt, views: u.views })),
+        total: stories.length,
+        open: query.open === "unassigned",
+        linked: (query.linked ?? "").slice(0, 200),
+        error: (query.linkerr ?? "").slice(0, 200),
+      },
       library: {
         // Stories videos' scripts and those added on their own — the ones Story Lab reads.
         scripts: kept.filter(learnsFrom),
@@ -1355,15 +1372,19 @@ export async function startWeb(): Promise<void> {
     return reply.redirect(`/r/${record.id}#script`);
   });
 
-  app.post<{ Body: { title?: string; text?: string; url?: string } }>("/story-lab/scripts", async (request, reply) => {
+  app.post<{ Body: { title?: string; text?: string; url?: string; from?: string } }>("/story-lab/scripts", async (request, reply) => {
     const title = (request.body?.title ?? "").trim().slice(0, 200);
-    if (!hasDatabase) return reply.redirect("/story-lab#scripts");
-    if (!title) return reply.redirect(`/story-lab?scripterr=${encodeURIComponent("Give the script its video title — that's how Story Lab reads its format, hero and world.")}#scripts`);
+    // Linked from Unassigned videos: back to that list, open, saying what happened.
+    const fromList = request.body?.from === "unassigned";
+    const fail = (why: string) =>
+      reply.redirect(fromList ? `/story-lab?open=unassigned&linkerr=${encodeURIComponent(`${title}: ${why}`)}#unassigned` : `/story-lab?scripterr=${encodeURIComponent(why)}#scripts`);
+    if (!hasDatabase) return reply.redirect(fromList ? "/story-lab?open=unassigned#unassigned" : "/story-lab#scripts");
+    if (!title) return fail("Give the script its video title — that's how Story Lab reads its format, hero and world.");
     const got = await scriptText(request.body?.text, request.body?.url);
-    if ("error" in got) return reply.redirect(`/story-lab?scripterr=${encodeURIComponent(got.error)}#scripts`);
+    if ("error" in got) return fail(got.error);
     await addScript({ recordId: null, title, ...got });
     await reloadScripts();
-    return reply.redirect("/story-lab#scripts");
+    return reply.redirect(fromList ? `/story-lab?open=unassigned&linked=${encodeURIComponent(title)}#unassigned` : "/story-lab#scripts");
   });
 
   // Read a linked doc again, for the latest draft.

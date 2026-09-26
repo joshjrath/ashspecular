@@ -228,6 +228,12 @@ page) sums up a cut's notes and scores it **out of 10**:
 
   Each card then shows its score (red at 5 or below, green at 8 and up).
 
+**Reviewed** (at the top of the History tab) lists every revision you've
+✓'d, newest first: its version, channel, when it was reviewed, and its score,
+or **★ Score it** when it was reviewed without a summary. A revision needs a
+score to be on its channel's timeline, so this is where an unscored one is
+kept; scoring it puts it on the timeline.
+
 **History** (the second tab on the Revisions page) is a timeline for each
 channel: every video's score in the order they came in (a video's latest
 version counts), through a red band (5 and below) and a green one (8 and
@@ -631,6 +637,14 @@ What's on the page:
   third on every measure.
 - **The formats** and **What's been done** (heroes × worlds).
 
+**Unassigned videos** (near the top of Story Lab): every Stories upload
+with no script anywhere (attached, in Story Lab, or delivered on the Scripts
+tab), newest first, with a count. Click it to open the list; a channel picker
+narrows it, and sixty show until *Show all*. **Link a script** on any video
+takes its Google Doc link or the script pasted in, filed under the video's
+title (which is how the board finds a video's script). The video leaves the
+list, and the script counts in Story Lab like any other added one.
+
 **Adding scripts:** straight from the board, with no rebuild needed.
 
 - **On a video's page**, the **Script** box takes the script pasted in (with
@@ -809,8 +823,8 @@ The tick beside a channel clears its whole day in one press.
 **Every channel counts uploads.** A reading channel's day is five uploads; a
 bits channel's depends on the channel — Studios, Anime, FNAF, Animation,
 Gaming, Undertale and Pokemon Bits five, Specular & Kay Bits one. Each row
-is one segment per upload. Tap the third to mark three done; tap the last
-filled one again to step back one. When every segment is filled the channel is
+is one segment per upload. Tap the third to mark three done (the fifth marks
+all five); tap the last filled one again to step back one. When every segment is filled the channel is
 cleared and counts once toward "cleared this week"; stepping back reopens it.
 Each group header totals its uploads — "7/25", "12/27". Change a number with
 `units` on the channel in `src/catalog.ts`.

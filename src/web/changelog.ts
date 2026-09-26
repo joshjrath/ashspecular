@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-26-reviewed-unassigned-pills",
+    title: "Reviewed revisions kept in History, Unassigned videos, and the Recurring segments fixed",
+    changes: [
+      { text: "Revision History lists every revision you've ✓'d, newest first, with its score, or ★ Score it to put one on its channel's timeline. A revision reviewed without a summary no longer disappears.", href: "/revisions?view=history#reviewed" },
+      { text: "Story Lab has Unassigned videos: every Stories upload with no script, and a Link a script button on each for its Google Doc or the script pasted in.", href: "/story-lab?open=unassigned#unassigned" },
+      { text: "Recurring: tapping a segment marks that many done. Tapping the fifth used to save four.", href: "/recurring" },
+    ],
+  },
+  {
     id: "2026-09-26-gaming-series-and-pace",
     title: "Gaming: its own pace, and every series read from the titles",
     changes: [

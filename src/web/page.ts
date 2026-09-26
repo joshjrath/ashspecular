@@ -861,6 +861,25 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .revmini .rv { background: rgba(91,108,240,.24) !important; color: #C9CFFB !important; }
 .revmini .rv svg { width: 8px; height: 8px; }
 .revmini .rscore { background: color-mix(in srgb, var(--sc) 20%, transparent) !important; color: var(--sc) !important; font-weight: 800; }
+.revdone { margin-bottom: 14px; }
+.rdlist { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; max-height: 420px; overflow-y: auto; }
+.rdrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 180px 88px; gap: 10px; align-items: center; padding: 9px 6px; border-top: 1px solid #26262C; font-size: 13px; }
+.rdrow .rdt { font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rdrow .rdt:hover { text-decoration: underline; }
+.rdrow .rv, .rdrow .rch { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: var(--raised); color: var(--ink2); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.rdrow .rv svg { width: 11px; height: 11px; color: #8E9BF7; }
+.rdrow .rch i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); }
+.rdrow .rch.none { color: var(--ink3); }
+.rdrow .rdwhen { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.rdrow .rscore, .rdrow .rdscore { justify-self: end; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.rdrow .rscore { background: color-mix(in srgb, var(--sc) 20%, transparent); color: var(--sc); }
+.rdrow .rdscore { background: rgba(243,233,108,.12); color: var(--yellow); font-weight: 700; }
+.rdrow .rdscore:hover { background: rgba(243,233,108,.22); }
+@media (max-width: 760px) {
+  .rdrow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .rdrow .rdt { grid-column: 1 / 3; }
+  .rdrow .rv, .rdrow .rch { display: none; }
+}
 .revmini .rch i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
 .revmini .rframe { background: rgba(91,108,240,.28) !important; color: #D6DBFD !important; }
 .revmini .rframe:hover { background: #5B6CF0 !important; color: #fff !important; }
@@ -1627,6 +1646,43 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .relchanges a { color: var(--nc); font-weight: 700; white-space: nowrap; }
 .scripterr { background: #3A1D1D; color: #FFB4B4; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
 .sform .or { font-size: 12px; color: var(--ink3); text-align: center; }
+.unassigned { margin-bottom: 14px; }
+.unassigned > summary { list-style: none; cursor: pointer; }
+.unassigned > summary::-webkit-details-marker { display: none; }
+.unassigned > summary h2 { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.unassigned > summary h2::before { content: "▸"; color: var(--ink3); font-size: 14px; transition: transform .15s; }
+.unassigned[open] > summary h2::before { transform: rotate(90deg); }
+.unassigned[open] > summary { margin-bottom: 12px; }
+.uacount { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--yellow); color: #101012; font-family: var(--ui); font-size: 12px; font-weight: 800; letter-spacing: 0; }
+.uabar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; color: var(--ink2); }
+.uabar select { margin-left: 6px; padding: 7px 10px; border-radius: 10px; background: var(--raised); color: var(--ink); border: 1px solid #2E2E35; font: inherit; }
+.uabar .hint-inline { color: var(--ink3); font-size: 12px; }
+.ualist { list-style: none; margin: 0; padding: 0; }
+.uarow { border-top: 1px solid #26262C; }
+.uarow[hidden] { display: none; }
+.uahead { display: grid; grid-template-columns: 12px minmax(0, 1fr) 110px 150px auto; gap: 10px; align-items: center; padding: 8px 4px; font-size: 13px; }
+.uahead .uat { font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uahead .uat:hover { text-decoration: underline; }
+.uahead .uach { color: var(--ink2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uahead .uad { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.ualink { justify-self: end; }
+.ualink > summary { list-style: none; display: inline-block; cursor: pointer; font-size: 12px; font-weight: 700; padding: 5px 12px;
+  border-radius: 999px; background: var(--raised); color: var(--ink); white-space: nowrap; }
+.ualink > summary:hover { background: var(--line); }
+.ualink[open] > summary { background: var(--salmon); color: #101012; }
+.ualink > summary::-webkit-details-marker { display: none; }
+.ualink[open] { grid-column: 1 / -1; justify-self: stretch; }
+.ualink[open] > summary { margin-bottom: 8px; }
+.uaform { padding: 0 0 6px; }
+.ualinked { background: #173226; color: #9FE8C2; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
+.uamore { margin-top: 10px; }
+@media (max-width: 760px) {
+  .uahead { grid-template-columns: 12px minmax(0, 1fr) auto; row-gap: 4px; }
+  .uahead .uach { display: none; }
+  .uahead .uad { grid-column: 2; grid-row: 2; }
+  .ualink { grid-column: 3; grid-row: 1 / 3; }
+}
 .shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
 .idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
 .idrafts a:hover { text-decoration: underline; }
@@ -5822,8 +5878,9 @@ export function renderRecurring(
         var path = new URL(form.action, location.href).pathname;
         if (path !== "/recurring/progress" && path !== "/recurring/clear") return;
         e.preventDefault();
-        fill(form);
+        // Read what was tapped before fill() turns the segment into "step back one".
         var body = new URLSearchParams(new FormData(form));
+        fill(form);
         busy = busy.then(function () {
           return fetch(form.action, { method: "POST", body: body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
         }).then(function (r) {
@@ -5861,6 +5918,14 @@ export interface StoryLabData {
   writeNext?: Array<{ channel: string; cards: Array<IdeaCard & { blueprint: Blueprint | null }>; saved: IdeaMark[]; skipped: number }>;
   /** The scripts added on the board, and how many came from the Drive. */
   library?: { scripts: StoredScript[]; drive: number; error: string };
+  /** Stories uploads with no script anywhere, newest first, to link one to. */
+  unassigned?: {
+    videos: Array<{ title: string; channel: string; url: string; publishedAt: Date; views: number | null }>;
+    total: number;
+    open: boolean;
+    linked: string;
+    error: string;
+  };
   /** 🎲 What was rolled, what was just added, and what's been added so far. */
   dice?: {
     rolled: DiceCard | null;
@@ -5971,6 +6036,69 @@ function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Sh
  * The scripts Story Lab learns from: the Drive's, plus every one added on the
  * board — a Stories video's own, or one added here on its own.
  */
+/**
+ * Unassigned videos: every Stories upload with no script anywhere, newest
+ * first — collapsed to one line until opened. Each can have its script linked
+ * right there (a Google Doc or pasted in), filed under the video's title, which
+ * is how the board finds a video's script; it then leaves this list.
+ */
+function unassignedPanel(u: NonNullable<StoryLabData["unassigned"]>): string {
+  const LIMIT = 60;
+  const channels = [...new Set(u.videos.map((v) => v.channel))].sort((a, b) => a.localeCompare(b));
+  const rowsHtml = u.videos
+    .map((v, i) => `<li class="uarow" data-ch="${esc(v.channel)}"${i >= LIMIT ? " hidden data-more" : ""}>
+      <div class="uahead">
+        <span class="cdot" style="--ch:${channelColour(v.channel)}"></span>
+        <a class="uat" href="${esc(v.url)}" target="_blank" rel="noreferrer" title="${esc(v.title)} — on YouTube">${esc(v.title)}</a>
+        <span class="uach">${esc(v.channel.replace(/^Specular /, ""))}</span>
+        <span class="uad">${esc(usDate(dayOf(v.publishedAt)))}${v.views !== null ? ` · ${esc(compactViews(v.views))} views` : ""}</span>
+        <details class="ualink"><summary>Link a script</summary>
+          <form class="sform uaform" method="post" action="/story-lab/scripts">
+            <input type="hidden" name="from" value="unassigned">
+            <input type="hidden" name="title" value="${esc(v.title)}">
+            <input type="text" name="url" placeholder="Its Google Doc link — shared as “Anyone with the link can view”" autocomplete="off">
+            <div class="or">or</div>
+            <textarea name="text" rows="4" placeholder="Paste the script, with its INTRO / PART 1 / … / OUTRO headers"></textarea>
+            <button class="clear">Link to this video</button>
+          </form>
+        </details>
+      </div>
+    </li>`)
+    .join("");
+  return `<details class="panel ideas unassigned" id="unassigned"${u.open ? " open" : ""}>
+    <summary><h2>Unassigned videos <span class="uacount">${u.videos.length}</span> <span class="sub">— Stories uploads with no script attached, ${u.total ? `${u.total - u.videos.length} of ${u.total} have one` : "none uploaded yet"}</span></h2></summary>
+    ${u.linked ? `<div class="ualinked" role="status">✓ Script linked to <b>${esc(u.linked)}</b>. It's that video's script now, and Story Lab learns from it once it's 150 words or more.</div>` : ""}
+    ${u.error ? `<div class="scripterr" role="alert">${esc(u.error)}</div>` : ""}
+    ${
+      u.videos.length
+        ? `<div class="uabar">
+            <label>Channel <select class="uapick"><option value="">Every channel</option>${channels.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>
+            <span class="hint-inline">Linking files the script under the video's title — how the board finds a video's script — and it joins what Story Lab learns from.</span>
+          </div>
+          <ul class="ualist">${rowsHtml}</ul>
+          ${u.videos.length > LIMIT ? `<button type="button" class="clear secondary uamore">Show all ${u.videos.length}</button>` : ""}
+          <script>
+          (function () {
+            var box = document.getElementById("unassigned");
+            var pick = box.querySelector(".uapick"), more = box.querySelector(".uamore"), all = false;
+            function draw() {
+              var ch = pick.value, n = 0;
+              box.querySelectorAll(".uarow").forEach(function (row) {
+                var show = !ch || row.getAttribute("data-ch") === ch;
+                if (show) n += 1;
+                row.hidden = !show || (!all && !ch && n > ${LIMIT});
+              });
+              if (more) more.hidden = all || !!ch;
+            }
+            pick.addEventListener("change", draw);
+            if (more) more.addEventListener("click", function () { all = true; draw(); });
+          })();
+          </script>`
+        : `<p class="hint">Every Stories upload has its script. New uploads land here until theirs is linked.</p>`
+    }
+  </details>`;
+}
+
 function libraryPanel(lib: NonNullable<StoryLabData["library"]>): string {
   const learning = lib.scripts.filter((sc) => corpus().some((c) => c.board?.id === sc.id)).length;
   const cards = lib.scripts
@@ -6177,6 +6305,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     shell,
     `${pageHeader("Story Lab", `<a class="clear secondary" href="/uploads?cat=stories">Stories uploads</a>`)}
     <p class="labsub">Learned from ${d.scripts} Stories scripts (${Math.round(d.words / 1000)}K words): how each format is built part by part, how every world's institution, roster and apex are used, and each hero's ability ladder. Ideas are ranked on the channel's own results${d.matched ? ` (${d.matched} scripts matched to their uploads)` : ""}, fit and freshness.</p>
+    ${d.unassigned ? unassignedPanel(d.unassigned) : ""}
     ${
       d.blueprint
         ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${
@@ -6326,7 +6455,7 @@ export function renderRevisions(
   shell: Shell,
   revisions: StoredRecord[],
   sort?: SortState,
-  history?: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort } | null,
+  history?: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort; reviewed?: Array<StoredRecord & { reviewedAt: Date | null }> } | null,
 ): string {
   const shown = sort ? sortRecords(revisions, sort.key, sort.dir) : revisions;
   const tabs = `<div class="tabs revtabs"><a class="tab${history ? "" : " on"}" href="/revisions">Waiting <span class="n">${revisions.length}</span></a><a class="tab${
@@ -6340,8 +6469,8 @@ export function renderRevisions(
     shell,
     `${pageHeader("Revisions")}${tabs}
     <p class="labsub">Each revision is due for review ${REVIEW_HOURS} hours after it comes in, unless its message gives a
-      deadline. ✓ marks it reviewed. ★ summarizes its Frame.io notes and scores the cut out of 10 — the scores build each channel's
-      <a href="/revisions?view=history">history</a>.</p>
+      deadline. ✓ marks it reviewed and moves it to <a href="/revisions?view=history">History</a>. ★ summarizes its Frame.io notes and
+      scores the cut out of 10 — the scores build each channel's timeline there.</p>
     ${revisions.length > 1 ? sortBar(sort) : ""}
     ${rows(shown, "No revisions waiting. Forward a Frame.io link into the intake channel.")}`,
   );
@@ -6373,7 +6502,34 @@ function timelineSvg(h: ChannelHistory): string {
     ${grid}<path d="${line}" class="tlline"/>${dots}</svg></div>`;
 }
 
-function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort }): string {
+/**
+ * Every revision marked reviewed, newest first: its score, or a way to give
+ * it one. A revision ✓'d without a summary has no score for the timeline, and
+ * this is where it's kept, so nothing reviewed disappears.
+ */
+function reviewedPanel(list: Array<StoredRecord & { reviewedAt: Date | null }>): string {
+  const unscored = list.filter((r) => typeof r.reviewScore !== "number").length;
+  const items = list
+    .map((r) => {
+      const score = typeof r.reviewScore === "number"
+        ? `<a class="rscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}" title="Its summary">${esc(fmtScore(r.reviewScore))}/10</a>`
+        : `<a class="rdscore" href="/r/${r.id}#summary" title="Summarize its notes and score it — it joins its channel's timeline">★ Score it</a>`;
+      return `<li class="rdrow">
+        <a class="rdt" href="/r/${r.id}" title="${esc(displayTitle(r))}">${esc(displayTitle(r))}</a>
+        <span class="rv">${REV_ICON}v${r.version ?? 1}</span>
+        ${r.channel ? `<span class="rch" style="--ch:${channelColour(r.channel)}"><i></i>${esc(r.channel.replace(/^Specular /, ""))}</span>` : `<span class="rch none">No channel</span>`}
+        <span class="rdwhen">${r.reviewedAt ? `reviewed ${esc(usDate(dayOf(r.reviewedAt)))} · ${esc(timeAgo(r.reviewedAt))}` : "reviewed"}</span>
+        ${score}
+      </li>`;
+    })
+    .join("");
+  return `<section class="panel revdone" id="reviewed">
+    <h2>Reviewed <span class="sub">— every revision you've ✓'d, newest first${unscored ? ` · ${unscored} without a score: ★ Score it puts one on its channel's timeline` : ""}</span></h2>
+    ${items ? `<ul class="rdlist">${items}</ul>` : `<p class="hint">Nothing reviewed yet. ✓ on a waiting revision moves it here.</p>`}
+  </section>`;
+}
+
+function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort; reviewed?: Array<StoredRecord & { reviewedAt: Date | null }> }): string {
   const opt = (v: string, label: string, sel: string) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(label)}</option>`;
   const picker = `<form class="histpick" method="get" action="/revisions">
       <input type="hidden" name="view" value="history">
@@ -6404,6 +6560,7 @@ function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch:
   };
   return `<p class="labsub">Every summarized revision's score, video by video (a video's latest version counts), for each channel. Red is 5 or below, green 8 and up. Three in a row at 5 or below is cause for concern; three at 8 or higher earns a trophy. Click a point for its summary.</p>
     ${picker}
+    ${d.reviewed ? reviewedPanel(d.reviewed) : ""}
     ${d.channels.length ? d.channels.map(section).join("") : `<div class="empty">Nothing scored yet. Open a revision and press Summarize — its score starts the channel's timeline.</div>`}`;
 }
 

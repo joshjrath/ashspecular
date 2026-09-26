@@ -1553,6 +1553,39 @@ t("…and when every running series is weak, it says so rather than 'no series'"
 t("…and with no series yet says how one starts", [gNone.includes("No series running yet"), gNone.includes("held to its own usual pace once it has four uploads")], [true, true]);
 setOwnPaces(new Map());
 
+section("Recurring: a tapped segment saves what was tapped");
+const recScript = [...renderRecurring(shellFix, { date: "2026-09-26", rows: [{ channel: "Specular DC", total: 5, done: 0, removed: 0 }] }, { date: "2026-09-27", rows: [] }, [], [], 90).matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!).find((x) => x.includes("/recurring/progress"))!;
+t("the count is read from the form before the segments step it back", recScript.indexOf("var body = new URLSearchParams(new FormData(form))") < recScript.indexOf("fill(form);"), true);
+const recPills = renderRecurring(shellFix, { date: "2026-09-26", rows: [{ channel: "Specular DC", total: 5, done: 2, removed: 0 }] }, { date: "2026-09-27", rows: [] }, [], [], 90);
+t("…and each segment asks for its own number (the last filled one steps back)", [...recPills.matchAll(/name="done" value="(\d)"/g)].map((m) => m[1]), ["1", "1", "3", "4", "5"]);
+
+section("Revisions: a reviewed revision stays in History, scored or not");
+const doneRev = (id: number, title: string, score: number | null) =>
+  ({ ...revRec, id, title, status: "done", reviewScore: score ?? undefined, reviewedAt: new Date("2026-09-26T15:00:00Z") }) as unknown as typeof revRec & { reviewedAt: Date };
+const withReviewed = renderRevisions(shellFix, [], undefined, { channels: [], all: [], ch: "", sort: "attention", reviewed: [doneRev(61, "Unscored Cut", null), doneRev(62, "Scored Cut", 8.5)] });
+t("History lists every reviewed revision", [withReviewed.includes('id="reviewed"'), (withReviewed.match(/class="rdrow"/g) ?? []).length], [true, 2]);
+t("…one without a score offers to score it, one with shows it", [/href="\/r\/61#summary"[^>]*>★ Score it</.test(withReviewed), withReviewed.includes("8.5/10")], [true, true]);
+t("…and says how many are unscored", withReviewed.includes("1 without a score"), true);
+t("Waiting says where a ✓'d revision goes", renderRevisions(shellFix, [revRec]).includes("moves it to <a href=\"/revisions?view=history\">History</a>"), true);
+
+section("Story Lab: Unassigned videos, and a script linked to one");
+const uaVideos = [
+  { title: "What If Gojo Was In <FNAF>?", channel: "Specular FNAF", url: "https://youtu.be/a", publishedAt: new Date("2026-09-20T12:00:00Z"), views: 120_000 },
+  { title: "Could Batman Survive The Purge?", channel: "Specular Studios", url: "https://youtu.be/b", publishedAt: new Date("2026-09-18T12:00:00Z"), views: null },
+];
+const labBase = {
+  scripts: 1, words: 1000, matched: 0, ideas: [], blueprint: null, picked: { format: "insert", hero: "", world: "", power: "", target: "" },
+  check: null, contrast: null, results: [], coverage: { heroes: [], worlds: [], done: new Set<string>() }, formats: [],
+};
+const uaShut = renderStoryLab(shellFix, { ...labBase, unassigned: { videos: uaVideos, total: 10, open: false, linked: "", error: "" } });
+t("a section says how many uploads have no script, closed until clicked", [uaShut.includes('<details class="panel ideas unassigned" id="unassigned">'), /Unassigned videos <span class="uacount">2</.test(uaShut), uaShut.includes("8 of 10 have one")], [true, true, true]);
+t("…each video can have its script linked right there, by its title", [(uaShut.match(/<form class="sform uaform" method="post" action="\/story-lab\/scripts">/g) ?? []).length, uaShut.includes('name="title" value="Could Batman Survive The Purge?"'), uaShut.includes('name="from" value="unassigned"')], [2, true, true]);
+t("…titles are escaped", uaShut.includes("<FNAF>"), false);
+t("…and its channel picker's script compiles", [...uaShut.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+const uaBack = renderStoryLab(shellFix, { ...labBase, unassigned: { videos: uaVideos.slice(1), total: 10, open: true, linked: "What If Gojo Was In FNAF?", error: "" } });
+t("after linking it comes back open, saying so", [uaBack.includes('id="unassigned" open'), uaBack.includes("Script linked to <b>What If Gojo Was In FNAF?</b>. It's that video's script now")], [true, true]);
+t("…and with nothing unassigned it says so", renderStoryLab(shellFix, { ...labBase, unassigned: { videos: [], total: 3, open: true, linked: "", error: "" } }).includes("Every Stories upload has its script"), true);
+
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
 );
