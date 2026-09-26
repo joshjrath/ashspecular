@@ -149,9 +149,48 @@ cut to look at, not a video to voice, so it never gets a VO deadline or an
 air date; it's due for review **12 hours after it comes in** (a deadline in
 its message wins; `REVIEW_HOURS` changes the 12). Revisions sit in their own
 section on the dashboard above the columns — switch it off under *Also show*
-like Unsorted and Channels — and on the Revisions page, soonest first, with
-other work that carries a Frame.io link listed below them. They're not in
-the category columns or counts. ✓ marks one reviewed.
+like Unsorted and Channels — and on the Revisions page, soonest first.
+They're not in the category columns or counts. ✓ marks one reviewed.
+
+Anything that arrives with a Frame.io link is a revision, whatever the
+message around it says. The one exception is the studio's own assignment
+post (a `MM-DD-YY | CODE | Title` heading), which can carry a link for
+reference. Work filed before this rule was moved over once, the way
+revisions were.
+
+**Summarize** (the ☰★ button on every revision card, or *Summary* on its
+page) sums up a cut's notes and scores it **out of 10**:
+
+- **The notes.** Paste Frame.io's comments (Comments panel ▸ ⋯ ▸ Export,
+  as CSV or text, or copied off the page). With `FRAMEIO_TOKEN` set (a
+  Frame.io developer token), leave the box empty and they're read from
+  Frame.io: every version of a review link or player link, v1's notes
+  included. Frame.io can't be reached from where the board was built, so
+  the API route is written to Frame.io's API but hasn't been run against it
+  yet. If it fails, it says why and asks you to paste the notes instead.
+- **Your own summary** (optional) counts as notes of its own, a little
+  heavier. **Your rating** (optional, 1–10) is half the score.
+- **The summary** is written by Claude when `ANTHROPIC_API_KEY` is set (it
+  also sorts each note by kind and size), and by rules otherwise.
+- **The score** is worked out in code, the same sum every time, with every
+  point taken off shown:
+  - *How many*: 0.1 a note, and 0.5 for each version past the first
+  - *How big*: a small bug 0.1, a real fix 0.3, an issue with the whole
+    video (its structure, the audio throughout, a re-edit) 1.4
+  - *Repeats*: an issue that was also on 2 of the channel's last 4 videos
+    costs 0.9, and a note given before 0.4, because the editor was already
+    told
+
+  Each card then shows its score (red at 5 or below, green at 8 and up).
+
+**History** (the second tab on the Revisions page) is a timeline for each
+channel: every video's score in the order they came in (a video's latest
+version counts), through a red band (5 and below) and a green one (8 and
+up). Pick one channel or see them all, sorted by *needs attention*, *best*
+or *A–Z*. Three videos in a row at 5 or below is cause for concern, and it
+offers **🚩 Flag the channel**, meaning time to find a different editor.
+Three in a row at 8 or higher offers **🏆 Give it a trophy**. You can set or
+clear either at any time.
 
 **Everything else** — open records that aren't in either list above.
 

@@ -19,6 +19,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-26-gaps-writenext-revisions",
+    title: "Revisions scored out of 10, Write next per channel, and nothing-assigned warnings",
+    changes: [
+      { text: "Every revision can be summarized: Frame.io's notes, pasted or read from Frame.io, plus your own take, into a summary and a score out of 10 that counts how many notes, how big, and what the editor was told before.", href: "/revisions" },
+      { text: "Revision history: a timeline of scores for each channel. Three in a row at 5 or below suggests a 🚩 flag; three at 8 or higher, a 🏆 trophy.", href: "/revisions?view=history" },
+      { text: "Anything sent with a Frame.io link is filed as a revision.", href: "/revisions" },
+      { text: "Story Lab's Write next: two ideas for every channel, each scored out of 100, with ↻ reroll, 🔖 save to the channel's idea bucket, and a warning when it's too close to a video on any channel.", href: "/story-lab#writenext" },
+      { text: "Rolling the dice is instant now, and whatever you add from them is brought forward in the cards and rerolls for two weeks.", href: "/story-lab#dice" },
+      { text: "Nothing assigned: a channel expected to post in the next 8 days with no video on that day shows on the dashboard, beside Calendar, in the bell and as a dashed slot on the calendar.", href: "/" },
+      { text: "An Uploaded button on every card: it clears the video and turns it green on the calendar.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-26-revisions-calendar-scripts",
     title: "Revisions on their own, a 4-day calendar, scripts that teach Story Lab",
     changes: [

@@ -30,6 +30,9 @@ import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
+import type { RevisionReview } from "../db/revisions.js";
+import { severityOf, themeLabel } from "../revisions/score.js";
+import type { ChannelHistory, HistorySort } from "../revisions/history.js";
 import type { Card as IdeaCard, IdeaMark, Neighbour } from "./stories/writenext.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
@@ -859,6 +862,60 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .dcard.uploaded .t, .dcard.uploaded .at { color: #CFF5E0; text-decoration: none; }
 .uploadbtn svg { width: 12px; height: 12px; vertical-align: -1px; }
 .uploadbtn.on { background: #2FB673 !important; color: #06170E !important; }
+.tick.sumlink { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #34343B; color: var(--ink2); }
+.tick.sumlink svg { width: 12px; height: 12px; }
+.tick.sumlink:hover { border-color: #8D9BF2; color: #C9CFFB; }
+.revscore { padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, var(--sc) 22%, transparent); color: var(--sc); font-weight: 800; font-size: 11px; }
+.sumpanel .big { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.sumpanel .scoreball { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--sc) 18%, var(--raised));
+  box-shadow: inset 0 0 0 3px var(--sc); font-family: var(--display); font-weight: 800; font-size: 26px; color: var(--sc); flex: none; }
+.sumpanel .scoreball small { display: block; font-size: 11px; color: var(--ink3); text-align: center; margin-top: -6px; }
+.sumpanel .sumtext { flex: 1; min-width: 240px; font-size: 14px; line-height: 1.6; color: var(--ink); }
+.sumpanel .sumby { font-size: 11.5px; color: var(--ink3); }
+.sumpens { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink2); }
+.sumpens b { display: inline-block; min-width: 48px; color: #FF9C94; font-variant-numeric: tabular-nums; }
+.sumthemes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.sumthemes span { background: var(--sunk); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--ink2); }
+.sumthemes span.rep { background: rgba(229,83,75,.18); color: #FFB1AA; }
+.sumnotes { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.sumnotes li { display: flex; gap: 8px; align-items: baseline; }
+.sumnotes .sev { flex: none; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; border-radius: 5px; padding: 1px 6px; }
+.sev.minor { background: #20302A; color: #8FE3B6; } .sev.moderate { background: #3A3218; color: #F3D27A; } .sev.major { background: #3A1D1D; color: #FFB4B4; }
+.sev.you { background: #2A2745; color: #C9CFFB; }
+.sumnotes .tc { color: var(--ink3); font-variant-numeric: tabular-nums; flex: none; }
+.sumform .row2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sumform input[type=number] { width: 90px; padding: 9px 10px; border-radius: 10px; border: 1px solid #2E2E35; background: var(--raised); color: var(--ink); font: inherit; }
+.revtabs { display: inline-flex; gap: 3px; background: var(--rail); border-radius: 999px; padding: 4px; margin: 0 0 14px; }
+.revtabs .tab { padding: 8px 19px; border-radius: 999px; font-size: 13px; color: #9A9AA3; font-weight: 600; }
+.revtabs .tab:hover { color: var(--ink); }
+.revtabs .tab.on { background: var(--yellow); color: #101012; font-weight: 700; }
+.revtabs .n { margin-left: 6px; color: inherit; opacity: .6; font-size: 11.5px; }
+.histpick { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 14px; }
+.histpick label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink2); }
+.histpick select { padding: 8px 10px; border-radius: 10px; background: var(--raised); color: var(--ink); border: 1px solid #2E2E35; font: inherit; }
+.histchan { padding: 16px 18px; margin-bottom: 12px; border-left: 3px solid var(--ch); }
+.histchan.flag { box-shadow: inset 0 0 0 1.5px rgba(229,83,75,.55); }
+.histchan.trophy { box-shadow: inset 0 0 0 1.5px rgba(232,197,71,.55); }
+.histchan header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.histchan header i { width: 10px; height: 10px; border-radius: 50%; background: var(--ch); }
+.histchan header b { font-family: var(--display); font-size: 16px; }
+.histmark { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 2px 10px; }
+.histmark.flag { background: rgba(229,83,75,.2); color: #FFB1AA; } .histmark.trophy { background: rgba(232,197,71,.2); color: #F8E27A; }
+.histavg { font-size: 12.5px; color: var(--ink3); } .histavg b { color: var(--sc); }
+.histbtns { margin-left: auto; display: flex; gap: 4px; }
+.histbtns button.icon { padding: 4px 9px; font-size: 12px; }
+.histalert { border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.histalert.bad { background: rgba(229,83,75,.14); color: #FFC9C4; } .histalert.good { background: rgba(60,203,132,.12); color: #BDF2D6; }
+.tlwrap { overflow-x: auto; }
+.timeline { display: block; }
+.timeline .tlbad { fill: rgba(229,83,75,.09); } .timeline .tlgood { fill: rgba(60,203,132,.09); }
+.timeline .tlgrid { stroke: #2A2A30; stroke-dasharray: 3 4; }
+.timeline .tlaxis { fill: var(--ink3); font-size: 10.5px; font-family: var(--ui); }
+.timeline .tlaxis.mid, .timeline .tlval { text-anchor: middle; }
+.timeline .tlval { fill: var(--ink); font-size: 11px; font-weight: 700; font-family: var(--ui); }
+.timeline .tlline { fill: none; stroke: #5B5B66; stroke-width: 2; }
+.timeline .tldot { stroke: var(--bg, #0B0B0D); stroke-width: 2.5; cursor: pointer; }
+.timeline a:hover .tldot { r: 9; }
 .row.uploaded { background: rgba(47,182,115,.10); box-shadow: inset 3px 0 0 #2FB673; }
 .uploaded-tag { padding: 1px 8px; border-radius: 6px; background: rgba(47,182,115,.22); color: #9BEBC2; font-weight: 700; font-size: 11px; }
 .paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
@@ -2084,6 +2141,7 @@ function row(r: StoredRecord): string {
     );
   }
   if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
+  if (typeof r.reviewScore === "number") meta.unshift(`<a class="revscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}" title="The cut's score, from its notes">${esc(fmtScore(r.reviewScore))}/10</a>`);
   if (r.uploadedAt) meta.unshift(`<span class="uploaded-tag" title="Marked ${esc(usDate(dayOf(r.uploadedAt)))}">Uploaded</span>`);
   if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
   if (r.pausedAt) meta.unshift(`<span class="paused-tag" title="Paused ${esc(usDate(dayOf(r.pausedAt)))}">Paused</span>`);
@@ -2267,9 +2325,14 @@ export function pinnedFirst(list: StoredRecord[]): StoredRecord[] {
 const PIN_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l-.75 4.5 2.5 2.5v1.25h-8.5V8.75l2.5-2.5z" fill="currentColor"/><path d="M8 10v4.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
 const PAUSE_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/><rect x="7.1" y="2" width="2.4" height="8" rx=".8" fill="currentColor"/></svg>`;
+const SUM_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2.5h8M2 5h8M2 7.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="m8.6 7.2.5 1.1 1.2.1-.9.8.3 1.2-1.1-.6-1 .6.2-1.2-.9-.8 1.2-.1z" fill="currentColor"/></svg>`;
 const UPLOAD_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 8.2V2.3M3.4 4.7 6 2.1l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.3 8.6v1.3h7.4V8.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const PLAY_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L9.6 6z" fill="currentColor"/></svg>`;
 const NOSCRIPT_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4.2L9.5 3.8v6.7H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6.2 4v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="8.6" r=".75" fill="currentColor"/></svg>`;
+
+/** A revision score out of 10 as a colour: red at 5 or below, green at 8 and up. */
+export const revColour = (n: number) => (n >= 8 ? "#3CCB84" : n > 5 ? "#E8C547" : "#E5534B");
+export const fmtScore = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /**
  * A card's buttons: ✓ clear and × remove on top; below them ⏸ pause (off
@@ -2303,7 +2366,11 @@ function actions(r: StoredRecord): string {
     : r.noScriptAt
       ? button("script", "Script arrived — clear the no-script mark", NOSCRIPT_ICON, "noscript", true)
       : button("noscript", "No script — the VO is needed but the script hasn't been sent", NOSCRIPT_ICON, "noscript");
-  return `<div class="acts">${top}${pause}${noScript}${upload}</div>`;
+  // A revision's notes, summed up and scored.
+  const summarize = revision
+    ? `<a class="tick sumlink" href="/r/${r.id}#summary" aria-label="Summarize the notes" title="Summarize the notes and score the cut">${SUM_ICON}</a>`
+    : "";
+  return `<div class="acts">${top}${pause}${noScript}${upload}${summarize}</div>`;
 }
 
 /**
@@ -2853,10 +2920,59 @@ function scriptForm(action: string, opts: { title?: boolean; url?: string; again
     </form>`;
 }
 
+/**
+ * A revision's Summary: its notes summed up, scored out of 10 with every point
+ * explained, and the form to (re)summarize — Frame.io's comments pasted or
+ * read through the API, your own summary, your own rating.
+ */
+function summaryPanel(r: StoredRecord, review: RevisionReview | null, opts: { frameio: boolean; error: string }): string {
+  const b = review?.breakdown;
+  const result = review && b
+    ? `<div class="big">
+        <div class="scoreball" style="--sc:${revColour(review.score)}">${esc(fmtScore(review.score))}<small>/10</small></div>
+        <div class="sumtext">${esc(review.summary)}<div class="sumby">${review.summaryBy === "claude" ? "Summed up by Claude" : "Summed up by rules"} · ${esc(usDate(dayOf(review.summarizedAt)))} · ${
+          review.ownScore !== null ? `the notes say ${esc(fmtScore(review.autoScore))}, you said ${esc(fmtScore(review.ownScore))} — half each` : `from the notes alone`
+        }</div></div>
+      </div>
+      <ul class="sumpens">${b.penalties.map((p) => `<li><b>−${esc(fmtScore(p.points))}</b> ${esc(p.what === "frequency" ? "How many" : p.what === "type" ? "How big" : "Repeats")}: ${esc(p.why)}</li>`).join("") || "<li>Nothing taken off.</li>"}</ul>
+      <div class="sumthemes">${b.themes.filter((t) => t.id !== "other").map((t) => `<span${b.repeats.some((x) => x.theme === t.id) ? ' class="rep" title="Also on this channel\'s recent videos"' : ""}>${esc(t.label)} · ${t.n}</span>`).join("")}</div>
+      ${b.repeatedNotes.length ? `<p class="hint" style="padding:0">Told before: ${b.repeatedNotes.slice(0, 4).map((x) => `“${esc(x.note.slice(0, 90))}” (on ${esc(x.before)})`).join(" · ")}</p>` : ""}
+      <details><summary class="hint" style="padding:0;cursor:pointer">All ${review.comments.length} notes ▾</summary>
+        <ul class="sumnotes">${review.comments
+          .map((c) => {
+            const sev = c.severity ?? severityOf(c);
+            return `<li><span class="sev ${c.source === "you" ? "you" : sev}">${c.source === "you" ? "you" : sev}</span>${c.timecode ? `<span class="tc">${esc(c.timecode)}</span>` : ""}${c.version ? `<span class="tc">v${c.version}</span>` : ""}<span>${esc(c.text)}${c.theme && c.theme !== "other" ? ` <span class="tc">· ${esc(themeLabel(c.theme))}</span>` : ""}</span></li>`;
+          })
+          .join("")}</ul></details>`
+    : `<p class="hint" style="padding:0">Not summarized yet. Paste the cut's Frame.io comments${opts.frameio ? " — or leave it empty and they're read from Frame.io" : ""}, add your own take if you like, and get a summary and a score out of 10.</p>`;
+  return `<section class="panel sumpanel" id="summary" style="padding:18px 20px"><h2>Summary</h2>
+    ${opts.error ? `<div class="scripterr" role="alert">${esc(opts.error)}</div>` : ""}
+    ${result}
+    <details${review ? "" : " open"} style="margin-top:12px"><summary class="clear secondary" style="display:inline-block;cursor:pointer">${review ? "Summarize again" : "Summarize"}</summary>
+      <form class="sform sumform" method="post" action="/r/${r.id}/summarize" style="padding:12px 0 0">
+        <textarea name="comments" rows="6" placeholder="${opts.frameio ? "Leave empty to read the comments from Frame.io — or paste them" : "Paste the Frame.io comments: Comments panel ▸ ⋯ ▸ Export (CSV or text), or copy them off the page"}"></textarea>
+        <textarea name="own" rows="3" placeholder="Your own summary (optional) — it counts as notes of its own">${esc(review?.ownSummary ?? "")}</textarea>
+        <div class="row2"><label class="hint" style="padding:0">Your rating <input type="number" name="rating" min="1" max="10" step="0.5" value="${review?.ownScore ?? ""}" placeholder="1–10"></label>
+          <span class="hint" style="padding:0">optional — half the score when given</span></div>
+        ${review ? `<span class="hint" style="padding:0">Leave the comments empty to keep the ${review.comments.filter((c) => c.source !== "you").length} already here.</span>` : ""}
+        <button class="clear">Summarize</button>
+      </form>
+    </details>
+  </section>`;
+}
+
 export function renderRecord(
   shell: Shell,
   r: StoredRecord,
-  extra: { later?: number; moved?: { token: string; text: string } | null; scripts?: StoredScript[]; scriptError?: string } = {},
+  extra: {
+    later?: number;
+    moved?: { token: string; text: string } | null;
+    scripts?: StoredScript[];
+    scriptError?: string;
+    review?: RevisionReview | null;
+    frameio?: boolean;
+    summaryError?: string;
+  } = {},
 ): string {
   const later = extra.later ?? 0;
   const c = colourOf(r.category);
@@ -2938,7 +3054,7 @@ export function renderRecord(
     ${r.brief ? `<section><h2>Story brief</h2><div class="brief">${esc(r.brief)}</div></section>` : ""}
     ${
       r.kind === "review"
-        ? ""
+        ? summaryPanel(r, extra.review ?? null, { frameio: Boolean(extra.frameio), error: extra.summaryError ?? "" })
         : `<section id="script"><h2>Script</h2>
       ${extra.scriptError ? `<div class="scripterr" role="alert">${esc(extra.scriptError)}</div>` : ""}
       ${extra.scripts?.length ? `<div class="scripts">${extra.scripts.map((sc) => scriptCard(sc, c)).join("")}</div>` : ""}
@@ -5820,24 +5936,89 @@ function colourSettings(rows: ColourRow[], saved: string): string {
  * REVIEW_HOURS after it came in unless its message said otherwise. Below,
  * other open work that carries a Frame.io link, so a link never goes missing.
  */
-export function renderRevisions(shell: Shell, revisions: StoredRecord[], others: StoredRecord[], sort?: SortState): string {
+export function renderRevisions(
+  shell: Shell,
+  revisions: StoredRecord[],
+  sort?: SortState,
+  history?: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort } | null,
+): string {
   const shown = sort ? sortRecords(revisions, sort.key, sort.dir) : revisions;
+  const tabs = `<div class="tabs revtabs"><a class="tab${history ? "" : " on"}" href="/revisions">Waiting <span class="n">${revisions.length}</span></a><a class="tab${
+    history ? " on" : ""
+  }" href="/revisions?view=history">History</a></div>`;
+  if (history) {
+    return layout("Revision history", shell, `${pageHeader("Revisions")}${tabs}${revisionHistoryHtml(history)}`);
+  }
   return layout(
     "Revisions",
     shell,
-    `${pageHeader("Revisions")}
+    `${pageHeader("Revisions")}${tabs}
     <p class="labsub">Each revision is due for review ${REVIEW_HOURS} hours after it comes in, unless its message gives a
-      deadline. ✓ marks it reviewed. Revisions have their own place — here and on the dashboard — and never carry a VO deadline.</p>
+      deadline. ✓ marks it reviewed. ★ summarizes its Frame.io notes and scores the cut out of 10 — the scores build each channel's
+      <a href="/revisions?view=history">history</a>.</p>
     ${revisions.length > 1 ? sortBar(sort) : ""}
-    ${rows(shown, "No revisions waiting. Forward a Frame.io link into the intake channel.")}
-    ${
-      others.length
-        ? `<h2 class="section-title" style="margin-top:28px">Other work with a Frame.io link</h2>
-           <p class="hint">Assignments sent with a cut to watch — they stay with their category's work.</p>
-           ${rows(others, "")}`
-        : ""
-    }`,
+    ${rows(shown, "No revisions waiting. Forward a Frame.io link into the intake channel.")}`,
   );
+}
+
+/** Each channel's scores as a line through the red (5 and below) and green (8 and up) bands. */
+function timelineSvg(h: ChannelHistory): string {
+  const n = h.points.length;
+  const padX = 34;
+  // Across the whole panel; past about twenty videos it scrolls sideways instead of crowding.
+  const w = Math.max(1000, padX * 2 + (n - 1) * 48);
+  const step = n > 1 ? (w - padX * 2) / (n - 1) : 0;
+  const top = 24;
+  const plotH = 140;
+  const y = (s: number) => top + ((10 - s) / 9) * plotH;
+  const x = (i: number) => (n === 1 ? w / 2 : padX + i * step);
+  const line = h.points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.score).toFixed(1)}`).join(" ");
+  const grid = [1, 5, 8, 10]
+    .map((s) => `<line x1="${padX - 14}" x2="${w - 8}" y1="${y(s)}" y2="${y(s)}" class="tlgrid"/><text x="4" y="${y(s) + 4}" class="tlaxis">${s}</text>`)
+    .join("");
+  const dots = h.points
+    .map((p, i) => `<a href="/r/${p.recordId}#summary"><circle cx="${x(i)}" cy="${y(p.score)}" r="7" fill="${revColour(p.score)}" class="tldot"><title>${esc(p.title)}${p.version ? ` (v${p.version})` : ""} — ${esc(fmtScore(p.score))}/10 · ${esc(usDate(dayOf(p.at)))}</title></circle>
+      <text x="${x(i)}" y="${y(p.score) - 12}" class="tlval">${esc(fmtScore(p.score))}</text>
+      <text x="${x(i)}" y="${top + plotH + 22}" class="tlaxis mid">${esc(usDate(dayOf(p.at)).replace(/\/\d{4}$/, ""))}</text></a>`)
+    .join("");
+  return `<div class="tlwrap"><svg class="timeline" viewBox="0 0 ${w} ${top + plotH + 30}" width="100%" style="min-width:${Math.max(320, n * 44 + 80)}px" role="img" aria-label="${esc(h.channel)} revision scores">
+    <rect x="${padX - 14}" y="${y(5)}" width="${w - padX + 6}" height="${y(1) - y(5)}" class="tlbad"/>
+    <rect x="${padX - 14}" y="${y(10)}" width="${w - padX + 6}" height="${y(8) - y(10)}" class="tlgood"/>
+    ${grid}<path d="${line}" class="tlline"/>${dots}</svg></div>`;
+}
+
+function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort }): string {
+  const opt = (v: string, label: string, sel: string) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(label)}</option>`;
+  const picker = `<form class="histpick" method="get" action="/revisions">
+      <input type="hidden" name="view" value="history">
+      <label>Channel <select name="ch" onchange="this.form.submit()">${opt("", "Every channel", d.ch)}${d.all.map((c) => opt(c, c, d.ch)).join("")}</select></label>
+      <label>Sort <select name="sort" onchange="this.form.submit()">${opt("attention", "Needs attention first", d.sort)}${opt("best", "Best first", d.sort)}${opt("name", "A–Z", d.sort)}</select></label>
+      <noscript><button class="clear secondary">Show</button></noscript>
+    </form>`;
+  const markForm = (channel: string, mark: "flag" | "trophy" | "clear", label: string, cls = "") =>
+    `<form method="post" action="/revisions/mark" class="inline"><input type="hidden" name="channel" value="${esc(channel)}"><input type="hidden" name="mark" value="${mark}"><button class="clear secondary ${cls}">${label}</button></form>`;
+  const section = (h: ChannelHistory) => {
+    const last3 = h.points.slice(-3);
+    const alert =
+      h.streak === "concern" && h.mark !== "flag"
+        ? `<div class="histalert bad">3 videos in a row at 5 or below (${last3.map((p) => esc(fmtScore(p.score))).join(", ")}) — cause for concern. Time to find a different editor for ${esc(h.channel)}? ${markForm(h.channel, "flag", "🚩 Flag the channel")}</div>`
+        : h.streak === "trophy" && h.mark !== "trophy"
+          ? `<div class="histalert good">3 videos in a row at 8 or higher (${last3.map((p) => esc(fmtScore(p.score))).join(", ")}). ${markForm(h.channel, "trophy", "🏆 Give it a trophy")}</div>`
+          : "";
+    return `<section class="panel histchan${h.mark ? ` ${h.mark}` : ""}" style="--ch:${channelColour(h.channel)}">
+      <header>
+        <i></i><b>${esc(h.channel)}</b>
+        ${h.mark === "flag" ? `<span class="histmark flag" title="Flagged: time to find a different editor">🚩 Flagged</span>` : h.mark === "trophy" ? `<span class="histmark trophy">🏆 Trophy</span>` : ""}
+        <span class="histavg" style="--sc:${revColour(h.average)}">average <b>${esc(fmtScore(h.average))}</b> · ${h.points.length} video${h.points.length === 1 ? "" : "s"}</span>
+        <span class="histbtns">${h.mark !== "flag" ? markForm(h.channel, "flag", "🚩", "icon") : ""}${h.mark !== "trophy" ? markForm(h.channel, "trophy", "🏆", "icon") : ""}${h.mark ? markForm(h.channel, "clear", "Clear mark", "icon") : ""}</span>
+      </header>
+      ${alert}
+      ${timelineSvg(h)}
+    </section>`;
+  };
+  return `<p class="labsub">Every summarized revision's score, video by video (a video's latest version counts), for each channel. Red is 5 or below, green 8 and up. Three in a row at 5 or below is cause for concern; three at 8 or higher earns a trophy. Click a point for its summary.</p>
+    ${picker}
+    ${d.channels.length ? d.channels.map(section).join("") : `<div class="empty">Nothing scored yet. Open a revision and press Summarize — its score starts the channel's timeline.</div>`}`;
 }
 
 /** Everything paused — out of the workflow with no deadline — and the way back. */

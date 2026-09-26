@@ -57,6 +57,12 @@ import jpegJs from "jpeg-js";
 import { esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
+import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
+import { commentsFromFrameio, ownNotes, parsePasted } from "../src/revisions/comments.js";
+import { scoreRevision, severityOf, themeOf } from "../src/revisions/score.js";
+import { channelHistories, streakOf } from "../src/revisions/history.js";
+import { summarize } from "../src/revisions/summarize.js";
+import { videoKey } from "../src/db/revisions.js";
 import { NeighbourIndex, scoreIdea, writeNext } from "../src/web/stories/writenext.js";
 import { indexPublic } from "../src/web/stories/lab.js";
 
@@ -1186,8 +1192,8 @@ const dashRev = renderDashboard({ ...shellFix, active: "dashboard" }, {
 });
 t("the dashboard gives revisions their own section", [dashRev.includes('class="panel revpanel dashpart" data-part="revisions"'), dashRev.includes("/r/40\"")], [true, true]);
 t("…switchable like Unsorted and Channels", dashRev.includes('data-part="revisions" checked'), true);
-const revPage = renderRevisions(shellFix, [revRec], [plainRec]);
-t("the Revisions page lists revisions, then other Frame.io work", [revPage.indexOf("/r/40\"") < revPage.indexOf("Other work with a Frame.io link"), revPage.includes("/r/8\"")], [true, true]);
+const revPage = renderRevisions(shellFix, [revRec]);
+t("the Revisions page lists revisions, and nothing else as 'other Frame.io work'", [revPage.includes("/r/40\""), revPage.includes("Other work with a Frame.io link")], [true, false]);
 
 section("Calendar — Day · 4 days · Week · Month, and a channel dropdown");
 const tabOrder = (html: string) => [...html.matchAll(/class="tab(?: on)?"[^>]*href="\/(day|4day|week|calendar)\//g)].map((m) => m[1]);
@@ -1344,6 +1350,65 @@ const tIdx = performance.now();
 indexPublic(bigPub);
 labIdeas([], new Date(), 100_000, bigPub, [], false);
 t("ideas against 3,000 public videos in well under a second", performance.now() - tIdx < 1500, true);
+
+section("Revisions — a Frame.io link is a revision");
+const fioFwd = { ...base, kind: "update", links: [{ url: "https://f.io/abc", kind: "frameio", label: "" }], air_date: "2026-10-01", vo_due: "2026-09-25T23:59:00-04:00" } as unknown as Extraction;
+t("a forward with a Frame.io link is a revision, whatever it was read as", [frameioIsRevision(fioFwd, "here's the new cut https://f.io/abc").kind, frameioIsRevision(fioFwd, "x").vo_due, frameioIsRevision(fioFwd, "x").air_date], ["review", null, null]);
+t("…but the studio's own assignment post keeps its kind", frameioIsRevision({ ...fioFwd, kind: "assignment" } as Extraction, "### 10-03-26 | VIDEO-008 | Title\nhttps://f.io/abc").kind, "assignment");
+t("…an assignment post is known by its heading", [isAssignmentPost("**10-03-26 | VIDEO-008 | What If**"), isAssignmentPost("new cut is up")], [true, false]);
+t("…and a message with no Frame.io link is left alone", frameioIsRevision({ ...fioFwd, links: [] } as Extraction, "x").kind, "update");
+
+section("Revisions — Summarize: the notes, a summary, a score out of 10");
+const csv = 'Comment Number,Commenter,Comment,Timecode\n1,Josh,"Audio is way too loud here",00:00:12:03\n2,Josh,"Typo in the caption, ""Wolverene""",00:01:05:10\n3,Josh,"The whole video drags — tighten the structure throughout",';
+const fromCsv = parsePasted(csv);
+t("Frame.io's CSV export is read, quotes and all", fromCsv.map((c) => [c.text, c.author, c.timecode]), [["Audio is way too loud here", "Josh", "00:00:12:03"], ["Typo in the caption, \"Wolverene\"", "Josh", "00:01:05:10"], ["The whole video drags — tighten the structure throughout", "Josh", null]]);
+const fromText = parsePasted("#1 00:00:12 Josh\nAudio too loud\n\n#2 00:01:05 Josh\nTypo in the caption");
+t("…so is the plain-text export, a note a block", fromText.map((c) => [c.text, c.author, c.timecode]), [["Audio too loud", "Josh", "00:00:12"], ["Typo in the caption", "Josh", "00:01:05"]]);
+t("…and notes copied a line each", parsePasted("0:12 audio too loud\n1:05 - typo in caption").map((c) => [c.timecode, c.text]), [["0:12", "audio too loud"], ["1:05", "typo in caption"]]);
+t("each note gets its kind", [themeOf("Audio is way too loud"), themeOf("Typo in the caption"), themeOf("pacing drags"), themeOf("nice")], ["audio", "text", "pacing", "other"]);
+t("…and its size: a small bug, a fix, or the whole video", fromCsv.map((c) => severityOf(c)), ["moderate", "minor", "major"]);
+const revClean = scoreRevision([], 1, []);
+const revFew = scoreRevision([{ text: "tiny typo at 0:12", source: "pasted" }], 1, []);
+const revHeavy = scoreRevision(fromCsv, 3, []);
+t("no notes is a 10; a small note costs little; a lot over three versions costs a lot", [revClean.score, revFew.score >= 9.5, revHeavy.score < revFew.score], [10, true, true]);
+t("…every point taken off says why", revHeavy.penalties.map((p) => p.what), ["frequency", "type"]);
+const revPast = [
+  { title: "Video A", themes: ["audio", "text"], comments: ["audio way too loud in the intro"] },
+  { title: "Video B", themes: ["audio"], comments: ["music drowns the VO"] },
+];
+const revRepeated = scoreRevision([{ text: "Audio is way too loud here", source: "pasted" }], 1, revPast);
+t("the same issue on the channel's recent videos costs extra", [revRepeated.repeats.map((r) => r.theme), revRepeated.repeatedNotes.map((r) => r.before), revRepeated.score < scoreRevision([{ text: "Audio is way too loud here", source: "pasted" }], 1, []).score], [["audio"], ["Video A"], true]);
+const revOwn = scoreRevision(fromCsv, 1, [], 9);
+t("your own rating is half the score", revOwn.score, Math.round(((revOwn.auto + 9) / 2) * 10) / 10);
+t("your own summary counts as notes of its own", ownNotes("Great pacing overall. Fix the intro music.\n- captions late").map((n) => n.text), ["Great pacing overall.", "Fix the intro music.", "captions late"]);
+const revSum = await summarize({ title: "What If Gojo Was In Invincible?", channel: "Specular Anime", comments: fromCsv, versions: 2, past: revPast, own: null });
+t("without a model the summary is written by rules, and says what repeats", [revSum.by, revSum.text.includes("3 notes over 2 versions"), revSum.text.includes("Again: audio levels")], ["rules", true, true]);
+t("the versions of one video share a key", [videoKey("video-012", "x"), videoKey(null, "Walter White v3"), videoKey(null, "Walter White")], ["VIDEO-012", "walter white", "walter white"]);
+const apiCalls: string[] = [];
+const fakeApi = (async (url: string) => {
+  apiCalls.push(url);
+  const body = url.includes("/review_links/") ? [{ asset_id: "a1" }] : url.endsWith("/assets/a1") ? { type: "version_stack", name: "x" } : url.includes("/children") ? [{ id: "v1" }, { id: "v2" }] : url.includes("/v1/comments") ? [{ text: "audio loud", timestamp: 72, owner: { name: "Josh" } }] : [{ text: "better", timestamp: null }];
+  return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+}) as unknown as typeof fetch;
+const fioApi = await commentsFromFrameio("https://app.frame.io/reviews/1234abcd-0000-0000-0000-000000000000/x", "tok", fakeApi);
+t("with a Frame.io token, a review link's comments come from the API — every version", fioApi.ok ? [fioApi.versions, fioApi.comments.map((c) => [c.text, c.version, c.timecode])] : fioApi.error, [2, [["audio loud", 1, "1:12"], ["better", 2, null]]]);
+t("…and without one, it says to paste them", (await commentsFromFrameio("https://f.io/x", "")).ok, false);
+
+section("Revisions — history, flags and trophies");
+t("3 in a row at 5 or below is cause for concern; 3 at 8 or more, a trophy", [streakOf([9, 5, 4, 3]), streakOf([4, 8, 9, 8.5]), streakOf([4, 9, 5]), streakOf([4, 4])], ["concern", "trophy", null, null]);
+const hp = (channel: string, scores: number[]) => scores.map((score, i) => ({ recordId: 100 + i, title: `${channel} ${i}`, version: 1, score, at: new Date(Date.UTC(2026, 8, 1 + i)), channel }));
+const revHist = channelHistories([...hp("Specular Anime", [9, 8, 8.5]), ...hp("Specular Law", [5, 4, 3]), ...hp("Specular Comics", [7])], new Map(), "attention");
+t("needs attention first", revHist.map((h) => [h.channel, h.streak]), [["Specular Law", "concern"], ["Specular Comics", null], ["Specular Anime", "trophy"]]);
+t("…or best first, or A–Z", [channelHistories(hp("A", [5]).concat(hp("B", [9])), new Map(), "best").map((h) => h.channel), channelHistories(hp("B", [5]).concat(hp("A", [9])), new Map(), "name").map((h) => h.channel)], [["B", "A"], ["A", "B"]]);
+const histPage = renderRevisions(shellFix, [], undefined, { channels: revHist, all: revHist.map((h) => h.channel), ch: "", sort: "attention" });
+t("the history draws a timeline a channel, a point a video", [(histPage.match(/class="timeline"/g) ?? []).length, (histPage.match(/class="tldot"/g) ?? []).length], [3, 7]);
+t("…suggests the flag and the trophy", [histPage.includes('class="histalert bad"'), histPage.includes("🚩 Flag the channel"), histPage.includes("🏆 Give it a trophy")], [true, true, true]);
+const flagged2 = channelHistories(hp("Specular Law", [5, 4, 3]), new Map([["Specular Law", "flag" as const]]));
+t("…and shows a flag once it's set, without asking again", [renderRevisions(shellFix, [], undefined, { channels: flagged2, all: ["Specular Law"], ch: "", sort: "attention" }).includes("🚩 Flagged"), renderRevisions(shellFix, [], undefined, { channels: flagged2, all: ["Specular Law"], ch: "", sort: "attention" }).includes('class="histalert bad"')], [true, false]);
+const revScored = { ...revRec, reviewScore: 4.5 } as typeof revRec;
+t("a scored revision's card shows its score; every revision card has ★ Summarize", [renderList(shellFix, "R", "", [revScored]).includes(">4.5/10<"), renderList(shellFix, "R", "", [revRec]).includes('href="/r/40#summary"')], [true, true]);
+const revPageSum = renderRecord(shellFix, revRec, { review: { recordId: 40, channel: "Specular Anime", video: "x", title: "x", version: 3, versions: 3, comments: revSum.comments, source: "pasted", summary: revSum.text, summaryBy: revSum.by, ownSummary: null, ownScore: null, autoScore: revSum.breakdown.auto, score: revSum.breakdown.score, breakdown: revSum.breakdown, summarizedAt: new Date() } });
+t("a revision's page has its Summary: score, why, and the notes", [revPageSum.includes('id="summary"'), revPageSum.includes('class="scoreball"'), revPageSum.includes("How big:"), revPageSum.includes("Summarize again")], [true, true, true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

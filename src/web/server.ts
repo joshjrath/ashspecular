@@ -16,7 +16,6 @@ import {
   listBatchesOn,
   search,
   listReviews,
-  listFrameioWork,
   openByCategory,
   setStatus,
   stats,
@@ -78,6 +77,10 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
+import { channelMarks, getReview, pastForChannel, revisionHistory, saveReview, scoresFor, setChannelMark, videoKey } from "../db/revisions.js";
+import { commentsFromFrameio, ownNotes, parsePasted } from "../revisions/comments.js";
+import { summarize } from "../revisions/summarize.js";
+import { channelHistories } from "../revisions/history.js";
 import { RELEASES, releaseNotices } from "./changelog.js";
 import { markReleases } from "../db/releases.js";
 
@@ -266,6 +269,13 @@ function zonedMidnight(day: string): Date {
   return new Date(Date.parse(`${day}T00:00:00Z`) - offset * 3_600_000);
 }
 
+/** Revisions with their scores, for their cards. */
+async function withScores(list: StoredRecord[]): Promise<StoredRecord[]> {
+  if (!hasDatabase) return list;
+  const scores = await scoresFor(list.filter((r) => r.kind === "review").map((r) => r.id)).catch(() => new Map<number, number>());
+  return list.map((r) => (scores.has(r.id) ? { ...r, reviewScore: scores.get(r.id)! } : r));
+}
+
 /** Everything for the bell, newest first. */
 async function allNotices(): Promise<Notice[]> {
   const [work, gaps] = await Promise.all([listNotices(ORG_TZ), currentGaps()]);
@@ -347,7 +357,7 @@ export async function startWeb(): Promise<void> {
     ]);
 
     // Revisions get their own section; the columns are the work to voice.
-    const revisions = [...grouped.values()].flat().filter((r) => r.kind === "review");
+    const revisions = await withScores([...grouped.values()].flat().filter((r) => r.kind === "review"));
     const due = (r: StoredRecord) => (r.deadline ?? r.voDue ?? r.scriptDue)?.getTime() ?? Infinity;
     revisions.sort((a, b) => Number(Boolean(b.pinnedAt)) - Number(Boolean(a.pinnedAt)) || due(a) - due(b));
     const columns = new Map([...grouped].map(([k, list]) => [k, list.filter((r) => r.kind !== "review")] as const));
@@ -612,9 +622,35 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderPaused(s, list));
   });
 
-  app.get("/revisions", async (request, reply) => {
-    const [s, list, others] = await Promise.all([shell("reviews"), listReviews(200), listFrameioWork(100)]);
-    return reply.type("text/html").send(renderRevisions(s, list, others, listSort(request, reply)));
+  app.get<{ Querystring: { view?: string; ch?: string; sort?: string } }>("/revisions", async (request, reply) => {
+    const [s, list] = await Promise.all([shell("reviews"), listReviews(200)]);
+    if (request.query.view === "history") {
+      const [points, marks] = hasDatabase ? await Promise.all([revisionHistory(), channelMarks()]) : [[], new Map<string, "flag" | "trophy">()];
+      const sort = (["attention", "best", "name"] as const).find((x) => x === request.query.sort) ?? "attention";
+      const channels = channelHistories(
+        points.map((p) => ({ recordId: p.recordId, title: p.title, version: p.version, score: p.score, at: p.at, channel: p.channel })),
+        marks,
+        sort,
+      );
+      const ch = channels.some((c) => c.channel === request.query.ch) ? request.query.ch! : "";
+      return reply.type("text/html").send(
+        renderRevisions(s, list, undefined, {
+          channels: ch ? channels.filter((c) => c.channel === ch) : channels,
+          all: channels.map((c) => c.channel).sort((a, b) => a.localeCompare(b)),
+          ch,
+          sort,
+        }),
+      );
+    }
+    return reply.type("text/html").send(renderRevisions(s, await withScores(list), listSort(request, reply)));
+  });
+
+  // Mark a channel from the history: 🚩 find a different editor, 🏆 a run of great cuts, or clear it.
+  app.post<{ Body: { channel?: string; mark?: string } }>("/revisions/mark", async (request, reply) => {
+    const channel = (request.body?.channel ?? "").trim().slice(0, 200);
+    const mark = request.body?.mark === "flag" || request.body?.mark === "trophy" ? request.body.mark : null;
+    if (hasDatabase && channel) await setChannelMark(channel, mark);
+    return reply.redirect(backTo(request.headers.referer, "/revisions?view=history"));
   });
 
   app.get("/queue", async (request, reply) => {
@@ -1109,11 +1145,12 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderCategory(s, cat.label, cat.id, list, channels, listSort(request, reply)));
   });
 
-  app.get<{ Params: { id: string }; Querystring: { moved?: string; scripterr?: string } }>("/r/:id", async (request, reply) => {
-    const [s, record, scripts] = await Promise.all([
+  app.get<{ Params: { id: string }; Querystring: { moved?: string; scripterr?: string; sumerr?: string } }>("/r/:id", async (request, reply) => {
+    const [s, record, scripts, review] = await Promise.all([
       shell(""),
       getRecord(Number(request.params.id)),
       hasDatabase ? scriptsFor(Number(request.params.id)).catch(() => []) : Promise.resolve([]),
+      hasDatabase ? getReview(Number(request.params.id)).catch(() => null) : Promise.resolve(null),
     ]);
     if (!record) return reply.code(404).type("text/html").send(renderList(s, "Not found", "That record is gone.", []));
     // How many of its channel's videos would move with a new air date.
@@ -1134,8 +1171,64 @@ export async function startWeb(): Promise<void> {
           moved: kept ? { token, text: kept.text } : null,
           scripts,
           scriptError: (request.query.scripterr ?? "").slice(0, 200),
+          review,
+          frameio: Boolean(process.env.FRAMEIO_TOKEN?.trim()) && record.links.some((l) => l.kind === "frameio"),
+          summaryError: (request.query.sumerr ?? "").slice(0, 300),
         }),
       );
+  });
+
+  /**
+   * Summarize a revision: its Frame.io comments (pasted, or read through the
+   * API), your own summary and rating, and the channel's earlier notes for
+   * repeats — into a summary and a score out of 10.
+   */
+  app.post<{ Params: { id: string }; Body: { comments?: string; own?: string; rating?: string } }>("/r/:id/summarize", async (request, reply) => {
+    const record = await getRecord(Number(request.params.id));
+    if (!record || record.kind !== "review") return reply.redirect(`/r/${request.params.id}`);
+    const back = (err?: string) => reply.redirect(`/r/${record.id}${err ? `?sumerr=${encodeURIComponent(err)}` : ""}#summary`);
+    const before = await getReview(record.id);
+    const pasted = parsePasted((request.body?.comments ?? "").slice(0, 200_000));
+    let comments = pasted;
+    let source = "pasted";
+    let versions = record.version ?? 1;
+    if (!pasted.length) {
+      const link = record.links.find((l) => l.kind === "frameio");
+      const fromApi = link ? await commentsFromFrameio(link.url) : null;
+      if (fromApi?.ok) {
+        comments = fromApi.comments;
+        versions = Math.max(versions, fromApi.versions);
+        source = "frameio";
+      } else if (before) {
+        // Nothing new: the notes already here, summed up again with the new take.
+        comments = before.comments.filter((c) => c.source !== "you");
+        source = before.source;
+      } else if ((request.body?.own ?? "").trim()) {
+        comments = [];
+      } else {
+        return back(fromApi?.error ?? "Paste the cut's Frame.io comments, or write your own summary.");
+      }
+    }
+    versions = Math.max(versions, ...comments.map((c) => c.version ?? 1));
+    const ownText = (request.body?.own ?? "").trim().slice(0, 5000);
+    const ratingRaw = Number(request.body?.rating);
+    const own = request.body?.rating && Number.isFinite(ratingRaw) ? Math.max(1, Math.min(10, ratingRaw)) : null;
+    const title = displayTitle(record);
+    const video = videoKey(record.code, title);
+    const done = await summarize({
+      title,
+      channel: record.channel,
+      comments: [...comments, ...ownNotes(ownText)],
+      versions,
+      past: await pastForChannel(record.channel, video, new Date()),
+      own,
+    });
+    await saveReview({
+      recordId: record.id, channel: record.channel, video, title, version: record.version, versions,
+      comments: done.comments, source, summary: done.text, summaryBy: done.by, ownSummary: ownText || null, ownScore: own,
+      autoScore: done.breakdown.auto, score: done.breakdown.score, breakdown: done.breakdown,
+    });
+    return back();
   });
 
   // ── scripts: pasted, or read from a Google Doc ──────────────────────────

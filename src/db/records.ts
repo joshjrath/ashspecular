@@ -43,6 +43,8 @@ export interface StoredRecord extends DerivedRecord {
   noScriptAt: Date | null;
   /** When it was marked uploaded — live on its channel; null when it isn't. */
   uploadedAt: Date | null;
+  /** A summarized revision's score out of 10, when the page has it to hand. */
+  reviewScore?: number | null;
   /**
    * The deadline as it was set, when a day off brought it forward. The
    * deadline fields themselves (voDue, deadline, scriptDue) are always the
@@ -428,7 +430,7 @@ interface Row {
 
 function hydrate(r: Row): StoredRecord {
   return {
-    id: r.id,
+    id: Number(r.id),
     kind: r.kind as DerivedRecord["kind"],
     category: r.category as CategoryId | "unknown",
     channel: r.channel,
@@ -522,17 +524,6 @@ export async function listReviews(limit = 50): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
     `${SELECT} WHERE status = 'open' AND ${LIVE} AND kind = 'review'
      ORDER BY ${DUE} ASC NULLS LAST, created_at DESC LIMIT $1`,
-    [limit],
-  );
-  return rows.map(hydrate);
-}
-
-/** Other open work that carries a Frame.io link — assignments sent with a cut to watch. */
-export async function listFrameioWork(limit = 50): Promise<StoredRecord[]> {
-  const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${LIVE} AND kind <> 'review'
-       AND links @> '[{"kind":"frameio"}]'::jsonb
-     ORDER BY created_at DESC LIMIT $1`,
     [limit],
   );
   return rows.map(hydrate);

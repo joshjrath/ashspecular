@@ -77,10 +77,30 @@ export interface ClassifyResult {
  */
 export async function classify(input: ClassifyInput): Promise<ClassifyResult> {
   const result = await classifyText(input);
+  result.extraction = frameioIsRevision(result.extraction, result.raw);
   if (result.extraction.links.some((l) => l.kind === "frameio")) {
     result.extraction = await enrichWithFrame(result.extraction);
   }
   return result;
+}
+
+/**
+ * A Frame.io link is a cut to review — a revision — whatever else the message
+ * says, unless it's the studio's own assignment post (`MM-DD-YY | CODE |
+ * Title`), which can carry a link for reference.
+ */
+export function frameioIsRevision(extraction: Extraction, raw: string): Extraction {
+  if (extraction.kind === "review") return extraction;
+  if (!extraction.links.some((l) => l.kind === "frameio")) return extraction;
+  if (isAssignmentPost(raw)) return extraction;
+  return { ...extraction, kind: "review", stage: "review", air_date: null, script_due: null, vo_due: null, word_count: null };
+}
+
+/** The studio's assignment post: a heading line `MM-DD-YY | CODE | Title`. */
+export function isAssignmentPost(raw: string): boolean {
+  return raw
+    .split("\n")
+    .some((l) => /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\s*\|/.test(l.replace(/^#{1,6}\s*/, "").replace(/\*\*|__|\*|`/g, "").trim()));
 }
 
 async function classifyText(input: ClassifyInput): Promise<ClassifyResult> {
