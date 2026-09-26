@@ -46,6 +46,7 @@ import {
   type Notice,
   type GapNotice,
   channelAirDays,
+  storiesOnBoard,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -67,13 +68,14 @@ import { GAP_HORIZON_DAYS, uploadGaps, type UploadGap } from "./gaps.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
-import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
+import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabIdea, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
-import { SHAPES, SHAPE_BY_ID, applyAdditions, currentAdditions, diceItem } from "./stories/added.js";
+import { SHAPES, SHAPE_BY_ID, applyAdditions, currentAdditions, diceItem, recentAdditions } from "./stories/added.js";
 import type { DiceKind } from "./stories/dice.js";
 import { diceCard, diceLeft, rollDice } from "./stories/roll.js";
-import { addLabAddition, listLabAdditions, removeLabAddition } from "../db/lab.js";
+import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAddition, setShowing, unmarkIdea } from "../db/lab.js";
+import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
 import { RELEASES, releaseNotices } from "./changelog.js";
@@ -847,11 +849,13 @@ export async function startWeb(): Promise<void> {
   const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
     const channels = channelsIn("stories");
     const now = new Date();
-    const [s, all, views, kept] = await Promise.all([
+    const [s, all, views, kept, marks, onBoard] = await Promise.all([
       shell("storylab"),
       hasDatabase ? listUploads(new Date(0)) : Promise.resolve([]),
       hasDatabase ? loadVideoViews(new Date(0), channels) : Promise.resolve([]),
       hasDatabase ? listScripts().catch(() => []) : Promise.resolve([]),
+      hasDatabase ? listIdeaMarks().catch(() => []) : Promise.resolve([]),
+      hasDatabase ? storiesOnBoard().catch(() => []) : Promise.resolve([]),
     ]);
     const perf = scoreAll(views, now);
     const stories = all.filter((u) => channels.includes(u.channel));
@@ -860,10 +864,46 @@ export async function startWeb(): Promise<void> {
     // Every video already public, on any channel — Stories ideas never repeat one.
     const published: PublicVideo[] = all.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
     const heldBack: PublicVideo[] = [];
-    const ideas = labIdeas(videos, now, 24, published, heldBack).map((idea) => ({
-      idea,
-      blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id, shape: idea.shape }),
+    // Every idea, best first — just-added dice items brought forward — then two per channel.
+    const everything = labIdeas(videos, now, 100_000, published, heldBack, false, recentAdditions());
+    const cards = writeNext({
+      channels: channels.map((channel) => ({
+        channel,
+        titles: [...stories.filter((u) => u.channel === channel).map((u) => u.title), ...onBoard.filter((r) => r.channel === channel).map((r) => r.title)],
+      })),
+      ideas: everything,
+      marks,
+      // Too close to anything made or planned, on any channel.
+      neighbours: [
+        ...onBoard.map((r) => ({ title: r.title, channel: r.channel, source: r.uploaded ? ("uploaded" as const) : ("assigned" as const) })),
+        ...published.map((v) => ({ title: v.title, channel: v.channel, source: "uploaded" as const })),
+        ...scripts.map((x) => ({ title: x.title, channel: null, source: "script" as const })),
+      ],
+    });
+    // Remember what's showing, so the next visit (and a reroll elsewhere) leaves these cards where they are.
+    if (hasDatabase) {
+      for (const channel of channels) {
+        const shown = (cards.get(channel) ?? []).map((c) => c.idea.key).sort().join("\n");
+        const was = marks.filter((m) => m.channel === channel && m.mark === "show").map((m) => m.key).sort().join("\n");
+        if (shown === was) continue;
+        await setShowing(
+          channel,
+          (cards.get(channel) ?? []).map((c) => ({
+            key: c.idea.key, title: c.idea.title, format: c.idea.format, hero: c.idea.hero?.id ?? null, world: c.idea.world?.id ?? null,
+            power: c.idea.power?.id ?? null, target: c.idea.target?.id ?? null, shape: c.idea.shape ?? null, score: c.score,
+          })),
+        ).catch((err) => console.error("[lab] couldn't keep the cards:", err));
+      }
+    }
+    const printOf = (idea: LabIdea) =>
+      blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id, shape: idea.shape });
+    const writeNextData = channels.map((channel) => ({
+      channel,
+      cards: (cards.get(channel) ?? []).map((c) => ({ ...c, blueprint: printOf(c.idea) })),
+      saved: marks.filter((m) => m.channel === channel && m.mark === "save"),
+      skipped: marks.filter((m) => m.channel === channel && m.mark === "skip").length,
     }));
+    const ideas = writeNextData.flatMap((w) => w.cards.map((c) => ({ idea: c.idea, blueprint: c.blueprint })));
     // A title shape picked in the builder ("shape:hundreddays") builds on its own format.
     const shape = query.shape && SHAPE_BY_ID.has(query.shape) ? SHAPE_BY_ID.get(query.shape)! : null;
     const picked = {
@@ -917,6 +957,7 @@ export async function startWeb(): Promise<void> {
       }).filter((f) => f.examples.length),
       shapes: [...SHAPES],
       dice,
+      writeNext: writeNextData,
       library: {
         // Stories videos' scripts and those added on their own — the ones Story Lab reads.
         scripts: kept.filter(learnsFrom),
@@ -944,6 +985,25 @@ export async function startWeb(): Promise<void> {
       applyAdditions(await listLabAdditions());
     }
     return reply.redirect("/story-lab#dice");
+  });
+
+  // Write next: ↻ a fresh idea in a card's place, 🔖 save it to the channel's bucket, or take it out again.
+  app.post<{ Body: Record<string, string | undefined> }>("/story-lab/idea", async (request, reply) => {
+    const b = request.body ?? {};
+    const channel = channelsIn("stories").find((c) => c === b.channel);
+    const key = (b.key ?? "").slice(0, 300);
+    const anchor = `#wn-${CHANNELS.find((c) => c.name === channel)?.id ?? ""}`;
+    if (!hasDatabase || !channel || !key) return reply.redirect(`/story-lab${anchor}`);
+    if (b.do === "unsave") await unmarkIdea(channel, key);
+    else if (b.do === "reroll" || b.do === "save") {
+      const opt = (v: string | undefined) => (v ? v.slice(0, 100) : null);
+      await markIdea({
+        channel, key, mark: b.do === "save" ? "save" : "skip", title: (b.title ?? "").slice(0, 300), format: (b.format ?? "").slice(0, 40),
+        hero: opt(b.hero), world: opt(b.world), power: opt(b.power), target: opt(b.target), shape: opt(b.shape),
+        score: Math.max(0, Math.min(100, Number(b.score) || 0)),
+      });
+    }
+    return reply.redirect(`/story-lab${anchor}`);
   });
 
   // Drafts are posted: they're far too long for a link.

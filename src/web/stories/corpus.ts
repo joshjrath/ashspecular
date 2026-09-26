@@ -168,6 +168,7 @@ const normTitle = (t: string) => t.toLowerCase().replace(/['’]/g, "").replace(
 /** The board's scripts, as stored — applied at start and after every add, refresh or remove. */
 export function setBoardScripts(list: BoardScript[]): void {
   board = [...list];
+  splitCache.clear();
   loaded = null;
 }
 
@@ -184,12 +185,18 @@ export function boardOpenings(): Map<string, string> {
   return out;
 }
 
+/** The Drive's scripts as read from disk: read once. */
+let driveRaw: { scripts: Array<{ title: string; file: string; words: number; sections: Section[] }> } | null = null;
+/** Each script's measurements and each board script's split — they don't change when the lore does. */
+const measured = new WeakMap<Section[], Metrics>();
+const splitCache = new Map<string, Section[]>();
+
 export function corpus(): Script[] {
   if (loaded) return loaded;
-  let raw: { scripts: Array<{ title: string; file: string; words: number; sections: Section[] }> } = { scripts: [] };
-  for (const p of [join(here, "corpus.json"), join(process.cwd(), "src", "web", "stories", "corpus.json")]) {
+  let raw: { scripts: Array<{ title: string; file: string; words: number; sections: Section[] }> } = driveRaw ?? { scripts: [] };
+  for (const p of driveRaw ? [] : [join(here, "corpus.json"), join(process.cwd(), "src", "web", "stories", "corpus.json")]) {
     try {
-      raw = JSON.parse(readFileSync(p, "utf8"));
+      raw = driveRaw = JSON.parse(readFileSync(p, "utf8"));
       break;
     } catch {
       /* try the next place */
@@ -197,7 +204,9 @@ export function corpus(): Script[] {
   }
   // A script added on the board is newer than the Drive's copy of the same title, so it takes its place.
   const mine = board.filter(learnsFrom).map((b) => {
-    const sections = splitScript(b.body, b.title);
+    const cacheKey = `${b.title}\u0000${b.body}`;
+    const sections = splitCache.get(cacheKey) ?? splitScript(b.body, b.title);
+    splitCache.set(cacheKey, sections);
     return { title: b.title, file: b.recordId ? `board: video ${b.recordId}` : "board", words: sections.reduce((n, x) => n + x.words, 0), sections, board: { id: b.id, recordId: b.recordId } };
   }).filter((b) => b.sections.length && b.words >= 150);
   const replaced = new Set(mine.map((b) => normTitle(b.title)));
@@ -208,7 +217,9 @@ export function corpus(): Script[] {
     // belongs to that world even when the title doesn't name it.
     const home = read.heroes[0]?.home;
     const worlds = read.worlds.length || !home ? read.worlds : [WORLD_BY_ID.get(home)!].filter(Boolean);
-    return { ...s, format, ...read, worlds, metrics: measure(s.sections) };
+    const metrics = measured.get(s.sections) ?? measure(s.sections);
+    measured.set(s.sections, metrics);
+    return { ...s, format, ...read, worlds, metrics };
   });
   return loaded;
 }

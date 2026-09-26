@@ -57,6 +57,8 @@ import jpegJs from "jpeg-js";
 import { esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
+import { NeighbourIndex, scoreIdea, writeNext } from "../src/web/stories/writenext.js";
+import { indexPublic } from "../src/web/stories/lab.js";
 
 let pass = 0;
 let fail = 0;
@@ -1295,6 +1297,53 @@ t("a revision has nothing to upload", renderList(shellFix, "R", "", [revRec]).in
 const upCal = renderCalendar(shellFix, "2026-09", "posting", [{ day: "2026-09-28", record: upRec } as never], [], []);
 t("the calendar shows it green", upCal.includes('class="chip done uploaded"'), true);
 t("…and so does its card", renderWeek(shellFix, "2026-09-27", "posting", [{ date: "2026-09-28", list: [upRec] }]).includes("dcard cleared uploaded"), true);
+
+section("Story Lab — Write next, channel by channel");
+const wnAll = labIdeas([], new Date("2026-09-26T12:00:00Z"), 100_000, [], [], false);
+const wnChannels = ["Specular Studios", "Specular Anime", "Specular Comics"].map((channel) => ({ channel, titles: [] as string[] }));
+const wn = writeNext({ channels: wnChannels, ideas: wnAll, marks: [], neighbours: [] });
+t("two cards for every channel", wnChannels.map((c) => wn.get(c.channel)!.length), [2, 2, 2]);
+const wnKeys = [...wn.values()].flat().map((c) => c.idea.key);
+t("…never the same idea twice on the page", new Set(wnKeys).size, wnKeys.length);
+t("…a channel's two share no hero or world", wnChannels.every((c) => {
+  const [a, b] = wn.get(c.channel)!;
+  return a!.idea.hero?.id !== b!.idea.hero?.id && (!a!.idea.world || a!.idea.world.id !== b!.idea.world?.id);
+}), true);
+t("…best score first, each out of 100", wnChannels.every((c) => {
+  const [a, b] = wn.get(c.channel)!;
+  return a!.score >= b!.score && a!.score >= 1 && a!.score <= 99;
+}), true);
+t("the score: 50 is the channel's usual, higher predicts better", [scoreIdea({ score: 1 } as never, 0, null).score, scoreIdea({ score: 2 } as never, 0, null).score, scoreIdea({ score: 0.5 } as never, 0, null).score], [50, 80, 20]);
+t("…a close fit to the channel and a clash with another video move it", [scoreIdea({ score: 1 } as never, 1, null).score > 50, scoreIdea({ score: 1 } as never, 0, { title: "x", channel: null, source: "uploaded", why: "" }).score < 50], [true, true]);
+const first = wn.get("Specular Studios")![0]!;
+const rerolled = writeNext({
+  channels: wnChannels, ideas: wnAll, neighbours: [],
+  marks: [
+    ...[...wn].flatMap(([channel, cards]) => cards.map((c) => ({ channel, key: c.idea.key, mark: "show" as const, title: c.idea.title, format: c.idea.format, hero: null, world: null, power: null, target: null, shape: null, score: c.score, markedAt: new Date() }))),
+  ].map((m) => (m.key === first.idea.key ? { ...m, mark: "skip" as const } : m)),
+});
+t("↻ reroll: a fresh idea in its place, and no other card moves", [
+  rerolled.get("Specular Studios")!.some((c) => c.idea.key === first.idea.key),
+  rerolled.get("Specular Studios")!.length,
+  wn.get("Specular Anime")!.map((c) => c.idea.key).join(),
+], [false, 2, rerolled.get("Specular Anime")!.map((c) => c.idea.key).join()]);
+const nIdx = new NeighbourIndex([{ title: "What If Invincible Was In The MCU", channel: "Specular Anime", source: "uploaded" }]);
+t("too close: the same pairing, on another channel, is flagged", nIdx.match("What If Invincible Was In The Avengers?")?.channel, "Specular Anime");
+t("…a different world for the same hero isn't", nIdx.match("What If Invincible Was In Jujutsu Kaisen?"), null);
+t("…nearly the same words are", new NeighbourIndex([{ title: "The Scariest Cursed Lighthouse Ever Found", channel: null, source: "script" }]).match("The Scariest Cursed Lighthouse Ever Found Again")?.why, "nearly the same words");
+// Everything already made on another channel: the cards still come, each with its warning.
+const flagged = writeNext({ channels: [wnChannels[0]!], ideas: wnAll, marks: [], neighbours: wnAll.slice(0, 400).map((i) => ({ title: i.title, channel: "Specular Anime", source: "uploaded" as const })) });
+t("a close idea is still offered, with its warning", flagged.get("Specular Studios")!.map((c) => c.similar?.channel), ["Specular Anime", "Specular Anime"]);
+const heroCounts = (list: typeof wnAll, id: string) => list.findIndex((i) => i.hero?.id === id || i.target?.id === id);
+const someHero = wnAll[wnAll.length - 1]!.hero?.id ?? wnAll.find((i) => i.hero)!.hero!.id;
+const boosted = labIdeas([], new Date("2026-09-26T12:00:00Z"), 100_000, [], [], false, new Set([`hero:${someHero}`]));
+t("just added from the dice: brought forward, so rerolls reach it", heroCounts(boosted, someHero) < heroCounts(wnAll, someHero), true);
+t("…and it says so", boosted.find((i) => i.hero?.id === someHero)!.reasons.some((r) => r.text.includes("just added from the dice")), true);
+const bigPub = Array.from({ length: 3000 }, (_, i) => ({ title: `Video number ${i} about things`, url: `u${i}`, channel: "c" }));
+const tIdx = performance.now();
+indexPublic(bigPub);
+labIdeas([], new Date(), 100_000, bigPub, [], false);
+t("ideas against 3,000 public videos in well under a second", performance.now() - tIdx < 1500, true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

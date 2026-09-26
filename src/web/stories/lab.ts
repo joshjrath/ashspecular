@@ -155,16 +155,41 @@ export function publicMatch(
   }
   const mine = wordsOf(idea.title);
   if (mine.size >= 2) {
-    for (const v of index.words) {
-      let shared = 0;
-      for (const w of mine) if (v.words.has(w)) shared += 1;
-      if (shared / new Set([...mine, ...v.words]).size >= 0.75) return v.video;
+    // Only the videos sharing a word can match: counted through each word's list.
+    const shared = new Map<number, number>();
+    for (const w of mine) for (const i of index.postings.get(w) ?? []) shared.set(i, (shared.get(i) ?? 0) + 1);
+    let best: number | null = null;
+    for (const [i, n] of shared) {
+      const theirs = index.words[i]!.words.size;
+      if (n / (mine.size + theirs - n) >= 0.75 && (best === null || i < best)) best = i;
     }
+    if (best !== null) return index.words[best]!.video;
   }
   return null;
 }
 
-export function indexPublic(published: PublicVideo[]): { pairs: Map<string, PublicVideo>; words: Array<{ words: Set<string>; video: PublicVideo }> } {
+export interface PublicIndex {
+  pairs: Map<string, PublicVideo>;
+  words: Array<{ words: Set<string>; video: PublicVideo }>;
+  /** Each word, and the videos (by position in `words`) whose titles have it. */
+  postings: Map<string, number[]>;
+}
+
+/** The last index built, reused while the list of public videos is the same. */
+let lastIndex: { sig: string; index: PublicIndex } | null = null;
+const sigOf = (published: PublicVideo[]) =>
+  // The lore's size too: an added hero or world reads the same titles differently.
+  `${HEROES.length}.${WORLDS.length}.${POWERS.length}|${published.length}|${published[0]?.url ?? ""}|${published.at(-1)?.url ?? ""}|${published[published.length >> 1]?.url ?? ""}`;
+
+export function indexPublic(published: PublicVideo[]): PublicIndex {
+  const sig = sigOf(published);
+  if (lastIndex?.sig === sig) return lastIndex.index;
+  const index = buildIndex(published);
+  lastIndex = { sig, index };
+  return index;
+}
+
+function buildIndex(published: PublicVideo[]): PublicIndex {
   const pairs = new Map<string, PublicVideo>();
   for (const v of published) {
     const k = keyOfTitle(v.title);
@@ -175,7 +200,16 @@ export function indexPublic(published: PublicVideo[]): { pairs: Map<string, Publ
       for (const x of [...r.worlds.map((w) => w.id), ...r.powers.map((pw) => pw.id)]) if (!pairs.has(`you|${x}`)) pairs.set(`you|${x}`, v);
     }
   }
-  return { pairs, words: published.map((v) => ({ words: wordsOf(v.title), video: v })) };
+  const words = published.map((v) => ({ words: wordsOf(v.title), video: v }));
+  const postings = new Map<string, number[]>();
+  words.forEach((x, i) => {
+    for (const w of x.words) {
+      const list = postings.get(w);
+      if (list) list.push(i);
+      else postings.set(w, [i]);
+    }
+  });
+  return { pairs, words, postings };
 }
 
 export function labIdeas(
@@ -186,6 +220,8 @@ export function labIdeas(
   held: PublicVideo[] = [],
   /** Spread the list across heroes, worlds, powers and formats; off, every idea best first (for a channel to pick from). */
   spread = true,
+  /** Items just added from the dice ("hero:gojo", "shape:hundreddays"): brought forward, so they come up. */
+  fresh: Set<string> = new Set(),
 ): LabIdea[] {
   const pub = indexPublic(published);
   const perf = perfStats(videos);
@@ -269,6 +305,15 @@ export function labIdeas(
       }
     }
 
+    // Just added from the dice: brought forward so it comes up in the cards and rerolls.
+    const newItem = [hero && `hero:${hero.id}`, target && `target:${target.id}`, target && `hero:${target.id}`, world && `world:${world.id}`, power && `power:${power.id}`]
+      .filter((k): k is string => Boolean(k))
+      .find((k) => fresh.has(k));
+    if (newItem) {
+      score *= 1.15;
+      reasons.push({ text: `${[hero, target, world, power].find((x) => x && newItem.endsWith(`:${x.id}`))?.name ?? "This"} was just added from the dice`, lift: 1.15 });
+    }
+
     // Freshness.
     const pair = [hero?.id ?? null, world?.id ?? power?.id ?? target?.id ?? null].join("|");
     const seen = donePairs.get(pair) ?? 0;
@@ -290,8 +335,9 @@ export function labIdeas(
     for (const shape of SHAPES.filter((x) => x.base === format)) {
       const t = fillShape(shape, { hero: hero?.name, world: world?.name, power: power ? titleCase(power.name) : null, target: target?.name });
       if (!t) continue;
-      const note = { text: `A new title shape — ${shape.name} — on the ${FORMAT_NAME[format]} structure the scripts use`, lift: 0.97 };
-      out.push({ key: `${key}|${shape.id}`, format, hero, world, power, target, title: t, score: score * 0.97, reasons: [note, ...sorted], shape: shape.id });
+      const lift = fresh.has(`shape:${shape.id}`) ? 0.97 * 1.15 : 0.97;
+      const note = { text: `A new title shape — ${shape.name}${lift > 1 ? ", just added from the dice" : ""} — on the ${FORMAT_NAME[format]} structure the scripts use`, lift };
+      out.push({ key: `${key}|${shape.id}`, format, hero, world, power, target, title: t, score: score * lift, reasons: [note, ...sorted], shape: shape.id });
     }
   };
 
@@ -400,7 +446,7 @@ export function contrast(results: ScriptResult[]): Contrast[] | null {
  * channel with too few videos to read gets the overall best. No hero more
  * than twice, so the list isn't one character.
  */
-export function channelLab(channel: string, titles: string[], ideas: LabIdea[], limit = 8): Array<{ idea: LabIdea; fit: string[] }> {
+export function channelLab(channel: string, titles: string[], ideas: LabIdea[], limit = 8, perHeroCap = 2): Array<{ idea: LabIdea; fit: string[]; fitScore: number }> {
   // A channel named for a world (Specular FNAF) leans to it before its titles say so.
   const namedFor = new Set(readTitle(channel.replace(/^Specular\s+/i, "")).worlds.map((w) => w.id));
   const n = titles.length;
@@ -431,14 +477,14 @@ export function channelLab(channel: string, titles: string[], ideas: LabIdea[], 
   });
   const fitting = ranked.filter((r) => r.fitScore > 0);
   const pool = ((n >= 5 || namedFor.size) && fitting.length >= 3 ? fitting : ranked).sort((a, b) => b.rank - a.rank);
-  const out: Array<{ idea: LabIdea; fit: string[] }> = [];
+  const out: Array<{ idea: LabIdea; fit: string[]; fitScore: number }> = [];
   const perHero = new Map<string, number>();
   for (const r of pool) {
     if (out.length >= limit) break;
     const hid = r.idea.hero?.id ?? "";
-    if ((perHero.get(hid) ?? 0) >= 2) continue;
+    if ((perHero.get(hid) ?? 0) >= perHeroCap) continue;
     perHero.set(hid, (perHero.get(hid) ?? 0) + 1);
-    out.push({ idea: r.idea, fit: r.fit });
+    out.push({ idea: r.idea, fit: r.fit, fitScore: r.fitScore });
   }
   return out;
 }

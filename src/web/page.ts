@@ -30,6 +30,7 @@ import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
+import type { Card as IdeaCard, IdeaMark, Neighbour } from "./stories/writenext.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
@@ -1320,6 +1321,33 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .vt { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vc { font-size: 11.5px; color: var(--ink3); }
 .isugg > li { list-style: none; }
+.wnlist { display: flex; flex-direction: column; gap: 16px; }
+.wnchan { border-left: 3px solid var(--ch); padding-left: 12px; transition: opacity .15s; }
+.wnchan.busy { opacity: .45; pointer-events: none; }
+.wnchan > header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.wnchan > header i { width: 10px; height: 10px; border-radius: 50%; background: var(--ch); }
+.wnchan > header b { font-family: var(--display); font-size: 15px; }
+.wnskip { font-size: 11.5px; color: var(--ink3); }
+.wncard { display: flex; flex-direction: column; gap: 6px; }
+.wnscore { align-self: flex-start; display: inline-flex; align-items: baseline; gap: 1px; font-family: var(--display); font-weight: 800; font-size: 20px;
+  color: var(--sc); line-height: 1; }
+.wnscore small { font-size: 11px; color: var(--ink3); font-weight: 700; }
+.wnscore.sm { font-size: 13px; min-width: 24px; }
+.wnsim { align-self: flex-start; font-size: 11.5px; font-weight: 700; color: #FFD29A; background: rgba(217,130,43,.18); border-radius: 6px; padding: 2px 8px; line-height: 1.45; }
+.wnacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.wnacts form, .wnbucket form { display: inline; margin: 0; }
+.wnbtn { border: 0; cursor: pointer; border-radius: 999px; padding: 5px 11px; background: var(--sunk); color: var(--ink2); font: 600 12px var(--ui); }
+.wnbtn:hover { background: var(--line); color: var(--ink); }
+.wnbucket { margin-left: auto; }
+.wnbucket summary { cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; color: var(--ink2); background: var(--sunk); border-radius: 999px; padding: 4px 11px; }
+.wnbucket summary b { color: var(--yellow); }
+.wnbucket ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wnbucket li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.wnbucket li a { color: var(--ink); font-weight: 600; } .wnbucket li a:hover { text-decoration: underline; }
+.wnwhen { color: var(--ink3); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+.wnx { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 16px; padding: 0 4px; }
+.wnx:hover { color: var(--late); }
+@media (max-width: 760px) { .wnbucket { margin-left: 0; flex-basis: 100%; } }
 .isg { background: var(--sunk); border-radius: 12px; }
 .isg summary { list-style: none; cursor: pointer; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; }
 .isg summary::-webkit-details-marker { display: none; }
@@ -5327,6 +5355,8 @@ export interface StoryLabData {
   formats: Array<{ format: Format; norms: Norms; examples: string[] }>;
   /** Title shapes added from the dice. */
   shapes?: Shape[];
+  /** Write next, channel by channel: the cards, the idea bucket, how many rerolled away. */
+  writeNext?: Array<{ channel: string; cards: Array<IdeaCard & { blueprint: Blueprint | null }>; saved: IdeaMark[]; skipped: number }>;
   /** The scripts added on the board, and how many came from the Drive. */
   library?: { scripts: StoredScript[]; drive: number; error: string };
   /** 🎲 What was rolled, what was just added, and what's been added so far. */
@@ -5339,6 +5369,100 @@ export interface StoryLabData {
     nonce: string;
     rolledNothing: boolean;
   };
+}
+
+/** A score out of 100 as a colour: green for the best, amber in the middle, red for the weakest. */
+const scoreColour = (n: number) => (n >= 70 ? "#3CCB84" : n >= 55 ? "#9BD35A" : n >= 40 ? "#E8C547" : "#E5534B");
+
+const SOURCE_LABEL: Record<Neighbour["source"], string> = {
+  uploaded: "uploaded",
+  assigned: "on the board",
+  script: "a written script",
+  saved: "saved for later",
+  card: "another card",
+};
+
+/**
+ * Write next, channel by channel: two cards each, best score first. Every
+ * card has its score out of 100, a warning when it's too close to something
+ * made or planned on any channel, ↻ for a fresh idea in its place and 🔖 to
+ * save it to the channel's idea bucket.
+ */
+function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Shape[], publicCount: number): string {
+  const shapeName = (id: string | null | undefined) => (id ? shapes.find((x) => x.id === id)?.name ?? id : "");
+  const hidden = (m: Record<string, string | null | number>) =>
+    Object.entries(m)
+      .map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v ?? "")}">`)
+      .join("");
+  const idFields = (channel: string, i: IdeaCard["idea"], score: number) =>
+    hidden({ channel, key: i.key, title: i.title, format: i.format, hero: i.hero?.id ?? null, world: i.world?.id ?? null, power: i.power?.id ?? null, target: i.target?.id ?? null, shape: i.shape ?? null, score });
+  const card = (channel: string, c: IdeaCard & { blueprint: Blueprint | null }) => `<li class="wncard"><details class="isg labidea">
+      <summary>
+        <span class="wnscore" style="--sc:${scoreColour(c.score)}" title="Predicted ${c.predicted}× the channel's usual">${c.score}<small>/100</small></span>
+        <span class="ikind ${c.idea.format}">${esc(FORMAT_BY_ID.get(c.idea.format)?.name ?? c.idea.format)}${c.idea.shape ? ` · ${esc(shapeName(c.idea.shape))}` : ""}</span>
+        <span class="iidea">${esc(c.idea.title)}</span>
+        ${
+          c.similar
+            ? `<span class="wnsim" title="Still an option — ↻ for another">Too close to “${esc(c.similar.title)}”${c.similar.channel ? ` · ${esc(c.similar.channel.replace(/^Specular /, ""))}` : ""} · ${esc(SOURCE_LABEL[c.similar.source])} (${esc(c.similar.why)})</span>`
+            : ""
+        }
+        <span class="iwhy">${[...c.fit.slice(0, 1), ...c.idea.reasons.slice(0, 2).map((r) => r.text)].map(esc).join(" · ")}</span>
+        <span class="imore">Blueprint ▾</span>
+      </summary>
+      <div class="idetail">
+        <h4>Why this one</h4>
+        <ul class="labwhy">${[
+          ...c.fit.map((f) => `<li><b class="up">fit</b> ${esc(f)}</li>`),
+          ...c.idea.reasons.map((r) => `<li><b class="${r.lift >= 1 ? "up" : "down"}">${esc(liftText(r.lift))}</b> ${esc(r.text)}</li>`),
+        ].join("")}</ul>
+        ${c.blueprint ? blueprintHtml(c.blueprint) : ""}
+      </div>
+    </details>
+    <div class="wnacts">
+      <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="reroll"><button class="wnbtn" title="A fresh idea in its place — this one won't come back to this channel">↻ Reroll</button></form>
+      <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="save"><button class="wnbtn" title="Keep it in this channel's idea bucket, and get a fresh card">🔖 Save for later</button></form>
+    </div></li>`;
+  const section = (w: (typeof list)[number]) => {
+    const ch = CHANNELS.find((c) => c.name === w.channel);
+    const saved = w.saved.length
+      ? `<details class="wnbucket"><summary>🔖 Idea bucket <b>${w.saved.length}</b></summary><ul>${w.saved
+          .map((m) => {
+            const q = new URLSearchParams({ format: m.shape ? "" : m.format, ...(m.hero ? { hero: m.hero } : {}), ...(m.world ? { world: m.world } : {}), ...(m.power ? { power: m.power } : {}), ...(m.target ? { target: m.target } : {}), ...(m.shape ? { shape: m.shape } : {}) });
+            return `<li><span class="wnscore sm" style="--sc:${scoreColour(m.score)}">${m.score}</span><a href="/story-lab?${esc(q.toString())}#blueprint">${esc(m.title)}</a><span class="wnwhen">saved ${esc(usDate(dayOf(m.markedAt)))}</span>
+              <form method="post" action="/story-lab/idea" data-swap>${hidden({ channel: w.channel, key: m.key, do: "unsave" })}<button class="wnx" title="Take it out of the bucket">×</button></form></li>`;
+          })
+          .join("")}</ul></details>`
+      : "";
+    return `<section class="wnchan" id="wn-${esc(ch?.id ?? w.channel)}" style="--ch:${channelColour(w.channel)}">
+      <header><i></i><b>${esc(w.channel)}</b>${w.skipped ? `<span class="wnskip">${w.skipped} rerolled away</span>` : ""}${saved}</header>
+      ${w.cards.length ? `<ul class="isugg">${w.cards.map((c) => card(w.channel, c)).join("")}</ul>` : `<p class="hint">Nothing left that fits — add something from the dice.</p>`}
+    </section>`;
+  };
+  return `<div class="panel ideas" id="writenext"><h2>Write next <span class="sub">— two for every channel, best score first · the score predicts how it'll do against the channel's usual (50 = its usual)${
+    publicCount ? ` · checked against ${publicCount.toLocaleString("en-US")} public videos` : ""
+  }</span></h2>
+    <div class="wnlist">${list.map(section).join("")}</div>
+    <script>
+    (function () {
+      // Reroll, save and unsave without losing your place: the new section swaps in.
+      document.getElementById("writenext").addEventListener("submit", function (e) {
+        var form = e.target;
+        if (!form.hasAttribute("data-swap") || !window.fetch || !window.DOMParser) return;
+        e.preventDefault();
+        var sec = form.closest(".wnchan");
+        sec.classList.add("busy");
+        fetch(form.action, { method: "POST", body: new URLSearchParams(new FormData(form)), headers: { Accept: "text/html" } })
+          .then(function (r) { return r.text(); })
+          .then(function (html) {
+            var doc = new DOMParser().parseFromString(html, "text/html");
+            var next = doc.getElementById(sec.id);
+            if (next) sec.replaceWith(document.importNode(next, true)); else location.reload();
+          })
+          .catch(function () { form.submit(); });
+      });
+    })();
+    </script>
+  </div>`;
 }
 
 /**
@@ -5562,10 +5686,14 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
           ? `<div class="panel" id="blueprint"><p class="hint">That combination needs a ${d.picked.format === "power" ? "power" : d.picked.format === "hunt" || d.picked.format === "versus" ? "target" : "world"} too.</p></div>`
           : ""
     }
-    <div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint${
-      d.publicCount ? ` · checked against ${d.publicCount.toLocaleString("en-US")} public videos${d.heldBack ? `, ${d.heldBack} already done and left out` : ""}` : ""
-    }</span></h2>
-      <ul class="isugg">${d.ideas.map(ideaCard).join("")}</ul></div>
+    ${
+      d.writeNext
+        ? writeNextPanel(d.writeNext, d.shapes ?? [], d.publicCount ?? 0)
+        : `<div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint${
+            d.publicCount ? ` · checked against ${d.publicCount.toLocaleString("en-US")} public videos${d.heldBack ? `, ${d.heldBack} already done and left out` : ""}` : ""
+          }</span></h2>
+      <ul class="isugg">${d.ideas.map(ideaCard).join("")}</ul></div>`
+    }
     ${d.dice ? dicePanel(d.dice) : ""}
     <div class="panel ideas"><h2>Build any blueprint</h2>${builder}</div>
     <div class="panel ideas" id="check"><h2>Check a draft <span class="sub">— against the ${d.scripts} scripts, format by format</span></h2>${checker}</div>

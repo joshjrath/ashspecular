@@ -404,7 +404,8 @@ and it doesn't copy them. It knows how they're built:
   ability ladder from the first thing he'd show to the ultimate he'd end on,
   the limits the writers are careful to respect, and his moral line.
 
-**🎲 Roll for something new.** Under *Write next*, the dice offer one new
+**🎲 Roll for something new.** Rolls are instant, including the ideas each
+one opens up. Under *Write next*, the dice offer one new
 thing a roll that isn't in Story Lab yet: a **format** (a new title shape,
 like *Could X Survive 100 Days In Y?* or *Could X Escape Y?*, built on the
 structure of a format the scripts already use), a **hero**, a **world or
@@ -429,7 +430,29 @@ ever dropped into their own story, and a heroine's blueprint says *her*.
 
 What's on the page:
 
-- **Write next**: ranked ideas. Each shows why: how the channel's uploads
+- **Write next**, channel by channel: **two cards for every Stories channel**,
+  chosen for that channel. Its own worlds, heroes and formats count for more,
+  and no idea is on the page twice. A channel's two cards share no hero,
+  world or power, and no world, power or lead appears more than twice across
+  the page. Each card has:
+  - **a score out of 100**, a prediction: 50 is the channel's usual, about
+    70 is 1.5× it, about 80 is 2×. It comes from the idea's own lift (below),
+    how well it fits the channel, and a dip when it's too close to another
+    video. Cards are sorted best first.
+  - **Too close to "…"** when it's the same pairing, or nearly the same words,
+    as something on **any** channel: an upload, a video on the board, a
+    written script, a saved idea or another card. "Invincible in The
+    Avengers" and "Invincible in the MCU" are the same pairing. It's still
+    offered; reroll it if you don't want it.
+  - **↻ Reroll**: a fresh idea in its place. The old one doesn't come back to
+    that channel for 60 days, and no other card moves.
+  - **🔖 Save for later**: into that channel's **idea bucket** (top right of
+    its section, with the score it had and a link to its blueprint; × takes
+    it out). The card is replaced with a fresh one.
+
+  Something you **add from the dice** is brought forward for 14 days (×1.15,
+  "just added from the dice"), so it shows up in the cards and the rerolls.
+  Each idea shows why it's there: how the channel's uploads
   with that hero, world and format did against their channel's usual, whether
   the world rewards that kind of hero, how often the writers have come back to
   it, and whether it's been done in another format. Nothing already written

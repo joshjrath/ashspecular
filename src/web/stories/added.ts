@@ -39,10 +39,10 @@ function addItem(kind: DiceKind, id: string): boolean {
   return true;
 }
 
-let applied: Array<{ kind: DiceKind; id: string }> = [];
+let applied: Array<{ kind: DiceKind; id: string; addedAt?: Date }> = [];
 
 /** Exactly these additions, in this order, and nothing else. */
-export function applyAdditions(list: Array<{ kind: DiceKind; id: string }>): void {
+export function applyAdditions(list: Array<{ kind: DiceKind; id: string; addedAt?: Date }>): void {
   resetLore();
   SHAPES.length = 0;
   SHAPE_BY_ID.clear();
@@ -51,8 +51,15 @@ export function applyAdditions(list: Array<{ kind: DiceKind; id: string }>): voi
   resetCorpus();
 }
 
-export function currentAdditions(): Array<{ kind: DiceKind; id: string }> {
+export function currentAdditions(): Array<{ kind: DiceKind; id: string; addedAt?: Date }> {
   return [...applied];
+}
+
+/** What was added from the dice lately ("hero:gojo", "shape:hundreddays") — Write next brings it forward. */
+export function recentAdditions(days = 14, now = new Date()): Set<string> {
+  return new Set(
+    applied.filter((a) => a.addedAt && now.getTime() - a.addedAt.getTime() < days * 86_400_000).map((a) => `${a.kind}:${a.id}`),
+  );
 }
 
 /** Run something as if this item were added — for a roll's preview — then put things back. */

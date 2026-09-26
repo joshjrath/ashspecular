@@ -325,6 +325,15 @@ export async function channelAirDays(from: string): Promise<Array<{ channel: str
   return rows;
 }
 
+/** Every Stories video on the board (not removed), for Story Lab to steer clear of. */
+export async function storiesOnBoard(): Promise<Array<{ title: string; channel: string | null; uploaded: boolean }>> {
+  const { rows } = await pool.query<{ title: string; channel: string | null; uploaded_at: Date | null }>(
+    `SELECT title, channel, uploaded_at FROM records
+      WHERE category = 'stories' AND kind <> 'review' AND status <> 'removed' AND batch_no IS NULL AND title IS NOT NULL`,
+  );
+  return rows.map((r) => ({ title: r.title, channel: r.channel, uploaded: r.uploaded_at !== null }));
+}
+
 /** Everything paused, most recently paused first. */
 export async function listPaused(limit = 200): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
