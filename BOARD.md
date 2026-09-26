@@ -152,7 +152,10 @@ those off. Every choice is remembered in the browser.
 
 Recurring batches opened ahead for a later day stay on Recurring and the
 calendar; they join the dashboard, the lists and every count on the morning
-they're for.
+they're for. **A daily batch is never late.** Uploads are daily, so a day
+gone by can't be caught up on (tomorrow brings its own). A batch still open
+at 6 PM doesn't turn red, and when its day is over it leaves the open work,
+late, the chart and every count. The Recurring tab keeps that day's record.
 
 **Tasks** are two tight lines each: the title, then its code, channel, air
 countdown and links, with one deadline pill on the right — "VO 9/24/2026 ·
@@ -186,8 +189,11 @@ link as a button, and a **Review** pill instead of a VO one. A revision is a
 cut to look at, not a video to voice, so it never gets a VO deadline or an
 air date; it's due for review **12 hours after it comes in** (a deadline in
 its message wins; `REVIEW_HOURS` changes the 12). Revisions sit in their own
-section on the dashboard above the columns — switch it off under *Also show*
-like Unsorted and Channels — and on the Revisions page, soonest first.
+column on the dashboard, between *Work due by day* and today's panel. Each
+card is the same shape: the title on up to two lines, its chips (version,
+score, channel, Frame.io ↗), then the review time and the buttons on one line.
+Switch the column off under *Also show*, like Unsorted and Channels. They're
+also on the Revisions page, soonest first.
 They're not in the category columns or counts. ✓ marks one reviewed.
 
 Anything that arrives with a Frame.io link is a revision, whatever the

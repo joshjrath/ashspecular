@@ -158,9 +158,7 @@ export function renderDigestEmbed(d: Digest): EmbedBuilder {
   embed.addFields({
     name: "Recurring",
     value: d.batches.total
-      ? `${d.batches.done}/${d.batches.total} done${
-          d.batches.late ? ` · **${d.batches.late} past their time**` : ""
-        }`
+      ? `${d.batches.done}/${d.batches.total} done`
       : "_No batches open yet._",
   });
 

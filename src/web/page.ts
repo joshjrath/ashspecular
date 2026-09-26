@@ -836,14 +836,54 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 /* No script: the whole card turns magenta, so a card waiting on its script
    reads at a glance — a colour no other state uses (pinned is yellow, late
    red, due-soon orange, cleared green, Frame.io blue). */
-.revpanel { margin: 14px 0 0; padding: 18px 20px 16px; }
-.revpanel .revhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+/* The dashboard's top row: the chart, Revisions as a column, then today. */
+.split.withrev { grid-template-columns: minmax(0, 1.25fr) minmax(330px, 1fr) 280px; align-items: stretch; }
+.split.withrev:has(> .revpanel[hidden]) { grid-template-columns: minmax(0, 1fr) 320px; }
+.revpanel { padding: 18px 16px 14px; display: flex; flex-direction: column; min-height: 0; max-height: 520px; }
+.revpanel .revhead { display: flex; align-items: center; gap: 10px; }
 .revpanel h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
 .revpanel h2 svg { width: 13px; height: 13px; color: #8E9BF7; }
-.revpanel .sub { color: var(--ink3); font-size: 12.5px; }
+.revpanel .sub { color: var(--ink3); font-size: 12.5px; margin: 4px 0 10px; }
 .revpanel .sub .late { color: #FF9C94; }
-.revpanel .seeall { margin-left: auto; padding: 0; }
-.revpanel .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 6px 12px; }
+.revpanel .seeall { margin-left: auto; padding: 0; font-size: 12.5px; }
+.revlist { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px 2px; }
+.revmini { background: rgba(91,108,240,.09); box-shadow: inset 3px 0 0 #7D8AF5; border-radius: 14px; padding: 11px 10px 10px 14px;
+  display: flex; flex-direction: column; gap: 7px; }
+.revmini.late { box-shadow: inset 3px 0 0 #F2685E; }
+.revmini.pinned { background: #27251A; }
+.revmini .rt { font-family: var(--display); font-weight: 650; font-size: 14px; letter-spacing: -0.02em; line-height: 1.3; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.revmini .rt:hover { text-decoration: underline; text-decoration-color: var(--ink3); }
+.revmini .rchips { display: flex; gap: 5px; flex-wrap: wrap; }
+.revmini .rchips > * { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; background: rgba(255,255,255,.05); color: var(--ink2); }
+.revmini .rv { background: rgba(91,108,240,.24) !important; color: #C9CFFB !important; }
+.revmini .rv svg { width: 8px; height: 8px; }
+.revmini .rscore { background: color-mix(in srgb, var(--sc) 20%, transparent) !important; color: var(--sc) !important; font-weight: 800; }
+.revmini .rch i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
+.revmini .rframe { background: rgba(91,108,240,.28) !important; color: #D6DBFD !important; }
+.revmini .rframe:hover { background: #5B6CF0 !important; color: #fff !important; }
+.revmini { container-type: inline-size; }
+.revmini .rfoot { display: flex; align-items: center; gap: 6px; }
+@container (max-width: 330px) { .revmini .rwhen .tm { display: none; } }
+.revmini .rwhen { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 9px;
+  background: var(--sunk); color: var(--ink2); font-size: 12px; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+.revmini .rwhen b { color: var(--ink); font-weight: 700; }
+.revmini .rwhen em { font-style: normal; font-weight: 800; margin-left: auto; }
+.revmini .rwhen.late { background: rgba(242,104,94,.13); color: #F6B1AB; }
+.revmini .rwhen.late b, .revmini .rwhen.late em { color: #FF8F86; }
+.revmini .rwhen.soon { background: rgba(238,154,85,.13); color: #F4C9A4; }
+.revmini .rwhen.soon em { color: #F8B377; }
+.revmini .rwhen.none { color: var(--ink3); }
+.revmini .acts { display: flex; gap: 5px; align-items: center; flex: none; }
+.revmini .acts > * { margin: 0; }
+.revmini .tick button, .revmini .tick.sumlink { width: 28px; height: 28px; }
+.revmini .tick.sumlink { border: 1.5px solid #45454D; color: #A6A6B0; box-sizing: border-box; display: grid; place-items: center; }
+@media (max-width: 1250px) {
+  .split.withrev { grid-template-columns: minmax(0, 1fr) 300px; }
+  .split.withrev > .revpanel { grid-column: 1 / -1; grid-row: 2; max-height: none; }
+  .split.withrev > .revpanel .revlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
 /* Each cell is its own container, so a card stacks like the columns' do. */
 .revcell { container-type: inline-size; min-width: 0; }
 @media (max-width: 760px) { .revpanel .rows { grid-template-columns: minmax(0, 1fr); } }
@@ -1758,6 +1798,11 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .row.revision .due .tm { display: none; }
   .row.revision .due { margin-left: 0; }
 }
+@media (max-width: 760px) {
+  .split.withrev, .split.withrev:has(> .revpanel[hidden]) { grid-template-columns: minmax(0, 1fr); }
+  .split.withrev > .revpanel { grid-column: auto; grid-row: auto; max-height: none; }
+  .split.withrev > .revpanel .revlist { display: flex; }
+}
 `;
 
 export interface Shell {
@@ -2224,7 +2269,8 @@ function row(r: StoredRecord): string {
       `<a class="lnk ${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.label || l.url)}">${esc(label)}</a>`,
     );
   }
-  if (r.confidence < 0.7) meta.push(`<span class="warn">needs a look</span>`);
+  // A revision is a link to watch; there's nothing about it to double-check.
+  if (r.confidence < 0.7 && r.kind !== "review") meta.push(`<span class="warn">needs a look</span>`);
   if (typeof r.reviewScore === "number") meta.unshift(`<a class="revscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}" title="The cut's score, from its notes">${esc(fmtScore(r.reviewScore))}/10</a>`);
   if (r.uploadedAt) meta.unshift(`<span class="uploaded-tag" title="Marked ${esc(usDate(dayOf(r.uploadedAt)))}">Uploaded</span>`);
   if (r.noScriptAt && r.status === "open") meta.unshift(`<span class="noscript-tag" title="Marked ${esc(usDate(dayOf(r.noScriptAt)))}">No script · waiting</span>`);
@@ -2357,7 +2403,8 @@ function duePill(r: StoredRecord): string {
   if (!at) return `<span class="due none">no deadline</span>`;
   const label = r.kind === "review" ? "Review" : r.voDue ? "VO" : r.deadline ? "Due" : "Script";
   const ms = at.getTime() - Date.now();
-  const open = r.status === "open";
+  // A daily batch is never late: its day is its day, and tomorrow brings its own.
+  const open = r.status === "open" && !(r.batchNo && ms < 0);
   const state = !open ? "" : ms < 0 ? " late" : ms < 86_400_000 ? " soon" : "";
   const span = (n: number) => {
     const h = Math.round(Math.abs(n) / 3_600_000);
@@ -2710,19 +2757,51 @@ function revisionsSection(list: StoredRecord[], hidden: boolean): string {
     const at = r.deadline ?? r.voDue ?? r.scriptDue;
     return at !== null && at.getTime() < Date.now();
   }).length;
-  const shown = list.slice(0, 8);
   return `<section class="panel revpanel dashpart" data-part="revisions"${hidden ? " hidden" : ""}>
     <div class="revhead">
       <h2>${REV_ICON}Revisions</h2>
-      <span class="sub">${
-        list.length
-          ? `${list.length} to review${late ? ` · <b class="late">${late} past ${late === 1 ? "its" : "their"} time</b>` : ""} · each due ${REVIEW_HOURS} hours after it comes in`
-          : `nothing to review · each new one is due ${REVIEW_HOURS} hours after it comes in`
-      }</span>
-      ${list.length > shown.length ? `<a class="seeall" href="/revisions">See all ${list.length} →</a>` : ""}
+      <a class="seeall" href="/revisions">All →</a>
     </div>
-    ${shown.length ? `<div class="rows">${shown.map((r) => `<div class="revcell">${row(r)}</div>`).join("")}</div>` : ""}
+    <div class="sub">${
+      list.length
+        ? `${list.length} to review${late ? ` · <b class="late">${late} past ${late === 1 ? "its" : "their"} time</b>` : ""}`
+        : `Nothing to review. Each new one is due ${REVIEW_HOURS} hours after it comes in.`
+    }</div>
+    ${list.length ? `<div class="revlist">${list.map(revMini).join("")}</div>` : ""}
   </section>`;
+}
+
+/**
+ * A revision as the dashboard's side panel shows it: the title on up to two
+ * lines, one row of chips, then the review time and the buttons on a line of
+ * their own — the same size on every card, however long the title.
+ */
+function revMini(r: StoredRecord): string {
+  const at = r.deadline ?? r.voDue ?? r.scriptDue;
+  const ms = at ? at.getTime() - Date.now() : null;
+  const span = (n: number) => {
+    const h = Math.round(Math.abs(n) / 3_600_000);
+    return h < 1 ? "<1h" : h < 24 ? `${h}h` : `${Math.round(h / 24)}d`;
+  };
+  const state = ms === null ? "none" : ms < 0 ? "late" : ms < 86_400_000 ? "soon" : "";
+  const [date, time] = at ? renderIn(at, ORG_TZ, "ET").split(" @ ") : ["", ""];
+  const when = at
+    ? `<span class="rwhen ${state}" title="${esc(`Review by ${renderIn(at, ORG_TZ, "ET")}`)}"><b>${esc((date ?? "").replace(/\/\d{4}$/, ""))}</b><span class="tm">${esc((time ?? "").replace(/ ET$/, ""))}</span>${
+        ms === null ? "" : `<em>${ms < 0 ? `${span(ms)} late` : `in ${span(ms)}`}</em>`
+      }</span>`
+    : `<span class="rwhen none">no review time</span>`;
+  const frame = r.links.find((l) => l.kind === "frameio");
+  const chips = [
+    `<span class="rv">${REV_ICON}v${r.version ?? 1}</span>`,
+    typeof r.reviewScore === "number" ? `<a class="rscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}">${esc(fmtScore(r.reviewScore))}/10</a>` : "",
+    r.channel ? `<span class="rch" style="--ch:${channelColour(r.channel)}"><i></i>${esc(r.channel.replace(/^Specular /, ""))}</span>` : "",
+    frame ? `<a class="rframe" href="${esc(frame.url)}" target="_blank" rel="noreferrer" title="Open on Frame.io">Frame.io ↗</a>` : "",
+  ].join("");
+  return `<article class="revmini${state === "late" ? " late" : ""}${r.pinnedAt ? " pinned" : ""}">
+    <a class="rt" href="/r/${r.id}" title="${esc(displayTitle(r))}">${esc(displayTitle(r))}</a>
+    <div class="rchips">${chips}</div>
+    <div class="rfoot">${when}${actions(r)}</div>
+  </article>`;
 }
 
 /** The dashboard's columns until you pick your own. */
@@ -2843,11 +2922,12 @@ export function renderDashboard(
     ${gapStrip(data.gaps ?? [])}
     ${daysOffStrip(shell.daysOff ?? [], data.shifted ?? [])}
 
-    <div class="split">
+    <div class="split withrev">
       <div class="panel">
         <h2>Work due by day</h2>
         ${dueChart(data.byDay)}
       </div>
+      ${revisionsSection(data.revisions ?? [], hideParts.has("revisions"))}
       <div class="panel today">
         <div class="date">${esc(
           new Intl.DateTimeFormat("en-US", {
@@ -2858,8 +2938,6 @@ export function renderDashboard(
         ${todayLines}
       </div>
     </div>
-
-    ${revisionsSection(data.revisions ?? [], hideParts.has("revisions"))}
 
     <div class="colbar">
       <h2 class="section-title">Open work</h2>
@@ -5308,7 +5386,7 @@ function dayCard(r: StoredRecord, mode: CalendarMode): string {
   const ch = r.channel ? channelColour(r.channel) : null;
   const at = mode === "deadlines" ? r.voDue ?? r.deadline ?? r.scriptDue : r.voDue;
   const label = r.kind === "review" ? "review" : r.voDue ? "VO" : r.deadline ? "due" : "script";
-  const over = at && r.status === "open" && at.getTime() < Date.now();
+  const over = at && r.status === "open" && !r.batchNo && at.getTime() < Date.now();
 
   const bits: string[] = [];
   if (r.stage) bits.push(esc(r.stage));

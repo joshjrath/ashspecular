@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-26-revision-column-batches-never-late",
+    title: "Revisions in their own column; daily batches are never late",
+    changes: [
+      { text: "Revisions now sit in a column between Work due by day and today's panel, every card the same shape whatever its title.", href: "/" },
+      { text: "Daily batches can't be late any more: a day gone by leaves the open work and every late count, and the Recurring tab keeps its record.", href: "/recurring" },
+    ],
+  },
+  {
     id: "2026-09-26-channel-pause-revision-rows",
     title: "Pause a whole channel, script marks, and tidier revision cards",
     changes: [

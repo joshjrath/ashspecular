@@ -579,9 +579,14 @@ export async function channelCounts(): Promise<Record<string, number>> {
  * 3 AM for the Bits/Reading day, midnight for a long-form channel's (Specular).
  * Paused work is never live: it waits on the Paused page with no deadline.
  */
-const LIVE = `paused_at IS NULL AND NOT (batch_no IS NOT NULL AND air_date > (CASE WHEN category IN ('bits', 'reading')
+// A daily batch is live on its own day only: a day ahead isn't due yet, and a
+// day gone by can't be caught up on (tomorrow brings its own), so it's never
+// overdue — it simply leaves the open work. The Recurring tab keeps its record.
+const LIVE = `paused_at IS NULL AND NOT (batch_no IS NOT NULL AND air_date <> (CASE WHEN category IN ('bits', 'reading')
   THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
   ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))`;
+/** Only one-off work can be late: a daily batch never is. */
+const CAN_BE_LATE = `batch_no IS NULL`;
 
 export interface Stats {
   late: number;
@@ -593,7 +598,7 @@ export interface Stats {
 export async function stats(zone: string): Promise<Stats> {
   const { rows } = await pool.query<Record<string, string>>(
     `SELECT
-       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND ${DUE} < now()) AS late,
+       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND ${CAN_BE_LATE} AND ${DUE} < now()) AS late,
        COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE}
          AND (${DUE} AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date) AS due_today,
        COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND vo_due IS NOT NULL) AS vo,
@@ -624,7 +629,7 @@ export interface DayBucket {
 export async function dueByDay(zone: string, days = 14): Promise<DayBucket[]> {
   const { rows } = await pool.query<{ day: string | null; category: string; n: string }>(
     `SELECT
-       CASE WHEN ${DUE} < now() THEN NULL
+       CASE WHEN ${DUE} < now() AND ${CAN_BE_LATE} THEN NULL
             ELSE to_char(${DUE} AT TIME ZONE $1, 'YYYY-MM-DD') END AS day,
        category, COUNT(*) AS n
      FROM records
@@ -742,7 +747,7 @@ export async function feedRecords(from: string, to: string, batches: boolean): P
 /** Open work past its time, most overdue first — the chart's LATE column. */
 export async function listLate(limit = 300): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${LIVE} AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND ${CAN_BE_LATE} AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
     [limit],
   );
   return rows.map(hydrate);

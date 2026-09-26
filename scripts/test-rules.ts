@@ -1454,6 +1454,21 @@ const gapDash2 = renderDashboard({ ...gapShell2, active: "dashboard" }, { stats:
 t("each chip has × to clear its days", /action="\/gaps\/dismiss"[\s\S]*?name="days" value="2026-09-28,2026-10-02"/.test(gapDash2), true);
 t("…each calendar slot × clears its own day", [renderWeek(gapShell2, "2026-09-27", "posting", [{ date: "2026-09-28", list: [] }]).includes('name="days" value="2026-09-28"'), renderCalendar(gapShell2, "2026-10", "posting", [], [], []).includes('name="days" value="2026-10-02"')], [true, true]);
 
+section("Dashboard: Revisions as a column; daily batches are never late");
+const lateBatch = { ...batchRec, id: 90, status: "open", deadline: new Date(Date.now() - 5 * 3_600_000), voDue: null, scriptDue: null } as typeof batchRec;
+const bList = renderList(shellFix, "Q", "", [lateBatch]);
+t("a daily batch past its time isn't late", [/class="due late"/.test(bList), bList.includes(" late</em>")], [false, false]);
+t("…nor red on the calendar", renderWeek(shellFix, "2026-09-27", "deadlines", [{ date: "2026-09-28", list: [lateBatch] }]).includes('class="at over"'), false);
+const oneOff = { ...plainRec, id: 91, deadline: new Date(Date.now() - 5 * 3_600_000), voDue: null, scriptDue: null } as typeof plainRec;
+t("…one-off work still is", /class="due late"/.test(renderList(shellFix, "Q", "", [oneOff])), true);
+const lowConf = { ...revRec, confidence: 0.4 } as typeof revRec;
+t("a revision never says 'needs a look'", renderList(shellFix, "R", "", [lowConf]).includes("needs a look"), false);
+const shortRev = { ...revRec, id: 41, title: "A" } as typeof revRec;
+const longRev = { ...revRec, id: 42, title: "A Much Longer Revision Title That Wraps Onto Two Lines Or More Easily" } as typeof revRec;
+const colDash = renderDashboard({ ...shellFix, active: "dashboard" }, { stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never, byDay: [], grouped: new Map(), channels: {}, revisions: [shortRev, longRev] });
+t("revisions sit in the top row, between the chart and today", /class="split withrev"[\s\S]*?Work due by day[\s\S]*?class="panel revpanel dashpart"[\s\S]*?class="panel today"/.test(colDash), true);
+t("…each card the same shape: title, chips, then the time and the buttons", (colDash.match(/<article class="revmini[^"]*">\s*<a class="rt"[\s\S]*?<div class="rchips">[\s\S]*?<div class="rfoot"><span class="rwhen/g) ?? []).length, 2);
+
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
 );
