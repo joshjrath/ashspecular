@@ -10,13 +10,13 @@
  * carried by category so a glance tells you which side of the business a row
  * belongs to.
  */
-import { CATEGORIES, CHANNELS, channelInk, contrastRatio, type CategoryId } from "../catalog.js";
+import { CATEGORIES, CHANNELS, channelInk, contrastRatio, isLongFormRecurring, type CategoryId } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
 import { compactViews, formatMultiple, type Performance } from "./performance.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, formatFor } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor } from "./targets.js";
 import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
@@ -701,6 +701,8 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
   font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: -0.02em;
 }
 .batch-head .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+.batch-head .sub { font-family: var(--ui); font-weight: 500; font-size: 12px; color: var(--ink3); letter-spacing: 0; text-transform: none; }
+.lfbadge { margin-left: 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; padding: 2px 6px; border-radius: 6px; background: #3A2A33; color: #F4B8CB; vertical-align: 1px; }
 .batch-head .n { margin-left: auto; font-family: var(--ui); font-weight: 600; font-size: 12px; color: var(--ink3); padding-right: 4px; }
 .hint { color: var(--ink3); font-size: 12.5px; margin: 14px 0 0; max-width: 560px; line-height: 1.6; }
 .panel form { margin-top: 14px; }
@@ -3276,9 +3278,17 @@ export function renderUploads(
 ): string {
   const category: CategoryId = data.category ?? "stories";
   const target = UPLOAD_TARGETS[category];
-  const hasTarget = target.kind === "every";
-  // No target: the lanes still show every gap, but none of them is "late".
-  const every = target.kind === "every" ? target.days : STORIES_EVERY_DAYS;
+  // Targets are per channel: Stories every four days, Specular one a day,
+  // others none. A channel with no target still shows every gap, none "late".
+  const everyOf = (name: string) => everyFor(name);
+  const targeted = data.channels.filter((n) => everyOf(n) !== null);
+  const hasTarget = targeted.length > 0;
+  const everyValues = [...new Set(targeted.map((n) => everyOf(n)!))];
+  const every = everyValues.length ? Math.max(...everyValues) : STORIES_EVERY_DAYS;
+  // One target shared by every channel reads as a heading; a mix doesn't.
+  const uniform = everyValues.length === 1 && targeted.length === data.channels.length;
+  const everyText = (d: number) => (d === 1 ? "one a day" : `every ${d} days`);
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "Stories";
   const q = (extra = "") => `/uploads?cat=${category}${extra}`;
   const perf = data.perf ?? new Map<string, Performance>();
@@ -3294,18 +3304,20 @@ export function renderUploads(
   const tracked = data.cadence.filter((c) => linked.includes(c.channel));
 
   // ── tiles
-  const onPace = tracked.filter((c) => c.state === "on-pace" || c.state === "due").length;
-  const behind = tracked.filter((c) => c.state === "behind").length;
+  const trackedT = tracked.filter((c) => everyOf(c.channel) !== null);
+  const linkedT = linked.filter((n) => everyOf(n) !== null);
+  const onPace = trackedT.filter((c) => c.state === "on-pace" || c.state === "due").length;
+  const behind = trackedT.filter((c) => c.state === "behind").length;
   const last30 = tracked.reduce((n, c) => n + c.uploads30, 0);
-  const target30 = Math.round((linked.length * 30) / every);
-  const gaps90 = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)));
-  const onTime = gaps90.length ? Math.round((gaps90.filter((g) => g.days <= every).length / gaps90.length) * 100) : null;
+  const target30 = Math.round(linkedT.reduce((n, name) => n + 30 / everyOf(name)!, 0));
+  const gapsT = trackedT.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)).map((g) => ({ g, ev: everyOf(c.channel)! })));
+  const onTime = gapsT.length ? Math.round((gapsT.filter(({ g, ev }) => g.days <= ev).length / gapsT.length) * 100) : null;
   const allGaps = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)).map((g) => g.days)).sort((x, y) => x - y);
   const medGap = allGaps.length ? allGaps[Math.floor(allGaps.length / 2)]! : null;
   const active7 = tracked.filter((c) => c.daysSince !== null && c.daysSince <= 7).length;
   const tiles = (hasTarget
     ? [
-        { n: linked.length ? `${onPace}/${linked.length}` : "—", l: "on pace", cls: "t-ok" },
+        { n: linkedT.length ? `${onPace}/${linkedT.length}` : "—", l: uniform ? "on pace" : targeted.length === 1 ? `on pace · ${targeted[0]} ${everyText(everyOf(targeted[0]!)!)}` : "on pace · channels with a target", cls: "t-ok" },
         { n: String(behind), l: "behind", cls: behind ? "t-late" : "" },
         { n: `${last30}`, l: `uploads · 30 days · target ${target30}`, cls: "" },
         { n: onTime === null ? "—" : `${onTime}%`, l: "gaps on time · 90 days", cls: "" },
@@ -3366,13 +3378,14 @@ export function renderUploads(
       const clamp = (d: string) => (d < start ? start : d);
 
       // Gaps between uploads, the late ones in red with their length.
+      const ev = everyOf(name);
       const segs = (c?.gaps ?? [])
         .filter((g) => g.to >= start)
         .map((g) => {
-          const late = g.days > every;
+          const late = ev !== null && g.days > ev;
           const x1 = x(clamp(g.from)), x2 = x(g.to);
           const mid = (x1 + x2) / 2;
-          const tip = `${g.days}-day gap · ${usDate(g.from)} → ${usDate(g.to)}${late ? ` · ${g.days - every} over` : " · on pace"}`;
+          const tip = `${g.days}-day gap · ${usDate(g.from)} → ${usDate(g.to)}${late ? ` · ${g.days - ev!} over` : ev !== null ? " · on pace" : ""}`;
           return `<g class="seg ${late ? "late" : "ok"}" data-tip="${esc(tip)}">
             <line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y}" y2="${y}"/>
             <rect x="${x1.toFixed(1)}" y="${y - 9}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="18" class="hit"/>
@@ -3390,7 +3403,7 @@ export function renderUploads(
           `${c.daysSince} day${c.daysSince === 1 ? "" : "s"} since the last upload${over ? ` · ${c.behindBy} over` : ""}`,
         )}"><line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y}" y2="${y}"/>
           <rect x="${x1.toFixed(1)}" y="${y - 9}" width="${Math.max(2, x2 - x1).toFixed(1)}" height="18" class="hit"/></g>`;
-        if (hasTarget && c.nextDue >= today) {
+        if (ev !== null && c.nextDue >= today) {
           const dx = x(c.nextDue);
           wait += `<g class="due-mark" data-tip="${esc(`Next due ${usDate(c.nextDue)} · ${relativeDay(c.nextDue)}`)}">
             <line x1="${x2.toFixed(1)}" x2="${dx.toFixed(1)}" y1="${y}" y2="${y}" class="ahead"/>
@@ -3421,7 +3434,7 @@ export function renderUploads(
         .join("");
 
       const state = c ? PACE[c.state] : PACE.none;
-      const status = hasTarget
+      const status = ev !== null
         ? `<text x="${W - RIGHT + 12}" y="${y + 4}" class="lstate ${state.cls}">${state.icon} ${
             c?.state === "behind" ? `${c.behindBy}d` : c?.state === "on-pace" ? (c.daysSince === 0 ? "today" : `${c.daysSince}d`) : c?.state === "due" ? "today" : ""
           }</text>`
@@ -3437,11 +3450,11 @@ export function renderUploads(
 
   const timeline = `<div class="panel uplanes">
     <div class="uphead">
-      <h2>${hasTarget ? `Every ${every} days, per channel` : "Uploads per channel"}</h2>
+      <h2>${uniform ? `${cap(everyText(every))}, per channel` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}` : "Uploads per channel"}</h2>
       <div class="ulegend" aria-label="Legend">
         <span><i class="lg-dot"></i>Upload</span>
-        ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace (≤${every}d)</span>
-        <span><i class="lg-late"></i>! Gap over ${every} days</span>
+        ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace${uniform ? ` (≤${every}d)` : ""}</span>
+        <span><i class="lg-late"></i>! Gap over ${uniform ? `${every} day${every === 1 ? "" : "s"}` : "the channel's target"}</span>
         <span><i class="lg-due"></i>Next due</span>` : `<span><i class="lg-ok"></i>Gap between uploads</span>`}
         <span><i class="lg-up"></i>🔥 Breakout (≥2× usual)</span>
         <span><i class="lg-down"></i>📉 Under (≤½ usual)</span>
@@ -3464,7 +3477,7 @@ export function renderUploads(
       const ch = channelColour(name);
       return `<tr>
         <td><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</td>
-        <td>${hasTarget ? `<span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span>` : c?.daysSince != null ? `${c.daysSince}d ago` : "—"}</td>
+        <td>${everyOf(name) !== null ? `<span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span>` : c?.daysSince != null ? `${c.daysSince}d ago` : "—"}</td>
         <td>${c?.lastDay ? `${esc(usDate(c.lastDay))} <small>${esc(relativeDay(c.lastDay))}</small>` : "—"}</td>
         <td>${c?.nextDue ? `${esc(usDate(c.nextDue))} <small>${esc(relativeDay(c.nextDue))}</small>` : "—"}</td>
         <td class="num">${c?.streak ?? "—"}</td>
@@ -3833,7 +3846,7 @@ function shiftDay(date: string, by: number): string {
 /** The Recurring page: today's batches per channel, and working ahead. */
 export function renderRecurring(
   shell: Shell,
-  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
+  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; date?: string }> },
   ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
   list: StoredRecord[],
   strip: Array<{ date: string; channels: number; total: number; done: number }> = [],
@@ -3842,12 +3855,20 @@ export function renderRecurring(
   const categoryOf = (channel: string) => CHANNELS.find((ch) => ch.name === channel)?.category ?? "bits";
 
   const line = (
-    r: { channel: string; total: number; done: number; removed?: number },
-    date?: string,
+    r: { channel: string; total: number; done: number; removed?: number; date?: string },
+    sectionDate?: string,
   ) => {
+    // A long-form channel's today can be a calendar day ahead of the Shorts
+    // day (midnight to 3 AM), so its row carries its own date.
+    const date = sectionDate ? r.date ?? sectionDate : undefined;
+    const lf = isLongFormRecurring(CHANNELS.find((ch) => ch.name === r.channel));
     const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
     const state =
-      r.total === 0 ? (r.removed ? "removed" : "not open") : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
+      r.total === 0
+        ? r.removed ? "removed" : "not open"
+        : lf
+          ? r.done === r.total ? "video up" : "video due"
+          : r.done === r.total ? "cleared" : `${r.done}/${r.total}`;
     const clearAll =
       date && r.total > r.done
         ? `<form class="tick" method="post" action="/recurring/clear">
@@ -3882,7 +3903,7 @@ export function renderRecurring(
 
     return `<div class="batch${r.total && r.done === r.total ? " done" : ""}" style="--c:${colourOf(categoryOf(r.channel))};--ch:${channelColour(r.channel)}">
       <a class="who" href="/channel/${encodeURIComponent(r.channel)}">
-        <span class="dot"></span><span class="name">${esc(r.channel)}</span>
+        <span class="dot"></span><span class="name">${esc(r.channel)}</span>${lf ? `<span class="lfbadge" title="Long-form — one video a day, midnight to midnight">LF</span>` : ""}
       </a>
       ${progress}
       <span class="state">${esc(state)}</span>
@@ -3934,11 +3955,16 @@ export function renderRecurring(
         const mine = list_.filter((r) => categoryOf(r.channel) === cat.id);
         const done = mine.reduce((n, r) => n + r.done, 0);
         const total = mine.reduce((n, r) => n + r.total, 0);
-        const unit = mine.some((r) => (CHANNELS.find((ch) => ch.name === r.channel)?.recurring?.units ?? 1) > 1)
-          ? "uploads"
-          : "cleared";
+        const longForm = mine.every((r) => isLongFormRecurring(CHANNELS.find((ch) => ch.name === r.channel)));
+        const unit = longForm
+          ? total === 1 ? "long-form video" : "long-form videos"
+          : mine.some((r) => (CHANNELS.find((ch) => ch.name === r.channel)?.recurring?.units ?? 1) > 1)
+            ? "uploads"
+            : "cleared";
         return `<div class="batch-group" style="--c:${cat.color}">
-          <div class="batch-head"><span class="dot"></span>${esc(cat.label)}
+          <div class="batch-head"><span class="dot"></span>${esc(cat.label)}${
+            longForm ? `<span class="sub">long-form · midnight to midnight</span>` : ""
+          }
             <span class="n">${done}/${total} ${unit}</span></div>
           <div class="batches">${mine.map((r) => line(r, date)).join("")}</div>
         </div>`;

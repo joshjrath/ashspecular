@@ -345,9 +345,11 @@ const DUE = "COALESCE(vo_due, deadline, script_due)";
  * Open work that is live today. A recurring batch opened ahead for a later day
  * is real, but it isn't today's work: it stays on Recurring and the calendar,
  * and joins the dashboard, the lists and every count when its day begins —
- * 3 AM, the Bits/Reading day.
+ * 3 AM for the Bits/Reading day, midnight for a long-form channel's (Specular).
  */
-const LIVE = `NOT (batch_no IS NOT NULL AND air_date > ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date)`;
+const LIVE = `NOT (batch_no IS NOT NULL AND air_date > (CASE WHEN category IN ('bits', 'reading')
+  THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
+  ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))`;
 
 export interface Stats {
   late: number;

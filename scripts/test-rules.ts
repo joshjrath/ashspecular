@@ -34,6 +34,9 @@ import { breakoutMessage } from "../src/jobs/breakouts.js";
 import { channelHealth, postingSlots, scoreShort, scoreShorts, tierOf, typicalShort } from "../src/web/shorts-perf.js";
 import { factsFromName, inspectFrameLink, mergeFrame, readFramePage } from "../src/parse/frameio.js";
 import { relativeDay, shortsDay, usDate } from "../src/parse/derive.js";
+import { batchDay as ownDay } from "../src/jobs/batches.js";
+import { everyFor, describeTarget } from "../src/web/targets.js";
+import { isLongFormRecurring } from "../src/catalog.js";
 import { corpus, splitScript } from "../src/web/stories/corpus.js";
 import { formatOfTitle } from "../src/web/stories/formats.js";
 import { readTitle } from "../src/web/stories/lore.js";
@@ -295,7 +298,7 @@ section("master channel list");
 
 t("five categories, Stories first", CATEGORIES.map((c) => c.id), ["stories", "gaming", "reading", "bits", "movies"]);
 t("channels are listed Stories first too", [...new Set(CHANNELS.map((c) => c.category))], ["stories", "gaming", "reading", "bits", "movies"]);
-t("30 channels", CHANNELS.length, 30);
+t("31 channels", CHANNELS.length, 31);
 t("every bits channel opens daily", CHANNELS.filter((c) => c.category === "bits").every((c) => c.recurring), true);
 t("roblox finds its channel", matchChannel("roblox doors ep 4 is up")?.name, "Specular Roblox");
 t("the full name finds a Stories channel", matchChannel("specular horror ep 2")?.name, "Specular Horror");
@@ -367,14 +370,14 @@ t("already aired", relativeDay("2026-09-20", fri), "5 days ago");
 t("late evening ET is still today, not tomorrow in UTC", relativeDay("2026-09-25", new Date("2026-09-26T03:30:00Z")), "today");
 
 t("the five reading channels open daily", CHANNELS.filter((c) => c.category === "reading").every((c) => c.recurring?.perDay === 1), true);
-t("twelve recurring channels in all", CHANNELS.filter((c) => c.recurring).length, 12);
+t("thirteen recurring Shorts channels", CHANNELS.filter((c) => c.recurring && c.category !== "movies").length, 13);
 t("a reading channel's day is five uploads", CHANNELS.filter((c) => c.category === "reading").map((c) => c.recurring?.units), [5, 5, 5, 5, 5]);
 t(
   "bits uploads per channel",
   Object.fromEntries(CHANNELS.filter((c) => c.category === "bits").map((c) => [c.name, c.recurring?.units])),
   {
     "Specular Studios Bits": 5, "Specular Anime Bits": 5, "Specular FNAF Bits": 5, "Specular Animation Bits": 5,
-    "Specular Gaming Bits": 3, "Specular Undertale Bits": 3, "Specular & Kay Bits": 1,
+    "Specular Gaming Bits": 5, "Specular Undertale Bits": 5, "Specular Pokemon Bits": 5, "Specular & Kay Bits": 1,
   },
 );
 
@@ -396,7 +399,7 @@ const ratio = (a: string, b: string) => {
 };
 
 t("every channel has a colour", CHANNELS.every((c) => /^#[0-9A-F]{6}$/i.test(c.color)), true);
-t("all 30 are different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, 30);
+t("every channel colour is different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, CHANNELS.length);
 t("none reuses a category colour", CHANNELS.some((c) => CATEGORIES.some((k) => k.color.toUpperCase() === c.color.toUpperCase())), false);
 t("each name reads as text on every dark surface (4.5:1)",
   CHANNELS.filter((c) => DARK_SURFACES.some((bg) => ratio(channelInk(c.color), bg) < 4.5)).map((c) => c.name), []);
@@ -739,6 +742,24 @@ section("Bits and Reading days run 3 AM to 3 AM");
 t("2:59 AM ET belongs to the day before", shortsDay(new Date("2026-09-26T02:59:00-04:00")), "2026-09-25");
 t("3:00 AM ET starts the new day", shortsDay(new Date("2026-09-26T03:00:00-04:00")), "2026-09-26");
 t("in winter too (EST)", shortsDay(new Date("2026-12-10T02:30:00-05:00")), "2026-12-09");
+section("Specular — one long-form video a day");
+const mainCh = CHANNELS.find((c) => c.name === "Specular")!;
+const gamingBits = CHANNELS.find((c) => c.name === "Specular Gaming Bits")!;
+t("Specular has a daily long-form batch", [isLongFormRecurring(mainCh), mainCh.recurring?.units, mainCh.recurring?.perDay], [true, 1, 1]);
+t("Shorts channels aren't long-form", isLongFormRecurring(gamingBits), false);
+t("at 1:30 AM ET Specular is already on the new day", ownDay(mainCh, new Date("2026-09-26T01:30:00-04:00")), "2026-09-26");
+t("…while the Shorts are still on the day before", ownDay(gamingBits, new Date("2026-09-26T01:30:00-04:00")), "2026-09-25");
+t("uploads: Specular one a day, Sleep untargeted, Stories every four", [everyFor("Specular"), everyFor("Specular Sleep"), everyFor("Specular FNAF")], [1, null, 4]);
+t("Movies says so", describeTarget("movies").includes("Specular: one a day"), true);
+const recLF = renderRecurring(shellFix, {
+  date: "2026-09-25",
+  rows: [
+    { channel: "Specular Gaming Bits", total: 5, done: 2, removed: 0 },
+    { channel: "Specular", total: 1, done: 0, removed: 0, date: "2026-09-26" },
+  ],
+}, { date: "2026-09-27", rows: [] }, [], [], 90);
+t("the Recurring page marks it long-form, on its own day", [recLF.includes('class="lfbadge"'), recLF.includes("video due"), recLF.includes('name="date" value="2026-09-26"'), recLF.includes("long-form · midnight to midnight")], [true, true, true, true]);
+
 const lateNight = dailyFor("Specular DC", [new Date("2026-09-25T20:00:00-04:00"), new Date("2026-09-26T01:30:00-04:00")], 5, new Date("2026-09-26T02:00:00-04:00"));
 t("a 1:30 AM Short counts toward yesterday, which is still 'today' until 3", [lateNight.today, lateNight.counts.get("2026-09-25")], [2, 2]);
 const after3 = dailyFor("Specular DC", [new Date("2026-09-26T01:30:00-04:00")], 5, new Date("2026-09-26T09:00:00-04:00"));

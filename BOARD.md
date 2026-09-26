@@ -166,7 +166,8 @@ changes to suit it:
 | Category | Counts | Target | View |
 |---|---|---|---|
 | **Stories** | long form only | one every 4 days per channel | timeline lanes, gaps red when over 4 days |
-| **Gaming, Movies** | long form only | none yet — tracked | the same lanes, no late gaps |
+| **Movies** | long form only | Specular one a day; Specular Sleep tracked | the same lanes, Specular's gaps red when over a day |
+| **Gaming** | long form only | none yet — tracked | the same lanes, no late gaps |
 | **Bits, Reading** | **Shorts only** | each channel's daily number (the Recurring page's `units`) | a heatmap: a row per channel, a square per day, shaded by how much of that day's number went up |
 
 **Bits and Reading days run 3 AM to 3 AM Eastern.** A Short posted at
@@ -439,12 +440,19 @@ npm run frameio -- https://f.io/7bu6f54B
 ![Recurring](docs/recurring.png)
 
 Every bits channel and every reading channel opens its batch by itself each
-morning at 06:00 ET — twelve a day, shown as two groups. You send nothing. A
+morning at 06:00 ET — thirteen a day, shown as two groups. You send nothing. A
 batch has no number: it is its channel and its day — "Specular FNAF Bits ·
 9/25/2026" in a list, just "Specular FNAF Bits" in a calendar cell or day
 column, where the date is already there.
 
-One batch per channel, twelve a day. To change that, edit `perDay` on the
+**Specular (Movies) is a daily long-form channel**: one video a day, opened
+just after midnight on the calendar day. It's long form, so its day runs
+midnight to midnight like Stories, not 3 AM to 3 AM like the Shorts, and it
+shows in its own Movies group with an **LF** mark ("video due" / "video up").
+On Uploads, Specular is held to one long-form upload a day (a gap over a day
+shows red); Specular Sleep is tracked with no target.
+
+One batch per channel a day. To change that, edit `perDay` on the
 channel in [`src/catalog.ts`](src/catalog.ts) — one number, and the next
 morning follows it. Removing a channel's `recurring` block stops it opening at
 all.
@@ -452,8 +460,8 @@ all.
 The tick beside a channel clears its whole day in one press.
 
 **Every channel counts uploads.** A reading channel's day is five uploads; a
-bits channel's depends on the channel — Studios, Anime, FNAF and Animation
-Bits five, Gaming and Undertale Bits three, Specular & Kay Bits one. Each row
+bits channel's depends on the channel — Studios, Anime, FNAF, Animation,
+Gaming, Undertale and Pokemon Bits five, Specular & Kay Bits one. Each row
 is one segment per upload. Tap the third to mark three done; tap the last
 filled one again to step back one. When every segment is filled the channel is
 cleared and counts once toward "cleared this week"; stepping back reopens it.

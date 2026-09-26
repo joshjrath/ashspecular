@@ -83,10 +83,21 @@ export interface Channel {
   /**
    * Channels that open a batch every day, known by channel and air date. perDay is how many batches;
    * units is how many uploads one batch holds, ticked off one at a time — five
-   * for a reading channel, and per channel for bits (Studios five, Gaming
-   * three, Specular & Kay one).
+   * for a reading channel, and per channel for bits (five each, Specular & Kay
+   * one).
    */
-  recurring?: { perDay: number; opensAt: string; dueAt: string; units?: number };
+  recurring?: {
+    perDay: number;
+    opensAt: string;
+    dueAt: string;
+    units?: number;
+    /**
+     * "long" for a long-form channel on a daily schedule (Specular, one
+     * video a day). Its day runs midnight to midnight like every other
+     * long-form thing; Shorts batches run 3 AM to 3 AM.
+     */
+    format?: "long";
+  };
   /**
    * Matched only by its exact name or an alias, never by appearing inside a
    * longer message. The main channel is called just "Specular", which is in
@@ -136,12 +147,14 @@ export const CHANNELS: Channel[] = [
   { id: "anime_bits", name: "Specular Anime Bits", color: "#4B781A", category: "bits", aliases: ["anime bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
   { id: "fnaf_bits", name: "Specular FNAF Bits", color: "#BD404D", category: "bits", aliases: ["fnaf bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
   { id: "animation_bits", name: "Specular Animation Bits", color: "#406D94", category: "bits", aliases: ["animation bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
-  { id: "gaming_bits", name: "Specular Gaming Bits", color: "#8B6143", category: "bits", aliases: ["gaming bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 3 } },
-  { id: "undertale_bits", name: "Specular Undertale Bits", color: "#BB3B95", category: "bits", aliases: ["undertale bits", "undertale"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 3 } },
+  { id: "gaming_bits", name: "Specular Gaming Bits", color: "#8B6143", category: "bits", aliases: ["gaming bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "undertale_bits", name: "Specular Undertale Bits", color: "#BB3B95", category: "bits", aliases: ["undertale bits", "undertale"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
+  { id: "pokemon_bits", name: "Specular Pokemon Bits", color: "#F2A900", category: "bits", aliases: ["pokemon bits", "pokémon bits"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 5 } },
   { id: "nk_bits", name: "Specular & Kay Bits", color: "#5566CD", category: "bits", aliases: ["nk bits", "specular nk bits", "kay bits", "specular and kay bits", "specular & kay"], recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: 1 } },
 
   // ── Movies ──────────────────────────────────────────────────────────────
-  { id: "main", name: "Specular", color: "#A75464", category: "movies", exactOnly: true, aliases: ["specular main", "main channel"] },
+  // One long-form video a day, opened just after midnight.
+  { id: "main", name: "Specular", color: "#A75464", category: "movies", exactOnly: true, aliases: ["specular main", "main channel"], recurring: { perDay: 1, opensAt: "00:05", dueAt: "23:59", units: 1, format: "long" } },
   { id: "sleep", name: "Specular Sleep", color: "#955890", category: "movies" },
 ];
 
@@ -196,7 +209,12 @@ export function matchChannel(text: string | null): Channel | undefined {
   );
 }
 
-export const BITS_CHANNELS = CHANNELS.filter((c) => c.recurring);
+export const BITS_CHANNELS = CHANNELS.filter((c) => c.recurring && c.recurring.format !== "long");
+
+/** Whether a channel's recurring batch is long form (a midnight day) rather than Shorts (a 3 AM day). */
+export function isLongFormRecurring(channel: Pick<Channel, "recurring"> | undefined): boolean {
+  return channel?.recurring?.format === "long";
+}
 
 // ── channel colours as text ─────────────────────────────────────────────────
 

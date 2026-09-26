@@ -46,7 +46,7 @@ import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
 import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, cadenceFor, dailyFor, dayOf, daysBetween } from "./cadence.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, perDayFor } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, perDayFor } from "./targets.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { corpus, normsFor } from "./stories/corpus.js";
 import { contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
@@ -58,7 +58,7 @@ import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
-import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, tomorrow } from "../jobs/batches.js";
+import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { DAY_SPAN, SORTS, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -507,9 +507,8 @@ export async function startWeb(): Promise<void> {
     const inCat = new Set(channels);
     const uploads = allUploads.filter((u) => inCat.has(u.channel));
     const viewData = allViews.filter((v) => inCat.has(v.channel));
-    const every = target.kind === "every" ? target.days : 36_500;
     const cadence = channels.map((name) =>
-      cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now, every),
+      cadenceFor(name, uploads.filter((u) => u.channel === name).map((u) => u.publishedAt), now, everyFor(name) ?? 36_500),
     );
     const daily =
       target.kind === "daily"
@@ -668,9 +667,9 @@ export async function startWeb(): Promise<void> {
     const first = tomorrow();
     const picked = safeDate(request.query.day);
     const day = picked && picked >= first ? picked : first;
-    const [s, todayRows, aheadRows, list, strip] = await Promise.all([
+    const [s, todayNow, aheadRows, list, strip] = await Promise.all([
       shell("recurring"),
-      batchStatus(today),
+      todayStatus(),
       batchStatus(day),
       listBatchesOn(today),
       batchDays(first, shiftDate(first, 13)),
@@ -680,7 +679,7 @@ export async function startWeb(): Promise<void> {
       .send(
         renderRecurring(
           s,
-          { date: today, rows: todayRows },
+          { date: today, rows: todayNow.rows },
           { date: day, rows: aheadRows },
           list,
           strip,

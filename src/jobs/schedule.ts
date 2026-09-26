@@ -1,7 +1,9 @@
 /**
  * The daily schedule.
  *
- * Batches open at the earliest opensAt in the catalog, in the studio's zone.
+ * Batches open at each channel's opensAt in the catalog, in the studio's zone:
+ * the Shorts channels at 6 AM on their 3 AM day, Specular's daily long-form
+ * batch just after midnight on the calendar day.
  * It also runs once at boot: a container that was asleep at 6am would
  * otherwise skip the day entirely, and the opener is idempotent so a boot run
  * on a day already opened does nothing.
@@ -11,21 +13,20 @@ import { config } from "../config.js";
 import { ORG_TZ } from "../parse/derive.js";
 import { openBatchesFor, recurringChannels } from "./batches.js";
 
-function earliestOpensAt(): string {
-  const times = recurringChannels()
-    .map((c) => c.recurring?.opensAt)
-    .filter((t): t is string => Boolean(t))
-    .sort();
-  return times[0] ?? "06:00";
+/** Every distinct opening time in the catalog: Shorts at 6 AM, Specular just after midnight. */
+function openingTimes(): string[] {
+  return [...new Set(recurringChannels().map((c) => c.recurring?.opensAt ?? "06:00"))].sort();
 }
 
-async function run(reason: string): Promise<void> {
+async function run(reason: string, opensAt?: string): Promise<void> {
   try {
-    const result = await openBatchesFor();
+    // Each channel opens its own today (see batchDay): at 00:05 that's the
+    // new calendar day for Specular, at 6 AM the new Shorts day.
+    const result = await openBatchesFor(undefined, (c) => !opensAt || (c.recurring?.opensAt ?? "06:00") === opensAt);
     if (result.opened) {
-      console.log(`[batches] ${reason}: opened ${result.opened} for ${result.date}`);
+      console.log(`[batches] ${reason}: opened ${result.opened}`);
     } else {
-      console.log(`[batches] ${reason}: nothing to open for ${result.date}`);
+      console.log(`[batches] ${reason}: nothing to open`);
     }
   } catch (err) {
     console.error("[batches] failed:", err);
@@ -101,13 +102,13 @@ function scheduleNudge(): void {
 }
 
 export function startSchedule(options: { withDigest: boolean }): void {
-  const [hh, mm] = earliestOpensAt().split(":");
-  const expression = `${Number(mm ?? 0)} ${Number(hh ?? 6)} * * *`;
+  for (const time of openingTimes()) {
+    const [hh, mm] = time.split(":");
+    cron.schedule(`${Number(mm ?? 0)} ${Number(hh ?? 6)} * * *`, () => void run("scheduled", time), { timezone: ORG_TZ });
+  }
+  console.log(`[batches] opening daily at ${openingTimes().join(" and ")} ${ORG_TZ}`);
 
-  cron.schedule(expression, () => void run("scheduled"), { timezone: ORG_TZ });
-  console.log(`[batches] opening daily at ${earliestOpensAt()} ${ORG_TZ}`);
-
-  // Catch up now in case the last opening time passed while this was down.
+  // Catch up now in case an opening time passed while this was down.
   void run("startup");
 
   // Only the half that holds a Discord connection can post the digest.

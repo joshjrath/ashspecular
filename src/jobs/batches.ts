@@ -12,15 +12,23 @@
  * early is the same call with a later date; when the schedule comes round it
  * finds them already there and does nothing.
  */
-import { CHANNELS, type Channel } from "../catalog.js";
+import { CHANNELS, isLongFormRecurring, type Channel } from "../catalog.js";
 import { pool } from "../db/pool.js";
-import { DEADLINE_TIME, ORG_TZ, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
+import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
 
 export { shortsDay };
 
-/** Bits channels, in catalog order. */
+/** Every channel with a daily batch, in catalog order. */
 export function recurringChannels(): Channel[] {
   return CHANNELS.filter((c) => c.recurring);
+}
+
+/**
+ * A channel's own "today": Shorts batches run 3 AM to 3 AM, a long-form
+ * channel's batch (Specular) midnight to midnight.
+ */
+export function batchDay(channel: Channel, at: Date = new Date()): string {
+  return isLongFormRecurring(channel) ? dateIn(ORG_TZ, at) : shortsDay(at);
 }
 
 function key(channel: Channel, date: string, n: number): string {
@@ -37,14 +45,19 @@ export interface OpenResult {
  * Open every channel's batches for one day. Returns what it actually created,
  * so a scheduled run can stay quiet when there was nothing to do.
  */
-export async function openBatchesFor(date = shortsDay()): Promise<OpenResult> {
+export async function openBatchesFor(
+  date?: string,
+  only: (c: Channel) => boolean = () => true,
+): Promise<OpenResult> {
   let opened = 0;
   let alreadyThere = 0;
 
-  for (const channel of recurringChannels()) {
+  for (const channel of recurringChannels().filter(only)) {
+    // With no date given, each channel opens its own today.
+    const day = date ?? batchDay(channel);
     const perDay = channel.recurring?.perDay ?? 1;
     const dueAt = channel.recurring?.dueAt ?? DEADLINE_TIME;
-    const deadline = instantIn(date, dueAt, ORG_TZ);
+    const deadline = instantIn(day, dueAt, ORG_TZ);
 
     // No running number: a batch is its channel and its day. The title is
     // the channel alone; the board adds the air date wherever it shows one,
@@ -60,10 +73,10 @@ export async function openBatchesFor(date = shortsDay()): Promise<OpenResult> {
           channel.name,
           null,
           channel.name,
-          date,
+          day,
           deadline,
           i,
-          key(channel, date, i),
+          key(channel, day, i),
           // A batch takes its channel's category — Reading batches are Reading.
           channel.category === "bits" ? "bits" : "update",
           channel.category,
@@ -76,7 +89,7 @@ export async function openBatchesFor(date = shortsDay()): Promise<OpenResult> {
     }
   }
 
-  return { date, opened, alreadyThere };
+  return { date: date ?? shortsDay(), opened, alreadyThere };
 }
 
 /** The furthest ahead one press may open: a quarter of a year. */
@@ -159,6 +172,28 @@ export async function batchStatus(date: string): Promise<
       removed: Number(row?.removed ?? 0),
     };
   });
+}
+
+/**
+ * Today's batches, each channel on its own day: the Shorts channels on the
+ * 3 AM day, a long-form channel on the calendar day. The two only differ
+ * between midnight and 3 AM.
+ */
+export async function todayStatus(at: Date = new Date()): Promise<{
+  date: string;
+  rows: Array<{ channel: string; total: number; done: number; removed: number; date: string }>;
+}> {
+  const shorts = shortsDay(at);
+  const calendar = dateIn(ORG_TZ, at);
+  const [a, b] = await Promise.all([batchStatus(shorts), shorts === calendar ? Promise.resolve(null) : batchStatus(calendar)]);
+  const lf = new Map((b ?? a).map((r) => [r.channel, r]));
+  return {
+    date: shorts,
+    rows: a.map((r) => {
+      const ch = CHANNELS.find((c) => c.name === r.channel);
+      return isLongFormRecurring(ch) ? { ...lf.get(r.channel)!, date: calendar } : { ...r, date: shorts };
+    }),
+  };
 }
 
 /**
