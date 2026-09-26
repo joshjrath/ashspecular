@@ -22,6 +22,8 @@ import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shor
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
 import type { Blueprint, PlannedPart } from "./stories/blueprint.js";
 import type { LabIdea, Contrast, PublicVideo, ScriptResult } from "./stories/lab.js";
+import { DICE_LABELS, type DiceKind, type Shape } from "./stories/dice.js";
+import type { DiceCard } from "./stories/roll.js";
 import type { DraftCheck } from "./stories/check.js";
 import type { Norms } from "./stories/corpus.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
@@ -169,6 +171,42 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .colrow .src { color: var(--ink3); font-size: 12px; }
 .colrow .src a { color: #9FDDF4; }
 .linkbtn { border: 0; background: none; padding: 0; margin-left: 4px; color: #9FDDF4; font: inherit; cursor: pointer; text-decoration: underline; }
+.dicebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin: 10px 0 14px; }
+.dgroups { display: flex; gap: 6px; flex-wrap: wrap; }
+.dgroups a, .dgroups .none { padding: 7px 12px; border-radius: 999px; background: var(--sunk); color: var(--ink2); font-size: 12.5px; font-weight: 600; }
+.dgroups a:hover { color: #fff; background: #26262C; }
+.dgroups a.on { background: var(--yellow); color: #101012; }
+.dgroups small { color: var(--ink3); font-weight: 700; margin-left: 3px; }
+.dgroups a.on small { color: #3A3A20; }
+.dgroups .none { opacity: .55; }
+.dicecard { background: var(--sunk); border-radius: 16px; padding: 16px 18px 18px; margin-bottom: 12px; }
+.dchead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.dchead h3 { margin: 0; font-family: var(--display); font-size: 24px; letter-spacing: -0.03em; }
+.dcgroup { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #F8E27A; }
+.dcfrom { color: var(--ink3); font-size: 13px; }
+.dcfacts { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 6px 14px; margin: 0 0 12px; font-size: 13px; }
+.dcfacts dt { color: var(--ink3); font-weight: 700; }
+.dcfacts dd { margin: 0; color: var(--ink2); line-height: 1.5; }
+.dicecard h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin: 6px 0 8px; }
+.dcopens { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dcopens a { display: flex; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+.dcopens a:hover { background: #26262C; }
+.dcopens .ikind { min-width: 150px; }
+.dcacts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dcacts form { margin: 0; }
+.dcsaved { margin: 0 0 8px; }
+.dcadded h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin: 14px 0 8px; }
+.dcadded { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dcadded h4 { flex-basis: 100%; }
+.dcchip { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 4px 4px 12px; border-radius: 999px; background: var(--sunk); font-size: 13px; font-weight: 600; }
+.dcchip small { color: var(--ink3); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; margin-right: 2px; }
+.dcchip button { width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: var(--ink3); cursor: pointer; font-size: 15px; }
+.dcchip button:hover { background: #2E2E35; color: #fff; }
+@media (max-width: 760px) {
+  .dcfacts { grid-template-columns: minmax(0, 1fr); }
+  .dcfacts dt { margin-top: 4px; }
+  .dcopens a { flex-direction: column; gap: 2px; }
+}
 aside .live .pulse {
   width: 7px; height: 7px; border-radius: 50%; background: #35D399; flex: none;
   box-shadow: 0 0 0 3px rgba(53,211,153,.16);
@@ -3984,6 +4022,7 @@ function channelLabPanel(f: ChannelFocus): string {
         ...(idea.world ? { world: idea.world.id } : {}),
         ...(idea.power ? { power: idea.power.id } : {}),
         ...(idea.target ? { target: idea.target.id } : {}),
+        ...(idea.shape ? { shape: idea.shape } : {}),
       }).toString();
       const why = [...fit, ...idea.reasons.slice(0, 1).map((r) => r.text)];
       return `<li><a href="/story-lab?${esc(qs)}#blueprint">
@@ -4889,12 +4928,82 @@ export interface StoryLabData {
   /** How many ideas were held back because they're already public, out of how many public videos. */
   heldBack?: number;
   publicCount?: number;
-  picked: { format: string; hero: string; world: string; power: string; target: string };
+  picked: { format: string; hero: string; world: string; power: string; target: string; shape?: string };
   check: { title: string; text: string; result: DraftCheck | null } | null;
   contrast: Contrast[] | null;
   results: ScriptResult[];
   coverage: { heroes: Hero[]; worlds: World[]; done: Set<string> };
   formats: Array<{ format: Format; norms: Norms; examples: string[] }>;
+  /** Title shapes added from the dice. */
+  shapes?: Shape[];
+  /** 🎲 What was rolled, what was just added, and what's been added so far. */
+  dice?: {
+    rolled: DiceCard | null;
+    added: DiceCard | null;
+    additions: Array<{ kind: DiceKind; id: string; name: string }>;
+    left: Record<DiceKind, number>;
+    group: DiceKind | null;
+    nonce: string;
+    rolledNothing: boolean;
+  };
+}
+
+/**
+ * 🎲 Roll for something new: one new format, hero, world, power or target
+ * per roll — what it is, the ideas it opens up — and Add to make it part of
+ * Story Lab. Everything added is listed, and can come out again.
+ */
+function dicePanel(d: NonNullable<StoryLabData["dice"]>): string {
+  const groups: DiceKind[] = ["shape", "hero", "world", "power", "target"];
+  const total = groups.reduce((n, k) => n + d.left[k], 0);
+  const rollHref = (g: DiceKind | null) => `/story-lab?roll=${d.nonce}${g ? `&amp;dice=${g}` : ""}#dice`;
+  const card = (c: DiceCard, action: "add" | "added") => `<div class="dicecard ${c.kind}">
+      <div class="dchead">
+        <span class="dcgroup">${esc(c.group)}</span>
+        <h3>${esc(c.name)}</h3>
+        <span class="dcfrom">${esc(c.from)}</span>
+      </div>
+      <dl class="dcfacts">${c.facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+      ${
+        c.opens.length
+          ? `<h4>${action === "added" ? "Now in Story Lab — ideas it makes" : "What it opens up"}</h4>
+             <ul class="dcopens">${c.opens.map((o) => `<li><a href="${esc(o.href)}"><span class="ikind">${esc(o.format)}</span>${esc(o.title)}</a></li>`).join("")}</ul>`
+          : `<p class="hint">Every idea it makes is already public or written — it'll still show in the builder.</p>`
+      }
+      ${
+        action === "add"
+          ? `<div class="dcacts">
+              <form method="post" action="/story-lab/add"><input type="hidden" name="kind" value="${c.kind}"><input type="hidden" name="id" value="${esc(c.id)}">
+                <button class="clear">Add to Story Lab</button></form>
+              <a class="clear secondary" href="${rollHref(d.group)}">🎲 Roll again</a>
+            </div>`
+          : `<div class="dcacts"><a class="clear" href="${rollHref(null)}">🎲 Roll another</a></div>`
+      }
+    </div>`;
+  return `<div class="panel ideas dice" id="dice">
+    <h2>🎲 Roll for something new <span class="sub">— one new format, hero, world, power or target a roll, none already in Story Lab; add the ones worth writing</span></h2>
+    <div class="dicebar">
+      <a class="clear" href="${rollHref(null)}">🎲 Roll</a>
+      <span class="dgroups">${groups
+        .map((g) => d.left[g]
+          ? `<a class="${d.group === g ? "on" : ""}" href="${rollHref(g)}">${esc(DICE_LABELS[g])} <small>${d.left[g]}</small></a>`
+          : `<span class="none">${esc(DICE_LABELS[g])} <small>all in</small></span>`)
+        .join("")}</span>
+    </div>
+    ${d.rolledNothing ? `<p class="hint">${total ? "Nothing left in that group — roll any." : "Everything on the dice is in Story Lab now."}</p>` : ""}
+    ${d.added ? `<p class="saved dcsaved" role="status">Added ${esc(d.added.name)}.</p>${card(d.added, "added")}` : ""}
+    ${d.rolled ? card(d.rolled, "add") : ""}
+    ${
+      d.additions.length
+        ? `<div class="dcadded"><h4>Added from the dice</h4>${d.additions
+            .map((a) => `<form method="post" action="/story-lab/remove" class="dcchip">
+              <input type="hidden" name="kind" value="${a.kind}"><input type="hidden" name="id" value="${esc(a.id)}">
+              <span><small>${esc(DICE_LABELS[a.kind])}</small> ${esc(a.name)}</span>
+              <button aria-label="Take ${esc(a.name)} out of Story Lab" title="Take it out again">×</button></form>`)
+            .join("")}</div>`
+        : ""
+    }
+  </div>`;
 }
 
 function blueprintHtml(b: Blueprint): string {
@@ -4926,10 +5035,17 @@ function blueprintHtml(b: Blueprint): string {
 export function renderStoryLab(shell: Shell, d: StoryLabData): string {
   const opt = (value: string, label: string, sel: string) => `<option value="${esc(value)}"${value === sel ? " selected" : ""}>${esc(label)}</option>`;
   const builder = `<form method="get" action="/story-lab#blueprint" class="labform">
-      <label>Format<select name="format">${d.formats
+      <label>Format<select name="format" onchange="var s=this.form.querySelector('[name=shape]');if(s)s.value=''">${d.formats
         .filter((f) => ["insert", "survive", "power", "hunt", "versus", "reborn", "you"].includes(f.format.id))
-        .map((f) => opt(f.format.id, f.format.name, d.picked.format))
+        .map((f) => opt(f.format.id, f.format.name, d.picked.shape ? "" : d.picked.format))
         .join("")}</select></label>
+      ${
+        d.shapes?.length
+          ? `<label>Title shape<select name="shape"><option value="">— the format's own</option>${d.shapes
+              .map((sh) => opt(sh.id, `${sh.name} (${FORMAT_BY_ID.get(sh.base)?.name ?? sh.base})`, d.picked.shape ?? ""))
+              .join("")}</select></label>`
+          : ""
+      }
       <label>Hero<select name="hero"><option value="">—</option>${HEROES.map((h) => opt(h.id, `${h.name}${h.fresh ? " (new)" : ""}`, d.picked.hero)).join("")}</select></label>
       <label>World or setting<select name="world"><option value="">—</option>${WORLDS.map((w) => opt(w.id, `${w.name}${w.fresh ? " (new)" : ""}`, d.picked.world)).join("")}</select></label>
       <label>Power<select name="power"><option value="">—</option>${POWERS.map((p) => opt(p.id, p.name, d.picked.power)).join("")}</select></label>
@@ -4939,7 +5055,9 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
 
   const ideaCard = ({ idea, blueprint }: StoryLabData["ideas"][number]) => `<li><details class="isg labidea">
       <summary>
-        <span class="ikind ${idea.format}">${esc(FORMAT_BY_ID.get(idea.format)?.name ?? idea.format)}</span>
+        <span class="ikind ${idea.format}">${esc(FORMAT_BY_ID.get(idea.format)?.name ?? idea.format)}${
+          idea.shape ? ` · ${esc(d.shapes?.find((x) => x.id === idea.shape)?.name ?? idea.shape)}` : ""
+        }</span>
         <span class="iidea">${esc(idea.title)}</span>
         <span class="iwhy">${idea.reasons.slice(0, 2).map((r) => esc(r.text)).join(" · ")}</span>
         <span class="imore">Blueprint ▾</span>
@@ -5033,6 +5151,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
       d.publicCount ? ` · checked against ${d.publicCount.toLocaleString("en-US")} public videos${d.heldBack ? `, ${d.heldBack} already done and left out` : ""}` : ""
     }</span></h2>
       <ul class="isugg">${d.ideas.map(ideaCard).join("")}</ul></div>
+    ${d.dice ? dicePanel(d.dice) : ""}
     <div class="panel ideas"><h2>Build any blueprint</h2>${builder}</div>
     <div class="panel ideas" id="check"><h2>Check a draft <span class="sub">— against the ${d.scripts} scripts, format by format</span></h2>${checker}</div>
     <div class="panel ideas"><h2>What the best-performing scripts did differently</h2>${contrast}${results}</div>

@@ -43,7 +43,10 @@ import { readTitle } from "../src/web/stories/lore.js";
 import { blueprint } from "../src/web/stories/blueprint.js";
 import { checkDraft } from "../src/web/stories/check.js";
 import { channelLab, keyOfTitle, labIdeas, publicMatch } from "../src/web/stories/lab.js";
-import { HERO_BY_ID, WORLD_BY_ID } from "../src/web/stories/lore.js";
+import { HERO_BY_ID, WORLD_BY_ID, HEROES, WORLDS, POWERS } from "../src/web/stories/lore.js";
+import { DICE_HEROES, DICE_POWERS, DICE_SHAPES, DICE_TARGETS, DICE_WORLDS } from "../src/web/stories/dice.js";
+import { SHAPES, applyAdditions, currentAdditions } from "../src/web/stories/added.js";
+import { diceCard, diceLeft, rollDice } from "../src/web/stories/roll.js";
 import { renderStoryLab, renderPaused, renderSettings, RAIL_ITEMS } from "../src/web/page.js";
 import { cardRows } from "../src/bot/render.js";
 import { cascadeText, planCascade } from "../src/web/cascade.js";
@@ -1083,6 +1086,79 @@ t("Story Lab ideas for a channel lead with its own world", fitted.slice(0, 3).ev
 t("…and say why", fitted[0]?.fit.some((f) => f.startsWith("FNAF is in")), true);
 const named = channelLab("Specular FNAF", ["What If Goku Joined The Avengers?", "Every Batman Villain, Ranked"], labIdeas([], new Date("2026-09-25"), 5000, [], [], false), 8);
 t("a channel named for a world leans to it before its titles do", named.some((x) => x.idea.world?.id === "fnaf" && x.fit.includes("the channel is named for FNAF")), true);
+
+// ── Story Lab's dice ──────────────────────────────────────────────────────
+section("Story Lab's dice — new formats, heroes, worlds, powers, targets");
+const baseCounts = [WORLDS.length, HEROES.length, POWERS.length];
+const allDiceHeroes = [...DICE_HEROES, ...DICE_TARGETS];
+t("nothing on the dice is already in the lore", [
+  DICE_WORLDS.filter((w) => WORLDS.some((x) => x.id === w.id)).map((w) => w.id),
+  allDiceHeroes.filter((h) => HEROES.some((x) => x.id === h.id)).map((h) => h.id),
+  DICE_POWERS.filter((p) => POWERS.some((x) => x.id === p.id)).map((p) => p.id),
+], [[], [], []]);
+t("…nor on the dice twice", [new Set(DICE_WORLDS.map((w) => w.id)).size === DICE_WORLDS.length, new Set(allDiceHeroes.map((h) => h.id)).size === allDiceHeroes.length,
+  new Set(DICE_POWERS.map((p) => p.id)).size === DICE_POWERS.length, new Set(DICE_SHAPES.map((x) => x.id)).size === DICE_SHAPES.length], [true, true, true, true]);
+t("every world is written out: truth, arrival, institution, roster, apex, endgame",
+  DICE_WORLDS.filter((w) => !(w.truth && w.arrival && w.incident && w.institution.name && w.institution.cantClassify && w.institution.approach && w.anchors.length >= 4
+    && w.ladder.length >= 4 && w.apex.name && w.apex.firstClash && w.apex.leverage && w.apex.weakness && w.endgame && w.aftermath && w.wants.length
+    && (w.kind === "universe" || (w.goal && w.rules && w.attrition && w.dilemma)))).map((w) => w.id), []);
+t("every hero: a version lock, an ability ladder, limits, a code",
+  allDiceHeroes.filter((h) => !(h.version && h.ladder.length >= 3 && h.limits.length >= 2 && h.code && h.engine && h.tags.length)).map((h) => h.id), []);
+t("every target says why he's hard to catch", DICE_TARGETS.filter((h) => !h.hides || h.role !== "target").map((h) => h.id), []);
+t("every power: what it grants, its catch, what it can't copy", DICE_POWERS.filter((p) => !(p.grants.length >= 3 && p.cost && p.cantCopy && p.mentor && p.weakness)).map((p) => p.id), []);
+t("every title shape is on a format the scripts built", DICE_SHAPES.every((x) => ["insert", "survive", "hunt", "you", "power"].includes(x.base) && /\{(hero|world|target)\}/.test(x.title)), true);
+const everything = [
+  ...DICE_SHAPES.map((x) => ({ kind: "shape" as const, id: x.id })), ...DICE_HEROES.map((x) => ({ kind: "hero" as const, id: x.id })),
+  ...DICE_WORLDS.map((x) => ({ kind: "world" as const, id: x.id })), ...DICE_POWERS.map((x) => ({ kind: "power" as const, id: x.id })),
+  ...DICE_TARGETS.map((x) => ({ kind: "target" as const, id: x.id })),
+];
+applyAdditions(everything);
+t("added, they're lore like any other", [WORLDS.length - baseCounts[0]!, HEROES.length - baseCounts[1]!, POWERS.length - baseCounts[2]!, SHAPES.length],
+  [DICE_WORLDS.length, allDiceHeroes.length, DICE_POWERS.length, DICE_SHAPES.length]);
+t("…read in titles", [readTitle("What If Naruto Was In My Hero Academia?").heroes[0]?.id, readTitle("What If Naruto Was In My Hero Academia?").worlds[0]?.id,
+  readTitle("Could Levi Survive The Walking Dead?").worlds[0]?.id], ["naruto", "mha", "twd"]);
+const everyBlueprint = [
+  ...DICE_WORLDS.map((w) => blueprint({ format: w.kind === "setting" ? "survive" : "insert", hero: "batman", world: w.id })),
+  ...DICE_HEROES.map((h) => blueprint({ format: "insert", hero: h.id, world: h.home === "boys" ? "mcu" : "boys" })),
+  ...DICE_TARGETS.map((h) => blueprint({ format: "hunt", hero: "l", target: h.id })),
+  ...DICE_POWERS.map((p) => blueprint({ format: "power", hero: "batman", power: p.id })),
+];
+t("every addition builds a full blueprint", everyBlueprint.filter((b) => !b || b.parts.length < 6).length, 0);
+const shaped = blueprint({ format: "survive", hero: "batman", world: "twd", shape: "hundreddays" });
+t("a title shape keeps its format's structure under the new title", [shaped?.title, shaped?.format.id, (shaped?.parts.length ?? 0) >= 6],
+  ["Could Batman Survive 100 Days In The Walking Dead?", "survive", true]);
+const withDice = labIdeas([], new Date("2026-09-25"), 20_000, [], [], false);
+t("ideas use what was added", ["naruto", "hannibal", "sharingan", "mha"].every((id) => withDice.some((i) => [i.hero?.id, i.target?.id, i.power?.id, i.world?.id].includes(id))), true);
+t("…in the new title shapes too", withDice.some((i) => i.shape === "hundreddays" && i.title.includes("Survive 100 Days In")), true);
+t("…and new detectives hunt new targets", withDice.some((i) => i.hero?.id === "sherlock" && i.target?.id === "hannibal"), true);
+t("nobody is dropped into their own story", withDice.filter((i) => !["reborn", "divergence"].includes(i.format) && i.hero && i.world && (i.hero.home === i.world.id || i.hero.from.toLowerCase() === i.world.name.toLowerCase())).map((i) => i.title).slice(0, 3), []);
+const wandaBoys = blueprint({ format: "insert", hero: "wanda", world: "boys" });
+const wandaText = wandaBoys ? [wandaBoys.title, ...wandaBoys.intro, ...wandaBoys.parts.map((x) => `${x.name} ${x.plan}`), wandaBoys.outro, wandaBoys.premise].join(" ") : "";
+t("a heroine's blueprint says her where it means her", ["Homelander would hear about her eventually", "still has to reach her", "talks to her", "tests her with heat vision", "she leaves Vought weaker than she found it"].filter((x) => !wandaText.includes(x)), []);
+t("…while Homelander and the rest keep theirs", [wandaText.includes("he'd probably assume"), wandaText.includes("Butcher (hates every Supe and wants a weapon against Homelander — he doesn't care")], [true, true]);
+t("…and nothing is left unfilled", /\{(he|him|his|himself|He|His)\}/.test(wandaText), false);
+t("…and her rebirth is hers", withDice.find((i) => i.format === "reborn" && i.hero?.id === "eleven")?.title ?? "", "What If Eleven Was Reborn With Her Memories?");
+const gojoInBoys = blueprint({ format: "insert", hero: "gojo", world: "boys" });
+t("a hero's still says him, and nothing is left unfilled", [/\bhim\b/.test([...(gojoInBoys?.intro ?? []), ...(gojoInBoys?.parts.map((x) => x.plan) ?? [])].join(" ")),
+  /\{(he|him|his|himself|He|His)\}/.test([gojoInBoys?.title, ...(gojoInBoys?.intro ?? []), ...(gojoInBoys?.parts.map((x) => x.name + x.plan) ?? []), gojoInBoys?.outro].join(" "))], [true, false]);
+t("targets never lead", withDice.some((i) => i.format !== "hunt" && i.hero?.role === "target"), false);
+t("with everything in, there's nothing left to roll", [rollDice(null), Object.values(diceLeft()).every((n) => n === 0)], [null, true]);
+applyAdditions([]);
+t("taking them out puts the lore back exactly", [WORLDS.length, HEROES.length, POWERS.length, SHAPES.length, readTitle("What If Naruto Was In Bleach?").heroes.length], [...baseCounts, 0, 0]);
+const rolled = rollDice(null, () => 0.3);
+t("a roll is always something new", rolled !== null && !currentAdditions().some((a) => a.kind === rolled.kind && a.id === rolled.id), true);
+t("…from the group asked for", rollDice("power", () => 0.5)?.kind, "power");
+const heroCard = diceCard("hero", "naruto", [], []);
+t("a rolled card says what it is and what it opens up", [heroCard?.name, heroCard?.group, (heroCard?.opens.length ?? 0) > 0, heroCard?.opens.every((o) => o.href.startsWith("/story-lab?"))], ["Naruto", "Hero", true, true]);
+t("…without adding it", HEROES.some((h) => h.id === "naruto"), false);
+const labWithDice = renderStoryLab(shellFix, {
+  scripts: 1, words: 1000, matched: 0, ideas: [], blueprint: null, picked: { format: "insert", hero: "", world: "", power: "", target: "" },
+  check: null, contrast: null, results: [], coverage: { heroes: [], worlds: [], done: new Set() }, formats: [],
+  dice: { rolled: heroCard, added: null, additions: [{ kind: "world", id: "mha", name: "My <Hero> Academia" }], left: diceLeft(), group: null, nonce: "1", rolledNothing: false },
+});
+t("the Story Lab page has the dice, an Add, and what's been added", [labWithDice.includes('id="dice"'), labWithDice.includes('action="/story-lab/add"'), labWithDice.includes('action="/story-lab/remove"')], [true, true, true]);
+t("…escaped", labWithDice.includes("My <Hero> Academia"), false);
+t("…and its scripts compile", [...labWithDice.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

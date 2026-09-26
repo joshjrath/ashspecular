@@ -64,6 +64,12 @@ import { corpus, normsFor } from "./stories/corpus.js";
 import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabVideo, type PublicVideo } from "./stories/lab.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
+import { SHAPES, SHAPE_BY_ID, applyAdditions, currentAdditions, diceItem } from "./stories/added.js";
+import type { DiceKind } from "./stories/dice.js";
+import { diceCard, diceLeft, rollDice } from "./stories/roll.js";
+import { addLabAddition, listLabAdditions, removeLabAddition } from "../db/lab.js";
+
+const DICE_KINDS: DiceKind[] = ["shape", "hero", "world", "power", "target"];
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -207,6 +213,8 @@ export async function startWeb(): Promise<void> {
     await migrate();
     // The Shorts channels' avatar colours and any set by hand, before the first page.
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
+    // Whatever's been added to Story Lab from its dice.
+    applyAdditions(await listLabAdditions().catch(() => []));
   }
 
   const app = Fastify({ logger: false, trustProxy: true });
@@ -701,7 +709,11 @@ export async function startWeb(): Promise<void> {
   );
 
   // Story Lab: what to write next for Stories, and how to build it.
-  type LabQuery = { format?: string; hero?: string; world?: string; power?: string; target?: string };
+  type LabQuery = {
+    format?: string; hero?: string; world?: string; power?: string; target?: string; shape?: string;
+    /** 🎲: any value rolls; `dice` keeps the roll to one group; `added` shows what was just added. */
+    roll?: string; dice?: string; added?: string;
+  };
   const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
     const channels = channelsIn("stories");
     const now = new Date();
@@ -719,18 +731,35 @@ export async function startWeb(): Promise<void> {
     const heldBack: PublicVideo[] = [];
     const ideas = labIdeas(videos, now, 24, published, heldBack).map((idea) => ({
       idea,
-      blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id }),
+      blueprint: blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id, shape: idea.shape }),
     }));
+    // A title shape picked in the builder ("shape:hundreddays") builds on its own format.
+    const shape = query.shape && SHAPE_BY_ID.has(query.shape) ? SHAPE_BY_ID.get(query.shape)! : null;
     const picked = {
-      format: FORMATS.some((f) => f.id === query.format) ? query.format! : "insert",
+      format: shape ? shape.base : FORMATS.some((f) => f.id === query.format) ? query.format! : "insert",
+      shape: shape?.id ?? "",
       hero: query.hero ?? "",
       world: query.world ?? "",
       power: query.power ?? "",
       target: query.target ?? "",
     };
     const built = query.hero || query.world || query.power
-      ? blueprint({ format: picked.format as FormatId, hero: picked.hero || null, world: picked.world || null, power: picked.power || null, target: picked.target || null })
+      ? blueprint({ format: picked.format as FormatId, hero: picked.hero || null, world: picked.world || null, power: picked.power || null, target: picked.target || null, shape: picked.shape || null })
       : null;
+
+    // 🎲 — one new item, or the one just added and what it opens up.
+    const group = DICE_KINDS.includes(query.dice as DiceKind) ? (query.dice as DiceKind) : null;
+    const rolledOne = query.roll !== undefined ? rollDice(group) : null;
+    const [addedKind, addedId] = (query.added ?? "").split(":");
+    const dice = {
+      rolled: rolledOne ? diceCard(rolledOne.kind, rolledOne.id, videos, published) : null,
+      added: addedKind && addedId && DICE_KINDS.includes(addedKind as DiceKind) ? diceCard(addedKind as DiceKind, addedId, videos, published) : null,
+      additions: currentAdditions().map((a) => ({ ...a, name: diceItem(a.kind, a.id)?.name ?? a.id })),
+      left: diceLeft(),
+      group,
+      nonce: String(Date.now()),
+      rolledNothing: query.roll !== undefined && !rolledOne,
+    };
     const builtRepeats = built ? publicMatch({ hero: built.hero, world: built.world, power: built.power, target: built.target, title: built.title }, published) : null;
     const results = matchScripts(videos);
     // Coverage: heroes who lead a script or a top idea, against every world.
@@ -755,11 +784,31 @@ export async function startWeb(): Promise<void> {
         const mine = scripts.filter((x) => x.format === f.id);
         return { format: f, norms: normsFor(mine.length ? mine : scripts), examples: mine.map((x) => x.title) };
       }).filter((f) => f.examples.length),
+      shapes: [...SHAPES],
+      dice,
     });
   };
   app.get<{ Querystring: LabQuery }>("/story-lab", async (request, reply) =>
     reply.type("text/html").send(await storyLab(request.query)),
   );
+  // 🎲 Add what was rolled, or take an addition out again.
+  app.post<{ Body: { kind?: string; id?: string } }>("/story-lab/add", async (request, reply) => {
+    const kind = request.body?.kind as DiceKind;
+    const id = request.body?.id ?? "";
+    if (!hasDatabase || !DICE_KINDS.includes(kind) || !diceItem(kind, id)) return reply.redirect("/story-lab#dice");
+    await addLabAddition(kind, id);
+    applyAdditions(await listLabAdditions());
+    return reply.redirect(`/story-lab?added=${kind}:${encodeURIComponent(id)}#dice`);
+  });
+  app.post<{ Body: { kind?: string; id?: string } }>("/story-lab/remove", async (request, reply) => {
+    const kind = request.body?.kind as DiceKind;
+    if (hasDatabase && DICE_KINDS.includes(kind)) {
+      await removeLabAddition(kind, request.body?.id ?? "");
+      applyAdditions(await listLabAdditions());
+    }
+    return reply.redirect("/story-lab#dice");
+  });
+
   // Drafts are posted: they're far too long for a link.
   app.post<{ Body: Record<string, string | undefined> }>("/story-lab/check", async (request, reply) => {
     const b = request.body ?? {};

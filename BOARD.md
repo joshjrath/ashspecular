@@ -360,6 +360,29 @@ and it doesn't copy them. It knows how they're built:
   ability ladder from the first thing he'd show to the ultimate he'd end on,
   the limits the writers are careful to respect, and his moral line.
 
+**🎲 Roll for something new.** Under *Write next*, the dice offer one new
+thing a roll that isn't in Story Lab yet: a **format** (a new title shape,
+like *Could X Survive 100 Days In Y?* or *Could X Escape Y?*, built on the
+structure of a format the scripts already use), a **hero**, a **world or
+setting**, a **power**, or a **target or opponent**. Roll any group, or
+pick one. Each roll shows what the item is, written the way the lore is
+(version lock, ability ladder, limits; institution, roster and apex; what a
+power grants and what it costs), and the ideas it would open up, each
+linking to its blueprint. **Add to Story Lab** makes it lore like any other:
+it's read in titles, offered in *Write next*, in the builder and on each
+channel's Uploads page, and its blueprints are built part by part. What's
+been added is listed under the dice, with × to take it out again. On the
+dice: 6 title shapes, 24 heroes (Naruto, Luffy, Ichigo, Deku, Tanjiro,
+Levi, Kratos, Master Chief, John Wick, Doctor Strange, Scarlet Witch,
+Captain America, Black Panther, the Flash, Wonder Woman, Vegeta, Itachi,
+Eleven, Leon Kennedy, Geralt, the Doom Slayer, Toji, Yuta, Sherlock Holmes),
+14 worlds and settings (My Hero Academia, Naruto, One Piece, Bleach, Dragon
+Ball, Solo Leveling, One Punch Man, Harry Potter, Game of Thrones, Stranger
+Things, The Hunger Games, The Walking Dead, Jurassic Park, Alien), 13
+powers and 10 targets (Hannibal Lecter, Moriarty, Johan Liebert, Ghostface,
+Michael Myers, Aizen, All For One, Makima, Kingpin, the Riddler). Nobody is
+ever dropped into their own story, and a heroine's blueprint says *her*.
+
 What's on the page:
 
 - **Write next**: ranked ideas. Each shows why: how the channel's uploads

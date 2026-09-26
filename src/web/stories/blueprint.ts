@@ -9,8 +9,9 @@
  * ability ladder, limits and code) in the order formats.ts says that format
  * is built in, which is the order the corpus scripts are built in.
  */
+import { SHAPE_BY_ID, fillShape } from "./added.js";
 import { FORMAT_BY_ID, type Format, type FormatId } from "./formats.js";
-import { HERO_BY_ID, POWER_BY_ID, WORLD_BY_ID, type Hero, type Power, type World } from "./lore.js";
+import { HERO_BY_ID, POWER_BY_ID, WORLD_BY_ID, forHeroine, voice, type Hero, type Power, type World } from "./lore.js";
 import { corpus, firstSentence, normsFor, partFor, referencesFor, type Norms, type Script } from "./corpus.js";
 
 export interface PlannedPart {
@@ -68,7 +69,7 @@ function titleFor(format: FormatId, hero: Hero | null, world: World | null, powe
     case "power":
       return { title: `What If ${h} Had ${P}?`, alternates: [`What If ${h} Got ${P}?`, `What If ${h} Was Given ${P}?`].filter((t) => !/Viltrumite biology/i.test(t)).concat(power?.id === "viltrumite" ? [`What If ${h} Was A Viltrumite?`] : []) };
     case "reborn":
-      return { title: `What If ${h} Was Reborn With His Memories?`, alternates: [`What If ${h} Knew What Was Coming?`] };
+      return { title: `What If ${h} Was Reborn With {His} Memories?`, alternates: [`What If ${h} Knew What Was Coming?`] };
     case "you":
       return power
         ? { title: `What If YOU Had ${P}?`, alternates: [`What If YOU Found ${P}?`] }
@@ -89,24 +90,24 @@ function introFor(format: FormatId, hero: Hero | null, world: World | null, powe
       return [
         `${h} would understand pretty quickly that ${w.truth}.`,
         `${cap(w.institution.name)} would have a much harder time understanding ${h}: ${w.institution.cantClassify}.`,
-        `${w.apex.name} would hear about him eventually. At first, he'd probably assume ${h} is just another ${noun} who needs to be reminded who runs things, but that attitude would change once he sees what ${bare(hero.ladder[0]!)} actually does.`,
+        `${w.apex.name} would hear about {him} eventually. At first, he'd probably assume ${h} is just another ${noun} who needs to be reminded who runs things, but that attitude would change once he sees what ${bare(hero.ladder[0]!)} actually does.`,
       ];
     }
     case "survive": {
       if (!hero || !w) return [];
       const first = w.ladder[0];
       return [
-        `${h} would have a huge advantage in ${w.name}. ${first ? `${cap(first.name)} would barely be a problem at first — his ${bare(hero.ladder[0]!)} sees to that.` : ""}`,
-        `The problem is that ${w.truth}, and nothing about ${h} guarantees that doesn't apply to him.`,
-        `So the real question isn't whether ${h} can beat ${first?.name ?? "what's in front of him"}. It's whether he can ${w.goal ?? "get out"} before ${w.name} wears him down.`,
+        `${h} would have a huge advantage in ${w.name}. ${first ? `${cap(first.name)} would barely be a problem at first — {his} ${bare(hero.ladder[0]!)} sees to that.` : ""}`,
+        `The problem is that ${w.truth}, and nothing about ${h} guarantees that doesn't apply to {him}.`,
+        `So the real question isn't whether ${h} can beat ${first?.name ?? "what's in front of {him}"}. It's whether {he} can ${w.goal ?? "get out"} before ${w.name} wears {him} down.`,
       ];
     }
     case "hunt": {
       if (!hero || !target) return [];
       return [
         `${target.name} has one of the best hiding places there is: ${target.hides ?? target.engine}.`,
-        `${h} would approach it differently. He wouldn't start by chasing ${target.name} — he'd start with ${bare(hero.ladder[0]!)}.`,
-        `But suspecting ${target.name} is only the beginning. The question would be whether ${h} can build a case before ${target.name} figures out exactly how he's doing it.`,
+        `${h} would approach it differently. {He} wouldn't start by chasing ${target.name} — {he}'d start with ${bare(hero.ladder[0]!)}.`,
+        `But suspecting ${target.name} is only the beginning. The question would be whether ${h} can build a case before ${target.name} figures out exactly how {he}'s doing it.`,
       ];
     }
     case "versus": {
@@ -121,9 +122,9 @@ function introFor(format: FormatId, hero: Hero | null, world: World | null, powe
     case "power": {
       if (!hero || !power) return [];
       return [
-        `${h} would first notice ${power.name} the way he notices anything unusual — something responding that shouldn't.`,
-        `${cap(power.name)} would give him ${list(power.grants, 3)}. What it can't give him is ${power.cantCopy}.`,
-        `The more it helps him, the easier it becomes to rely on it. The real problem starts when ${power.cost}.`,
+        `${h} would first notice ${power.name} the way {he} notices anything unusual — something responding that shouldn't.`,
+        `${cap(power.name)} would give {him} ${list(power.grants, 3)}. What it can't give {him} is ${power.cantCopy}.`,
+        `The more it helps {him}, the easier it becomes to rely on it. The real problem starts when ${power.cost}.`,
       ];
     }
     case "reborn": {
@@ -131,8 +132,8 @@ function introFor(format: FormatId, hero: Hero | null, world: World | null, powe
       const home = hero.home ? WORLD_BY_ID.get(hero.home) : null;
       return [
         `${h}'s last memory is ${home?.anchors.at(-2) ?? "the end"}.`,
-        `Then he wakes up years earlier, back in his younger body, remembering ${list(home?.anchors.slice(0, 3) ?? [], 3)} — and every person he lost.`,
-        `This time he knows what's coming, but every change he makes makes everything he remembers after it less reliable.`,
+        `Then {he} wakes up years earlier, back in {his} younger body, remembering ${list(home?.anchors.slice(0, 3) ?? [], 3)} — and every person {he} lost.`,
+        `This time {he} knows what's coming, but every change {he} makes makes everything {he} remembers after it less reliable.`,
       ];
     }
     case "you": {
@@ -158,7 +159,7 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
   const h = hero?.name ?? "You";
   const w = world;
   const L = hero?.ladder ?? [];
-  const ult = L.at(-1) ?? "his strongest move";
+  const ult = L.at(-1) ?? "{his} strongest move";
   const early = L.slice(0, 2);
   const mid = L.slice(2, -1);
   switch (format.id) {
@@ -168,11 +169,11 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
       const leader = w.faction?.members[0];
       const conscience = w.faction?.members[1];
       return [
-        { name: "Arrival", at: [1], names: [], plan: `Lock the version: ${hero.version}. He lands ${w.arrival}. First public moment: ${w.incident} — with ${bare(L[0]!)}, in front of people, without anyone understanding what they just saw.` },
-        { name: `${cap(w.institution.name)} can't classify him`, at: [1, 2], names: [w.institution.name], plan: `${cap(w.institution.cantClassify)}. That one fact is the engine of the script: ${hero.engine}.` },
-        { name: "The friendly approach — then the test", at: [2], names: [w.institution.name], plan: `${cap(w.institution.approach)}. ${h} listens because he's curious. The line gets crossed when a test becomes an attack — ${bare(L[0]!)} holds, and that's the moment he stops treating ${w.institution.name} as a joke.` },
-        { name: "The roster, one by one", at: [3], names: w.ladder.map((r) => r.name), plan: `Meet them in ascending order — ${w.ladder.slice(0, 4).map((r) => `${r.name} (${r.test})`).join("; ")}. For each, one mechanics beat: exactly how their power meets ${list(early.map(bare))}.${insider ? ` ${insider.name} — ${insider.test} — points him at what ${w.institution.name} is hiding.` : ""}` },
-        { name: w.faction ? `${w.faction.name}` : "The other side", at: [4], names: w.faction?.members.map((m) => m.name) ?? [], plan: w.faction ? `${w.faction.name} find him: ${w.faction.members.slice(0, 3).map(who).join("; ")}. ${h} takes what they know but won't become anyone's weapon — his line, in his terms: ${hero.code}.` : `Whoever opposes ${w.institution.name} reaches him; he helps on his own terms (${hero.code}).` },
+        { name: "Arrival", at: [1], names: [], plan: `Lock the version: ${hero.version}. {He} lands ${w.arrival}. First public moment: ${w.incident} — with ${bare(L[0]!)}, in front of people, without anyone understanding what they just saw.` },
+        { name: `${cap(w.institution.name)} can't classify {him}`, at: [1, 2], names: [w.institution.name], plan: `${cap(w.institution.cantClassify)}. That one fact is the engine of the script: ${hero.engine}.` },
+        { name: "The friendly approach — then the test", at: [2], names: [w.institution.name], plan: `${cap(w.institution.approach)}. ${h} listens because {he}'s curious. The line gets crossed when a test becomes an attack — ${bare(L[0]!)} holds, and that's the moment {he} stops treating ${w.institution.name} as a joke.` },
+        { name: "The roster, one by one", at: [3], names: w.ladder.map((r) => r.name), plan: `Meet them in ascending order — ${w.ladder.slice(0, 4).map((r) => `${r.name} (${r.test})`).join("; ")}. For each, one mechanics beat: exactly how their power meets ${list(early.map(bare))}.${insider ? ` ${insider.name} — ${insider.test} — points {him} at what ${w.institution.name} is hiding.` : ""}` },
+        { name: w.faction ? `${w.faction.name}` : "The other side", at: [4], names: w.faction?.members.map((m) => m.name) ?? [], plan: w.faction ? `${w.faction.name} find {him}: ${w.faction.members.slice(0, 3).map(who).join("; ")}. ${h} takes what they know but won't become anyone's weapon — {his} line, in {his} terms: ${hero.code}.` : `Whoever opposes ${w.institution.name} reaches {him}; {he} helps on {his} own terms (${hero.code}).` },
         { name: `First clash with ${w.apex.name} — inconclusive`, at: [5], names: [w.apex.name], plan: `${w.apex.name} ${w.apex.firstClash}. ${h} answers with ${list(early.map(bare))} and nothing more. Say what neither side used yet: ${h} hasn't shown ${list((mid.length ? mid : [ult]).map(bare))}${mid.length ? ` or ${bare(ult)}` : ""}.` },
         { name: `${w.apex.name} adapts`, at: [6], names: [w.apex.name, w.institution.name], plan: `${cap(w.institution.name)} studies every frame for a real weakness — use the honest ones: ${hero.limits[0] ?? "the limits canon actually shows"}. Then ${w.apex.name} ${w.apex.leverage}. The stakes turn personal and ${h} starts planning instead of reacting.` },
         { name: "Taking the system apart", at: [7, 8], names: [w.institution.name], plan: `${h} goes after what keeps ${w.apex.name} informed and supplied, and gets ${w.faction?.name ?? "the other side"} into places they could never reach: ${w.endgame}.` },
@@ -184,14 +185,14 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
       if (!hero || !w) return [];
       const tiers = w.ladder;
       return [
-        { name: "Version lock and entry", at: [1], names: [], plan: `${cap(hero.version)}. Say what he has and what he doesn't: ${list(hero.limits, 2)}. He arrives at ${w.anchors[0]}.` },
-        { name: "The easy start", at: [2], names: [tiers[0]?.name ?? ""], plan: `${cap(tiers[0]?.name ?? "the first threats")}: ${tiers[0]?.test ?? ""}. His ${list(early.map(bare))} make it look easy — and quietly start the attrition: ${w.attrition ?? "what he can't replace"}.` },
-        { name: "Learning the rules", at: [3], names: [], plan: `${cap(w.rules ?? w.truth)}. He works it out before other survivors do because of ${bare(L[0]!)} — and works out which of his strengths don't apply.` },
-        ...tiers.slice(1, 4).map((t, i) => ({ name: `Tier: ${t.name}`, at: [4 + i], names: [t.name], plan: `${cap(t.name)} — ${t.test}. ${i === 0 ? `Does ${bare(L[1] ?? L[0]!)} still work the way it does at home?` : i === 1 ? `This is where ${bare(L[0]!)} stops being enough on its own — say exactly why.` : `The fight that costs him something he can't replace.`}` })),
-        { name: "Attrition", at: [6], names: [], plan: `${cap(w.attrition ?? "supplies")} becomes the real enemy. Show one decision he'd never have to make at home.` },
+        { name: "Version lock and entry", at: [1], names: [], plan: `${cap(hero.version)}. Say what {he} has and what {he} doesn't: ${list(hero.limits, 2)}. {He} arrives at ${w.anchors[0]}.` },
+        { name: "The easy start", at: [2], names: [tiers[0]?.name ?? ""], plan: `${cap(tiers[0]?.name ?? "the first threats")}: ${tiers[0]?.test ?? ""}. {His} ${list(early.map(bare))} make it look easy — and quietly start the attrition: ${w.attrition ?? "what {he} can't replace"}.` },
+        { name: "Learning the rules", at: [3], names: [], plan: `${cap(w.rules ?? w.truth)}. {He} works it out before other survivors do because of ${bare(L[0]!)} — and works out which of {his} strengths don't apply.` },
+        ...tiers.slice(1, 4).map((t, i) => ({ name: `Tier: ${t.name}`, at: [4 + i], names: [t.name], plan: `${cap(t.name)} — ${t.test}. ${i === 0 ? `Does ${bare(L[1] ?? L[0]!)} still work the way it does at home?` : i === 1 ? `This is where ${bare(L[0]!)} stops being enough on its own — say exactly why.` : `The fight that costs {him} something {he} can't replace.`}` })),
+        { name: "Attrition", at: [6], names: [], plan: `${cap(w.attrition ?? "supplies")} becomes the real enemy. Show one decision {he}'d never have to make at home.` },
         ...(w.cast ? [{ name: "The canon cast", at: [7], names: [], plan: `${cap(w.cast)}. Change one canon beat without replacing them.` }] : []),
-        ...(w.dilemma ? [{ name: "The choice", at: [8, 9], names: [], plan: `${cap(w.dilemma)} — decided by his code: ${hero.code}.` }] : []),
-        { name: "Endgame", at: [9, 10], names: [w.apex.name], plan: `${cap(tiers.at(-1)?.name ?? w.apex.name)}, and the push to ${w.goal ?? w.endgame}. What it costs him.` },
+        ...(w.dilemma ? [{ name: "The choice", at: [8, 9], names: [], plan: `${cap(w.dilemma)} — decided by {his} code: ${hero.code}.` }] : []),
+        { name: "Endgame", at: [9, 10], names: [w.apex.name], plan: `${cap(tiers.at(-1)?.name ?? w.apex.name)}, and the push to ${w.goal ?? w.endgame}. What it costs {him}.` },
       ];
     }
     case "hunt": {
@@ -203,8 +204,8 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
         { name: `${target.name} notices`, at: [4, 5], names: [target.name], plan: `${target.name} realises someone is studying the pattern and starts investigating back — through ${target.ladder.at(-1)}.` },
         { name: "The test", at: [5, 6], names: [], plan: `${h} builds a test only the real ${target.name} would react to — ${bare(hero.ladder[1] ?? hero.ladder[0]!)}.` },
         { name: "The counter-move", at: [6, 7], names: [], plan: `${target.name} hands the case a perfect suspect. ${h} asks who benefits from the search stopping there.` },
-        { name: "The mistake", at: [7, 8], names: [], plan: `${target.name}'s weakness — ${target.limits[0] ?? "his need to stay ahead"} — produces the one mistake that survives a courtroom.` },
-        { name: "Certainty versus proof", at: [8, 9], names: [], plan: `${h} is certain before he can prove it. Say exactly what's still missing. His own limit matters here: ${hero.limits[0] ?? ""}.` },
+        { name: "The mistake", at: [7, 8], names: [], plan: `${target.name}'s weakness — ${target.limits[0] ?? `${target.pronoun === "she" ? "her" : "his"} need to stay ahead`} — produces the one mistake that survives a courtroom.` },
+        { name: "Certainty versus proof", at: [8, 9], names: [], plan: `${h} is certain before {he} can prove it. Say exactly what's still missing. {His} own limit matters here: ${hero.limits[0] ?? ""}.` },
         { name: "Endgame", at: [10], names: [target.name], plan: `The confrontation on ${h}'s ground, not ${target.name}'s.` },
       ];
     }
@@ -224,16 +225,16 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
       const home = hero.home ? WORLD_BY_ID.get(hero.home) : null;
       const fights = home?.anchors ?? [];
       return [
-        { name: "Acquisition", at: [1], names: [], plan: `${cap(hero.version)}. How ${power.name} reaches him — and the first time it activates, it's bigger than he expected.` },
-        { name: "Testing the rules", at: [2], names: [], plan: `He tests ${list(power.grants, 2)} small and controlled. First limit found: ${power.weakness}.` },
+        { name: "Acquisition", at: [1], names: [], plan: `${cap(hero.version)}. How ${power.name} reaches {him} — and the first time it activates, it's bigger than {he} expected.` },
+        { name: "Testing the rules", at: [2], names: [], plan: `{He} tests ${list(power.grants, 2)} small and controlled. First limit found: ${power.weakness}.` },
         { name: "What it can't copy", at: [3], names: [], plan: `${cap(power.cantCopy)}. That's what stops it being a straight upgrade.` },
-        { name: "The mentor", at: [4], names: [], plan: `${cap(power.mentor)} corrects how he uses it — his stance, not his strength. Tie it to his own ${bare(hero.ladder[0]!)}.` },
+        { name: "The mentor", at: [4], names: [], plan: `${cap(power.mentor)} corrects how {he} uses it — {his} stance, not {his} strength. Tie it to {his} own ${bare(hero.ladder[0]!)}.` },
         { name: "The first canon fight it changes", at: [5], names: [], plan: fights.length ? `Replay ${fights[Math.min(2, fights.length - 1)]} and show precisely where ${power.name} changes the outcome.` : `Replay a named canon fight and change it precisely.` },
         { name: "The ripple", at: [6], names: [], plan: fights.length > 3 ? `Because of that, ${fights[3]} plays out differently — who survives, who never falls.` : `The canon events downstream shift.` },
-        { name: "Temptation", at: [7], names: [], plan: `${cap(power.cost)} — pushing on his existing flaw: ${hero.limits[0] ?? hero.code}.` },
-        { name: "Used against him", at: [8], names: [], plan: `Someone targets the power itself: ${power.weakness}.` },
-        { name: "The defining fight", at: [9], names: [], plan: `He stops using ${power.name} as the answer and uses it inside his own style — ${bare(hero.ladder[0]!)} first, the power second.` },
-        { name: "Who he is after", at: [10], names: [], plan: `The power stays; he decides its place. His code holds: ${hero.code}.` },
+        { name: "Temptation", at: [7], names: [], plan: `${cap(power.cost)} — pushing on {his} existing flaw: ${hero.limits[0] ?? hero.code}.` },
+        { name: "Used against {him}", at: [8], names: [], plan: `Someone targets the power itself: ${power.weakness}.` },
+        { name: "The defining fight", at: [9], names: [], plan: `{He} stops using ${power.name} as the answer and uses it inside {his} own style — ${bare(hero.ladder[0]!)} first, the power second.` },
+        { name: "Who {he} is after", at: [10], names: [], plan: `The power stays; {he} decides its place. {His} code holds: ${hero.code}.` },
       ];
     }
     case "reborn": {
@@ -242,10 +243,10 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
       const a = home?.anchors ?? [];
       return [
         { name: "Is this real", at: [1], names: [], plan: `The first hours: the date, the younger body, checking it isn't a dream.` },
-        { name: "The first fix", at: [2], names: [], plan: `The earliest tragedy he can stop — planned around what his younger body can't do.` },
+        { name: "The first fix", at: [2], names: [], plan: `The earliest tragedy {he} can stop — planned around what {his} younger body can't do.` },
         { name: "Convincing the skeptic", at: [2, 3], names: [], plan: `Proof the key person can check: a prediction that comes true.` },
-        ...a.slice(0, 5).map((ev, i) => ({ name: cap(ev), at: [3 + i], names: [], plan: `${cap(ev)} — what he actually witnessed versus what he never saw; change it precisely.` })),
-        { name: "The memories go stale", at: [8], names: [], plan: `The timeline has moved too far; what he knows stops matching.` },
+        ...a.slice(0, 5).map((ev, i) => ({ name: cap(ev), at: [3 + i], names: [], plan: `${cap(ev)} — what {he} actually witnessed versus what {he} never saw; change it precisely.` })),
+        { name: "The memories go stale", at: [8], names: [], plan: `The timeline has moved too far; what {he} knows stops matching.` },
         { name: `The big one: ${a.at(-2) ?? "the end"}`, at: [9, 10], names: [], plan: `Played out with everything they prepared.` },
       ];
     }
@@ -287,17 +288,17 @@ function outroFor(format: FormatId, hero: Hero | null, world: World | null, powe
   const h = hero?.name ?? "you";
   switch (format) {
     case "insert":
-      return world ? `The bigger change happens before and after the fight: ${world.institution.name} spends most of the story trying to understand someone who doesn't fit its system, ${world.faction?.name ?? "the other side"} gets access it never had, and ${world.apex.name} loses the fear that holds everyone in place. ${h} doesn't replace him — he leaves ${world.institution.name} weaker than he found it.` : "";
+      return world ? `The bigger change happens before and after the fight: ${world.institution.name} spends most of the story trying to understand someone who doesn't fit its system, ${world.faction?.name ?? "the other side"} gets access it never had, and ${world.apex.name} loses the fear that holds everyone in place. ${h} doesn't replace him — {he} leaves ${world.institution.name} weaker than {he} found it.` : "";
     case "survive":
-      return world ? `So could ${h} survive ${world.name}? Probably — but not because ${world.ladder.at(-1)?.name ?? "the threats"} can't hurt him. What makes it hard is ${world.attrition ?? "what runs out"}, and the people he refuses to leave behind — and because he was there, ${world.cast ? world.cast.split(",")[0] : "more people"} come out of it differently.` : "";
+      return world ? `So could ${h} survive ${world.name}? Probably — but not because ${world.ladder.at(-1)?.name ?? "the threats"} can't hurt {him}. What makes it hard is ${world.attrition ?? "what runs out"}, and the people {he} refuses to leave behind — and because {he} was there, ${world.cast ? world.cast.split(",")[0] : "more people"} come out of it differently.` : "";
     case "hunt":
       return target ? `${h} could figure out ${target.name}. Proving it is the harder part.` : "";
     case "versus":
       return `A clear read with its win condition, and the one interaction canon doesn't settle.`;
     case "power":
-      return power ? `${cap(power.name)} would make ${h} stronger almost everywhere that matters in a fight. The harder part is what it does to his choices — ${power.cost}. That's the choice he keeps having to make.` : "";
+      return power ? `${cap(power.name)} would make ${h} stronger almost everywhere that matters in a fight. The harder part is what it does to {his} choices — ${power.cost}. That's the choice {he} keeps having to make.` : "";
     case "reborn":
-      return `A safer world, but not the one he lost — and ${h} learning to live without knowing what happens next.`;
+      return `A safer world, but not the one {he} lost — and ${h} learning to live without knowing what happens next.`;
     case "you":
       return `The hardest part isn't the power or surviving the people with it. It's knowing when to stop.`;
     default:
@@ -305,7 +306,15 @@ function outroFor(format: FormatId, hero: Hero | null, world: World | null, powe
   }
 }
 
-export function blueprint(opts: { format: FormatId; hero?: string | null; world?: string | null; power?: string | null; target?: string | null }): Blueprint | null {
+export function blueprint(opts: {
+  format: FormatId;
+  hero?: string | null;
+  world?: string | null;
+  power?: string | null;
+  target?: string | null;
+  /** A title shape added from the dice: its title, on this format's structure. */
+  shape?: string | null;
+}): Blueprint | null {
   const format = FORMAT_BY_ID.get(opts.format);
   if (!format) return null;
   const hero = opts.hero ? HERO_BY_ID.get(opts.hero) ?? null : null;
@@ -324,7 +333,7 @@ export function blueprint(opts: { format: FormatId; hero?: string | null; world?
     // The reference: the best-matching script's part at this position.
     let ref: PlannedPart["ref"] = null;
     for (const s of refs) {
-      const sec = partFor(s, p.at, p.names.filter(Boolean));
+      const sec = partFor(s, p.at, p.names.filter(Boolean).map((n) => voice(n, hero)));
       if (sec) {
         ref = { title: s.title, part: sec.name + (sec.label ? ` — ${sec.label}` : ""), line: firstSentence(sec) };
         break;
@@ -333,21 +342,29 @@ export function blueprint(opts: { format: FormatId; hero?: string | null; world?
     return { n: i + 1, name: p.name, plan: p.plan.replace(/\s+/g, " ").trim(), words: perPart, ref };
   });
 
-  const t = titleFor(format.id, hero, world, power, target);
+  const base = titleFor(format.id, hero, world, power, target);
+  const shape = opts.shape ? SHAPE_BY_ID.get(opts.shape) : undefined;
+  const shaped = shape && shape.base === format.id
+    ? fillShape(shape, { hero: hero?.name, world: world?.name, power: power ? power.name.replace(/\b([a-z])/g, (m) => m.toUpperCase()) : null, target: target?.name })
+    : null;
+  const t = shaped ? { title: shaped, alternates: [base.title, ...base.alternates].slice(0, 3) } : base;
+  // The worlds and these templates say {he}/{him}/{his} for whoever the story
+  // follows; say them for this hero.
+  const v = (x: string) => voice(x, hero);
   return {
     format,
     hero,
     world,
     power,
     target,
-    title: t.title,
-    alternates: t.alternates,
-    premise: format.pitch,
+    title: v(t.title),
+    alternates: t.alternates.map(v),
+    premise: forHeroine(format.pitch, hero),
     versionLock: hero?.version ?? "",
-    intro: introFor(format.id, hero, world, power, target).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean),
-    parts,
-    outro: outroFor(format.id, hero, world, power, target),
-    caveats: caveatsFor(format.id, hero, world, target),
+    intro: introFor(format.id, hero, world, power, target).map((l) => v(l.replace(/\s+/g, " ").trim())).filter(Boolean),
+    parts: parts.map((p) => ({ ...p, name: v(p.name), plan: v(p.plan) })),
+    outro: v(outroFor(format.id, hero, world, power, target)),
+    caveats: caveatsFor(format.id, hero, world, target).map(v),
     rules: format.rules,
     refs,
     norms,

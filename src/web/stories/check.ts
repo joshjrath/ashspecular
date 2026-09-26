@@ -9,7 +9,7 @@
  * Every finding says where in the draft and what the corpus does instead.
  */
 import { FORMAT_BY_ID, formatOfTitle, type Format } from "./formats.js";
-import { readTitle, type Hero, type World } from "./lore.js";
+import { readTitle, voice, type Hero, type World } from "./lore.js";
 import { corpus, measure, normsFor, sentencesOf, splitScript, type Norms, type Section } from "./corpus.js";
 
 export interface Finding {
@@ -123,8 +123,9 @@ export function checkDraft(text: string, title: string): DraftCheck | null {
       f.push({ level: "fix", label: `${world.apex.name} barely appears`, detail: `Every ${world.name} insertion script builds to him.` });
     }
     const namesOf = (n: string) => n.split(/,| and /).map((x) => x.replace(/^\s*the\s+/i, "").trim()).filter((x) => x.length > 2);
-    const met = world.ladder.filter((r) => namesOf(r.name).some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(all)));
-    f.push({ level: met.length >= 2 ? "good" : "fix", label: `Meets ${met.length} of ${world.ladder.length} of the roster`, detail: `${met.map((r) => r.name).join(", ") || "none"}. The corpus meets them one by one, weakest first, each as a mechanics beat.` });
+    const roster = world.ladder.map((r) => ({ ...r, name: voice(r.name, hero) }));
+    const met = roster.filter((r) => namesOf(r.name).some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(all)));
+    f.push({ level: met.length >= 2 ? "good" : "fix", label: `Meets ${met.length} of ${roster.length} of the roster`, detail: `${met.map((r) => r.name).join(", ") || "none"}. The corpus meets them one by one, weakest first, each as a mechanics beat.` });
     if (world.faction && !world.faction.members.some((mb) => new RegExp(`\\b${mb.name}\\b`, "i").test(all)))
       f.push({ level: "fix", label: `No ${world.faction.name}`, detail: `The resistance side is part 4 of every ${world.name} insertion — and where the hero states his line.` });
   }

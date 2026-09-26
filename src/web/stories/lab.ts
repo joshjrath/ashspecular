@@ -22,6 +22,7 @@
 import { FORMAT_BY_ID, formatOfTitle, type FormatId } from "./formats.js";
 import { HEROES, POWERS, WORLDS, readTitle, type Hero, type Power, type World } from "./lore.js";
 import { corpus, measure, type Script } from "./corpus.js";
+import { SHAPES, fillShape } from "./added.js";
 
 export interface LabVideo {
   title: string;
@@ -39,6 +40,8 @@ export interface LabIdea {
   title: string;
   score: number;
   reasons: Array<{ text: string; lift: number }>;
+  /** A title shape added from the dice, on this format's structure. */
+  shape?: string;
 }
 
 const TARGET_ONLY = new Set(["light", "joker", "walter", "avengers"]);
@@ -280,24 +283,39 @@ export function labIdeas(
       score *= f;
       reasons.push({ text: `${hero!.name} led ${recent} uploads in the last 60 days`, lift: f });
     }
-    out.push({ key, format, hero, world, power, target, title, score, reasons: reasons.sort((a, b) => Math.abs(b.lift - 1) - Math.abs(a.lift - 1)) });
+    const sorted = reasons.sort((a, b) => Math.abs(b.lift - 1) - Math.abs(a.lift - 1));
+    out.push({ key, format, hero, world, power, target, title, score, reasons: sorted });
+    // Title shapes added from the dice: the same idea, titled the new way,
+    // built on this format's structure — a touch below the tested title.
+    for (const shape of SHAPES.filter((x) => x.base === format)) {
+      const t = fillShape(shape, { hero: hero?.name, world: world?.name, power: power ? titleCase(power.name) : null, target: target?.name });
+      if (!t) continue;
+      const note = { text: `A new title shape — ${shape.name} — on the ${FORMAT_NAME[format]} structure the scripts use`, lift: 0.97 };
+      out.push({ key: `${key}|${shape.id}`, format, hero, world, power, target, title: t, score: score * 0.97, reasons: [note, ...sorted], shape: shape.id });
+    }
   };
 
-  const heroes = HEROES.filter((h) => !TARGET_ONLY.has(h.id));
+  // Leads, detectives and targets — the lore's own, and any added from the dice.
+  const heroes = HEROES.filter((h) => !TARGET_ONLY.has(h.id) && h.role !== "target");
+  const detectives = [...DETECTIVES, ...HEROES.filter((h) => h.role === "detective").map((h) => h.id)];
+  const targets = [...TARGETS, ...HEROES.filter((h) => h.role === "target").map((h) => h.id)];
+  // Never a character dropped into his own story.
+  const ownWorld = (hero: Hero, world: World) =>
+    hero.home === world.id || [world.name, ...world.aliases].some((n) => n.toLowerCase() === hero.from.toLowerCase());
   for (const hero of heroes) {
     for (const world of WORLDS) {
-      if (hero.home === world.id) continue;
+      if (ownWorld(hero, world)) continue;
       if (world.kind === "universe") consider("insert", hero, world, null, null, `What If ${hero.name} Was In ${world.name}?`);
       else if (!hero.tags.every((t) => t === "villain")) consider("survive", hero, world, null, null, `Could ${hero.name} Survive ${world.name}?`);
     }
     for (const power of POWERS) {
       if (power.from === hero.from) continue;
-      consider("power", hero, null, power, null, `What If ${hero.name} Had ${power.name.replace(/\b([a-z])/g, (m) => m.toUpperCase())}?`);
+      consider("power", hero, null, power, null, `What If ${hero.name} Had ${titleCase(power.name)}?`);
     }
-    if (hero.home && !hero.tags.includes("villain")) consider("reborn", hero, hero.home ? WORLDS.find((w) => w.id === hero.home) ?? null : null, null, null, `What If ${hero.name} Was Reborn With His Memories?`);
+    if (hero.home && !hero.tags.includes("villain")) consider("reborn", hero, hero.home ? WORLDS.find((w) => w.id === hero.home) ?? null : null, null, null, `What If ${hero.name} Was Reborn With ${hero.pronoun === "she" ? "Her" : "His"} Memories?`);
   }
-  for (const d of DETECTIVES) {
-    for (const t of TARGETS) {
+  for (const d of detectives) {
+    for (const t of targets) {
       if (d === t) continue;
       const hero = HEROES.find((h) => h.id === d)!;
       const target = HEROES.find((h) => h.id === t)!;
@@ -306,7 +324,7 @@ export function labIdeas(
     }
   }
   for (const w of WORLDS.filter((x) => x.kind === "universe")) consider("you", null, w, null, null, `What If YOU Were In ${w.name}?`);
-  for (const p of POWERS) consider("you", null, null, p, null, `What If YOU Had ${p.name.replace(/\b([a-z])/g, (m) => m.toUpperCase())}?`);
+  for (const p of POWERS) consider("you", null, null, p, null, `What If YOU Had ${titleCase(p.name)}?`);
 
   // Best first, but a spread: no hero, world or power more than twice.
   out.sort((a, b) => b.score - a.score);
@@ -325,6 +343,11 @@ export function labIdeas(
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "the Infinity Gauntlet" → "The Infinity Gauntlet", for a title. */
+function titleCase(s: string): string {
+  return s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+}
 
 // ── what the channel's best scripts did differently ────────────────────────
 

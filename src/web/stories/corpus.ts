@@ -144,6 +144,11 @@ export function splitScript(text: string, title = ""): Section[] {
 
 let loaded: Script[] | null = null;
 
+/** Read the scripts again next time — after the lore changes, so new names are recognised in their titles. */
+export function resetCorpus(): void {
+  loaded = null;
+}
+
 export function corpus(): Script[] {
   if (loaded) return loaded;
   let raw: { scripts: Array<{ title: string; file: string; words: number; sections: Section[] }> } = { scripts: [] };
