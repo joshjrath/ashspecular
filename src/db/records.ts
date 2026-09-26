@@ -287,7 +287,7 @@ export async function listOffShifted(limit = 60): Promise<Array<{ record: Stored
  */
 export async function setPaused(id: number, on: boolean): Promise<void> {
   await pool.query(
-    `UPDATE records SET paused_at = CASE WHEN $2 THEN COALESCE(paused_at, now()) END, updated_at = now() WHERE id = $1`,
+    `UPDATE records SET paused_at = CASE WHEN $2 THEN COALESCE(paused_at, now()) END, paused_by_channel = false, updated_at = now() WHERE id = $1`,
     [id, on],
   );
   await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);

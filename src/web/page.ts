@@ -845,8 +845,34 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .rev-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 6px;
   background: rgba(91,108,240,.24); color: #C9CFFB; font-weight: 700; font-size: 11px; white-space: nowrap; }
 .rev-tag svg { width: 9px; height: 9px; }
-.row.revision .meta .lnk.frameio { background: #5B6CF0; color: #fff; }
-.row.revision .meta .lnk.frameio:hover { background: #6E7DF5; }
+/* A revision's row: one size for every chip, the due pill and its four
+   buttons in a single line, centred on the two lines of text. */
+.row.revision .meta { gap: 6px; }
+.row.revision .meta > * { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 7px;
+  font-size: 11.5px; font-weight: 700; line-height: 1; white-space: nowrap; box-sizing: border-box; max-width: 100%; }
+.row.revision .meta .rev-tag { padding: 0 8px 0 7px; }
+.row.revision .meta .code { background: rgba(255,255,255,.05); color: var(--ink2); letter-spacing: .02em; }
+.row.revision .meta .chan { background: rgba(255,255,255,.05); color: var(--ink, var(--ch)); }
+.row.revision .meta .chan i { width: 7px; height: 7px; }
+.row.revision .meta .lnk.frameio { background: rgba(91,108,240,.28); color: #D6DBFD; }
+.row.revision .meta .lnk.frameio::after { content: "↗"; font-size: 11px; opacity: .8; }
+.row.revision .meta .lnk.frameio:hover { background: #5B6CF0; color: #fff; }
+.row.revision .meta .revscore { font-weight: 800; }
+.row.revision .due { align-self: center; padding: 0 12px; height: 34px; align-items: center; border-radius: 10px; }
+.row.revision .acts { display: flex; align-items: center; gap: 6px; align-self: center; }
+.row.revision .acts .tick button, .row.revision .acts .tick.sumlink { width: 30px; height: 30px; border-width: 1.5px; }
+.row.revision .acts .tick.sumlink { border: 1.5px solid #45454D; color: #A6A6B0; box-sizing: border-box; }
+@container (max-width: 560px) {
+  /* Narrow: title, chips, then the due pill and the buttons on one line. */
+  .row.revision { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .row.revision .acts { grid-column: 2; grid-row: 3; }
+  .row.revision .due { grid-column: 1; grid-row: 3; margin: 0 0 0 19px; height: 30px; padding: 0 10px; white-space: nowrap; font-size: 12px; max-width: none; }
+  .row.revision .meta > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+}
+@container (max-width: 380px) {
+  .row.revision .due .tm { display: none; }
+  .row.revision .due { margin-left: 0; }
+}
 .dcard.revision { box-shadow: inset 3px 0 0 #7D8AF5; }
 .row.noscript { background: rgba(226,79,203,.10); box-shadow: inset 3px 0 0 #E24FCB; }
 .row.noscript:hover { background: rgba(226,79,203,.15); }
@@ -916,6 +942,28 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .timeline .tlline { fill: none; stroke: #5B5B66; stroke-width: 2; }
 .timeline .tldot { stroke: var(--bg, #0B0B0D); stroke-width: 2.5; cursor: pointer; }
 .timeline a:hover .tldot { r: 9; }
+.chpause { display: flex; align-items: center; margin: 0; align-self: center; }
+header.page .chpause { margin-left: 0; }
+.chpause button { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; margin: 0; }
+header.page .checknow button { white-space: nowrap; }
+.chpause button svg { width: 12px; height: 12px; }
+.chpause button.on { background: rgba(141,155,242,.2) !important; color: #C9CFFB !important; }
+.chpause.compact button { padding: 6px 12px; font-size: 12px; }
+.chpausetag { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; background: rgba(141,155,242,.18);
+  color: #C3CAF8; font-size: 11.5px; font-weight: 700; margin-right: 8px; white-space: nowrap; }
+.chpausetag svg { width: 10px; height: 10px; }
+.batch.chpaused { opacity: .85; }
+.batch.chpaused .name { color: var(--ink2); }
+.batch.chpaused .chpausetag { justify-self: start; }
+.pausedlead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px; border-radius: 16px;
+  background: rgba(141,155,242,.10); box-shadow: inset 0 0 0 1.5px rgba(141,155,242,.35); color: #C9CFFB; font-size: 13.5px; }
+.pchans { margin-bottom: 14px; padding: 16px 18px; }
+.pchanlist { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.pchan { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 12px; background: var(--sunk); }
+.pchan i { width: 9px; height: 9px; border-radius: 50%; background: var(--ch); }
+.pchan a { font-weight: 700; color: var(--ink); }
+.pchan span { color: var(--ink3); font-size: 12px; }
+.pchans .pchan form.chpause { margin: 0 0 0 auto; }
 .row.uploaded { background: rgba(47,182,115,.10); box-shadow: inset 3px 0 0 #2FB673; }
 .uploaded-tag { padding: 1px 8px; border-radius: 6px; background: rgba(47,182,115,.22); color: #9BEBC2; font-weight: 700; font-size: 11px; }
 .paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
@@ -1681,6 +1729,19 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .cal .cell { min-height: 110px; border-radius: 14px; }
   .cal .chip .t { display: none; }
 }
+/* Revision rows, last so a phone's own rules can't undo them: the chips, then
+   the due pill and the four buttons on one line. */
+.row.revision .acts > * { margin: 0; align-self: center; }
+.row.revision .acts .tick, .row.revision .acts .tick.sumlink { height: 30px; }
+@media (max-width: 760px) {
+  .row.revision { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .row.revision .acts { grid-column: 2; grid-row: 3; }
+  .row.revision .due { grid-column: 1; grid-row: 3; margin: 0 0 0 19px; height: 30px; padding: 0 10px; white-space: nowrap; font-size: 12px; max-width: none; }
+}
+@media (max-width: 420px) {
+  .row.revision .due .tm { display: none; }
+  .row.revision .due { margin-left: 0; }
+}
 `;
 
 export interface Shell {
@@ -1688,6 +1749,8 @@ export interface Shell {
   active: string;
   /** Upload slots in the next eight days with nothing assigned: a badge on Calendar, dashed slots on it. */
   gaps?: UploadGap[];
+  /** Channels with production paused, and the day each was paused (YYYY-MM-DD). */
+  pausedChannels?: Record<string, string>;
   counts: Record<string, number>;
   nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null };
   lastIntake: Date | null;
@@ -1809,8 +1872,10 @@ function sidebar(s: Shell): string {
     ${cats ? `<h3>Categories</h3>\n    <div class="cats">${cats}</div>` : ""}
     ${off.has("live") ? "" : `<div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>`}
     ${
-      s.paused && !off.has("paused")
-        ? `<a class="removed-link paused-link${s.active === "paused" ? " on" : ""}" href="/paused">Paused · ${s.paused}</a>`
+      (s.paused || Object.keys(s.pausedChannels ?? {}).length) && !off.has("paused")
+        ? `<a class="removed-link paused-link${s.active === "paused" ? " on" : ""}" href="/paused">Paused · ${s.paused ?? 0}${
+            Object.keys(s.pausedChannels ?? {}).length ? ` · ${Object.keys(s.pausedChannels ?? {}).length} channel${Object.keys(s.pausedChannels ?? {}).length === 1 ? "" : "s"}` : ""
+          }</a>`
         : ""
     }
     ${
@@ -2331,6 +2396,28 @@ const UPLOAD_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 8.2
 const PLAY_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L9.6 6z" fill="currentColor"/></svg>`;
 const NOSCRIPT_ICON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4.2L9.5 3.8v6.7H3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6.2 4v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="8.6" r=".75" fill="currentColor"/></svg>`;
 
+/**
+ * Pause production on a whole channel, or resume it: off every deadline, the
+ * late list, the calendar and the bell; no new daily batches. Everything
+ * else about the channel stays where it is.
+ */
+export function channelPauseButton(shell: Shell, channel: string, size: "full" | "compact" = "full"): string {
+  const since = shell.pausedChannels?.[channel];
+  const label = since ? "Resume channel" : "Pause channel";
+  const tip = since
+    ? `Paused since ${usDate(since)} — resume and its work comes back with its deadlines`
+    : "Pause production: its work comes off every deadline, the calendar and the bell, and no new daily batches open";
+  return `<form method="post" action="/channels/${since ? "resume" : "pause"}" class="chpause${size === "compact" ? " compact" : ""}"${
+    since ? "" : ` onsubmit="return confirm('Pause ${esc(channel.replace(/'/g, ""))}? Its open work comes off every deadline until you resume it.')"`
+  }><input type="hidden" name="channel" value="${esc(channel)}"><button class="clear secondary${since ? " on" : ""}" title="${esc(tip)}">${since ? PLAY_ICON : PAUSE_ICON}<span>${label}</span></button></form>`;
+}
+
+/** A small "Paused" mark beside a paused channel's name. */
+export function channelPausedTag(shell: Shell, channel: string): string {
+  const since = shell.pausedChannels?.[channel];
+  return since ? `<span class="chpausetag" title="Production paused since ${esc(usDate(since))}">${PAUSE_ICON}Paused</span>` : "";
+}
+
 /** A revision score out of 10 as a colour: red at 5 or below, green at 8 and up. */
 export const revColour = (n: number) => (n >= 8 ? "#3CCB84" : n > 5 ? "#E8C547" : "#E5534B");
 export const fmtScore = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -2838,12 +2925,16 @@ export function renderList(
   subtitle: string,
   list: StoredRecord[],
   sort?: SortState,
+  /** Beside the title: a channel page's Pause channel button. */
+  headerExtra = "",
+  /** Above the list: a paused channel says so. */
+  lead = "",
 ): string {
   const shown = sort ? sortRecords(list, sort.key, sort.dir) : list;
   return layout(
     title,
     shell,
-    `${pageHeader(title)}${list.length > 1 ? sortBar(sort) : ""}${rows(shown, subtitle)}`,
+    `${pageHeader(title, headerExtra)}${lead}${list.length > 1 ? sortBar(sort) : ""}${rows(shown, subtitle)}`,
   );
 }
 
@@ -4020,7 +4111,7 @@ function dailyView(
       const t = typical.get(name);
       const met = d && d.today >= d.perDay;
       return `<tr>
-        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</a></td>
+        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${channelColour(name)}"></span>${esc(name)}</a>${pausedMark(name)}</td>
         <td>${ok && d ? `<span class="pace ${met ? "ok" : d.today ? "due" : "late"}">${met ? "✓" : d.today ? "◷" : "!"} ${d.today} of ${d.perDay}</span>` : "—"}</td>
         <td class="num">${d ? d.streak : "—"}</td>
         <td class="num">${d?.avg7 != null ? d.avg7.toFixed(1) : "—"}</td>
@@ -4577,6 +4668,15 @@ function channelLabPanel(f: ChannelFocus): string {
  * wait since the last one running up to today and on to when the next is due
  * — then the same thing as a table, the latest uploads, and the links.
  */
+/**
+ * The paused channels while an Uploads page renders — its tables are drawn by
+ * helpers that don't take the shell. A paused channel stays on every chart;
+ * it just says so.
+ */
+let uploadsPaused: Record<string, string> = {};
+const pausedMark = (name: string) =>
+  uploadsPaused[name] ? ` <span class="chpausetag" title="Production paused since ${esc(usDate(uploadsPaused[name]!))}">Paused</span>` : "";
+
 export function renderUploads(
   shell: Shell,
   data: {
@@ -4603,6 +4703,7 @@ export function renderUploads(
 ): string {
   const category: CategoryId = data.category ?? "stories";
   const focus = data.focus ?? null;
+  uploadsPaused = shell.pausedChannels ?? {};
   const target = UPLOAD_TARGETS[category];
   // Targets are per channel: Stories every four days, Specular one a day,
   // others none. A channel with no target still shows every gap, none "late".
@@ -4802,7 +4903,7 @@ export function renderUploads(
       const st = link?.youtubeId && c ? PACE[c.state] : PACE.none;
       const ch = channelColour(name);
       return `<tr>
-        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</a></td>
+        <td><a class="chlink" href="${chanHref(name)}"><span class="cdot" style="--ch:${ch}"></span>${esc(name)}</a>${pausedMark(name)}</td>
         <td>${everyOf(name) !== null ? `<span class="pace ${st.cls}">${st.icon} ${esc(st.label)}${c?.state === "behind" ? ` · ${c.behindBy}d` : ""}</span>` : c?.daysSince != null ? `${c.daysSince}d ago` : "—"}</td>
         <td>${c?.lastDay ? `${esc(usDate(c.lastDay))} <small>${esc(relativeDay(c.lastDay))}</small>` : "—"}</td>
         <td>${c?.nextDue ? `${esc(usDate(c.nextDue))} <small>${esc(relativeDay(c.nextDue))}</small>` : "—"}</td>
@@ -4903,17 +5004,17 @@ export function renderUploads(
   const header = focus
     ? `${pageHeader(
         focus.channel,
-        `<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><input type="hidden" name="_ch" value="${esc(focus.channel)}"><button class="clear secondary">Read YouTube now</button></form>`,
+        `${channelPauseButton(shell, focus.channel)}<form method="post" action="/uploads/check" class="checknow"><input type="hidden" name="_cat" value="${category}"><input type="hidden" name="_ch" value="${esc(focus.channel)}"><button class="clear secondary">Read YouTube now</button></form>`,
       )}
       <nav class="catswitch chswitch" aria-label="${esc(catLabel)} channels">
         <a class="back" href="/uploads?cat=${category}">← All ${esc(catLabel)}</a>
         ${CHANNELS.filter((c) => c.category === category)
           .map((c) => `<a class="${c.name === focus.channel ? "on" : ""}" style="--c:${c.color};--on:${
             contrastRatio("#0B0B0D", c.color) >= contrastRatio("#FFFFFF", c.color) ? "#0B0B0D" : "#FFFFFF"
-          }" href="${chanHref(c.name)}"${c.name === focus.channel ? ' aria-current="page"' : ""}><i class="round"></i>${esc(c.name.replace(/^Specular /, ""))}</a>`)
+          }" href="${chanHref(c.name)}"${c.name === focus.channel ? ' aria-current="page"' : ""}${shell.pausedChannels?.[c.name] ? ' title="Paused"' : ""}><i class="round"></i>${esc(c.name.replace(/^Specular /, ""))}${shell.pausedChannels?.[c.name] ? " ⏸" : ""}</a>`)
           .join("")}
       </nav>
-      <div class="usub"><span class="cdot" style="--ch:${channelColour(focus.channel)}"></span>${esc(catLabel)} · ${esc(
+      <div class="usub">${channelPausedTag(shell, focus.channel)}<span class="cdot" style="--ch:${channelColour(focus.channel)}"></span>${esc(catLabel)} · ${esc(
         everyOf(focus.channel) !== null ? everyText(everyOf(focus.channel)!) : target.kind === "daily" ? `${describeTarget(category)}` : "no target"
       )}${focusLink?.youtubeId ? ` · <a href="https://www.youtube.com/channel/${esc(focusLink.youtubeId)}" target="_blank" rel="noreferrer">${esc(focusLink.title ?? "on YouTube")} ↗</a>` : ""}${
         checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
@@ -5205,8 +5306,8 @@ function shiftDay(date: string, by: number): string {
 /** The Recurring page: today's batches per channel, and working ahead. */
 export function renderRecurring(
   shell: Shell,
-  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; date?: string }> },
-  ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number }> },
+  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; date?: string; paused?: boolean }> },
+  ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; paused?: boolean }> },
   list: StoredRecord[],
   strip: Array<{ date: string; channels: number; total: number; done: number }> = [],
   maxAhead = 90,
@@ -5214,9 +5315,17 @@ export function renderRecurring(
   const categoryOf = (channel: string) => CHANNELS.find((ch) => ch.name === channel)?.category ?? "bits";
 
   const line = (
-    r: { channel: string; total: number; done: number; removed?: number; date?: string },
+    r: { channel: string; total: number; done: number; removed?: number; date?: string; paused?: boolean },
     sectionDate?: string,
   ) => {
+    // A paused channel keeps its row, marked, with the way back.
+    if (r.paused) {
+      return `<div class="batch chpaused" style="--c:${colourOf(categoryOf(r.channel))};--ch:${channelColour(r.channel)}">
+      <a class="who" href="/channel/${encodeURIComponent(r.channel)}"><span class="dot"></span><span class="name">${esc(r.channel)}</span></a>
+      <span class="chpausetag">${PAUSE_ICON}Paused${shell.pausedChannels?.[r.channel] ? ` since ${esc(usDate(shell.pausedChannels[r.channel]!))}` : ""}</span>
+      ${channelPauseButton(shell, r.channel, "compact")}
+    </div>`;
+    }
     // A long-form channel's today can be a calendar day ahead of the Shorts
     // day (midnight to 3 AM), so its row carries its own date.
     const date = sectionDate ? r.date ?? sectionDate : undefined;
@@ -5277,8 +5386,8 @@ export function renderRecurring(
 
   // A channel is missing on a day when nothing of it is there — not even a
   // batch someone removed on purpose, which must stay removed.
-  const missing = ahead.rows.filter((r) => r.total === 0 && r.removed === 0).length;
-  const channelCount = ahead.rows.length;
+  const missing = ahead.rows.filter((r) => r.total === 0 && r.removed === 0 && !r.paused).length;
+  const channelCount = ahead.rows.filter((r) => !r.paused).length;
   // A day off has no batches.
   const offDays = new Set(shell.daysOff ?? []);
   const offNote = (date: string, rows_: unknown[]) =>
@@ -5312,13 +5421,15 @@ export function renderRecurring(
 
   // One labelled block per recurring category — Reading, then Bits — so a
   // dozen lines read as two short lists rather than one long one.
-  type Row_ = { channel: string; total: number; done: number; removed: number };
+  type Row_ = { channel: string; total: number; done: number; removed: number; paused?: boolean };
   const sections = (list_: Row_[], date: string) =>
     CATEGORIES.filter((cat) => list_.some((r) => categoryOf(r.channel) === cat.id))
       .map((cat) => {
         const mine = list_.filter((r) => categoryOf(r.channel) === cat.id);
-        const done = mine.reduce((n, r) => n + r.done, 0);
-        const total = mine.reduce((n, r) => n + r.total, 0);
+        // A paused channel keeps its row but not its count.
+        const live = mine.filter((r) => !r.paused);
+        const done = live.reduce((n, r) => n + r.done, 0);
+        const total = live.reduce((n, r) => n + r.total, 0);
         const longForm = mine.every((r) => isLongFormRecurring(CHANNELS.find((ch) => ch.name === r.channel)));
         const unit = longForm
           ? total === 1 ? "long-form video" : "long-form videos"
@@ -6054,10 +6165,18 @@ export function renderWhatsNew(shell: Shell, releases: Array<Release & { at: Dat
 }
 
 export function renderPaused(shell: Shell, list: StoredRecord[]): string {
+  const chans = Object.entries(shell.pausedChannels ?? {});
+  const chanPanel = chans.length
+    ? `<div class="panel pchans"><h2>Paused channels</h2>
+        <p class="hint" style="padding:0">Production is paused on these: their work is here with the rest, off every deadline, and no daily batches open. Resume one and its work comes back as it was.</p>
+        <div class="pchanlist">${chans
+          .map(([name, since]) => `<div class="pchan" style="--ch:${channelColour(name)}"><i></i><a href="/channel/${encodeURIComponent(name)}">${esc(name)}</a><span>since ${esc(usDate(since))}</span>${channelPauseButton(shell, name, "compact")}</div>`)
+          .join("")}</div></div>`
+    : "";
   return layout(
     "Paused",
     shell,
-    `${pageHeader("Paused")}
+    `${pageHeader("Paused")}${chanPanel}
     <p class="labsub">Paused videos have no deadline anywhere: they're off late, due today, the calendar, the
       dashboard columns, the bell and the reminders. Resume one (▶) and its deadline comes back as it was —
       if that date has passed, change it on its page.</p>

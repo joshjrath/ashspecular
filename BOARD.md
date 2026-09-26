@@ -38,6 +38,24 @@ as many as you like; the newest pin comes first. Press the tag to unpin.
   nudge, and goes to **Paused** at the foot of the sidebar. ▶ Resume there
   (or on its page) brings it back with its deadline as it was. Clearing a
   paused video un-pauses it.
+- **⏸ Pause channel** pauses production on a whole channel. The button is on
+  the channel's page (click its name anywhere), its Uploads page, its row on
+  the Recurring tab, and the Paused page.
+  - Every open video, revision and batch on the channel is paused the same
+    way: off every deadline, the calendar, the bell, the digest and the
+    nudges. Anything filed for the channel while it's paused is paused as it
+    arrives.
+  - A recurring channel opens no new daily batches. Its row on the Recurring
+    tab reads *Paused since …* with **Resume channel**, and it leaves that
+    day's count.
+  - It drops out of *Nothing assigned* and the behind count.
+  - Uploads still shows it (its charts, pace and videos), marked *Paused*.
+  - **Resume channel** brings back exactly what the channel pause paused,
+    with deadlines as they were; a video you paused on its own stays paused.
+    A recurring channel's batches reopen from today through the furthest day
+    already open.
+  - The sidebar's Paused link counts paused channels too, and the Paused
+    page lists them first.
 - **No script** (the page with the !) is for a VO that's needed while the
   script hasn't been sent. The whole card turns magenta, with a *No script ·
   waiting* tag, until you press it again (*Script arrived*). The video keeps

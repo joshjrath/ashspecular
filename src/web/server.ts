@@ -77,6 +77,7 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
+import { pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
 import { channelMarks, getReview, pastForChannel, revisionHistory, saveReview, scoresFor, setChannelMark, videoKey } from "../db/revisions.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../revisions/comments.js";
 import { summarize } from "../revisions/summarize.js";
@@ -95,9 +96,9 @@ import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts
 import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
-import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
+import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { DAY_SPAN, RAIL_ITEMS, SORTS, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, RAIL_ITEMS, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -139,7 +140,7 @@ function cookieList(name: string): string[] {
  * the counts can never disagree between one page and the next.
  */
 async function shell(active: string): Promise<Shell> {
-  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps] = await Promise.all([
+  const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps, chPaused] = await Promise.all([
     categoryCounts(),
     listReviews(200),
     openByCategory(),
@@ -151,11 +152,13 @@ async function shell(active: string): Promise<Shell> {
     pausedCount(),
     listDaysOff(),
     currentGaps().catch(() => []),
+    hasDatabase ? pausedChannels().catch(() => new Map<string, Date>()) : Promise.resolve(new Map<string, Date>()),
   ]);
   const queue = [...grouped.values()].reduce((n, list) => n + list.length, 0);
   return {
     active,
     gaps,
+    pausedChannels: Object.fromEntries([...chPaused].map(([c, at]) => [c, dateIn(ORG_TZ, at)])),
     counts,
     nav: {
       reviews: reviews.length,
@@ -175,8 +178,9 @@ async function shell(active: string): Promise<Shell> {
 
 /** How many linked Stories channels are past the four-day pace — for the rail. */
 async function behindCount(): Promise<number | null> {
-  const [links, latest] = await Promise.all([listChannelLinks(), latestUploads()]);
-  const linked = links.filter((l) => l.youtubeId);
+  const [links, latest, paused] = await Promise.all([listChannelLinks(), latestUploads(), pausedChannels().catch(() => new Map<string, Date>())]);
+  // A paused channel isn't behind: it isn't meant to be posting.
+  const linked = links.filter((l) => l.youtubeId && !paused.has(l.channel));
   if (!linked.length) return null;
   const today = dateIn(ORG_TZ);
   return linked.filter((l) => {
@@ -235,12 +239,14 @@ async function currentGaps(): Promise<UploadGap[]> {
   if (gapCache && Date.now() - gapCache.at < 60_000) return gapCache.gaps;
   const today = dateIn(ORG_TZ);
   const from = addDays(today, -45);
-  const [uploads, aired] = await Promise.all([
+  const [uploads, aired, paused] = await Promise.all([
     listUploads(new Date(`${from}T00:00:00Z`)).catch(() => []),
     channelAirDays(from).catch(() => []),
+    pausedChannels().catch(() => new Map<string, Date>()),
   ]);
+  // A paused channel isn't expected to post.
   const channels = CHANNELS.map((c) => ({ channel: c.name, every: everyFor(c.name) ?? 0 }))
-    .filter((c) => c.every > 1)
+    .filter((c) => c.every > 1 && !paused.has(c.channel))
     .map((c) => ({
       ...c,
       days: [
@@ -1128,13 +1134,35 @@ export async function startWeb(): Promise<void> {
     return reply.redirect(`/recurring?day=${show}`);
   });
 
+  // Pause production on a whole channel, or resume it.
+  app.post<{ Params: { action: string }; Body: { channel?: string } }>("/channels/:action", async (request, reply) => {
+    const channel = CHANNELS.find((c) => c.name === request.body?.channel)?.name;
+    const { action } = request.params;
+    if (hasDatabase && channel && (action === "pause" || action === "resume")) {
+      if (action === "pause") await pauseChannel(channel);
+      else {
+        await resumeChannel(channel);
+        await reopenChannel(channel);
+      }
+      gapCache = null;
+    }
+    return reply.redirect(backTo(request.headers.referer, channel ? `/channel/${encodeURIComponent(channel)}` : "/"));
+  });
+
   app.get<{ Params: { name: string } }>("/channel/:name", async (request, reply) => {
     const name = decodeURIComponent(request.params.name);
     const known = CHANNELS.find((c) => c.name === name);
     const [s, list] = await Promise.all([shell(known?.category ?? ""), listByChannel(name)]);
-    return reply
-      .type("text/html")
-      .send(renderList(s, name, `Nothing filed under ${name} yet.`, list, listSort(request, reply)));
+    const since = s.pausedChannels?.[name];
+    return reply.type("text/html").send(
+      renderList(
+        s, name, `Nothing filed under ${name} yet.`, list, listSort(request, reply),
+        known ? channelPauseButton(s, name) : "",
+        since
+          ? `<div class="pausedlead">${channelPausedTag(s, name)}Production on ${esc(name)} is paused since ${esc(usDate(since))}: its work is off every deadline, the calendar and the bell${known?.recurring ? ", and no daily batches open" : ""}.</div>`
+          : "",
+      ),
+    );
   });
 
   app.get<{ Params: { id: string } }>("/category/:id", async (request, reply) => {

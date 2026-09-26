@@ -54,7 +54,7 @@ import { cascadeText, planCascade } from "../src/web/cascade.js";
 import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels } from "../src/jobs/avatars.js";
 import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
-import { esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
+import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
@@ -1416,6 +1416,16 @@ const offRec = renderRecurring({ ...shellFix, daysOff: ["2026-09-28"] } as typeo
   [{ date: "2026-09-28", channels: 0, total: 0, done: 0 }, { date: "2026-09-29", channels: 0, total: 0, done: 0 }]);
 t("today, a day off says so instead of listing batches", offRec.includes("A day off — no batches."), true);
 t("…its day in the strip reads 'day off', and it can't be opened", [/daychip none dayoff[^>]*>[\s\S]*?day off<\/small>/.test(offRec), offRec.includes('value="2026-09-28"><button class="clear">Open this day')], [true, false]);
+
+section("Pause a whole channel");
+const pShell = { ...shellFix, pausedChannels: { "Specular Studios Bits": "2026-09-26" } } as typeof shellFix;
+t("a channel's button pauses it, or resumes it once paused", [channelPauseButton(shellFix, "Specular Studios Bits").includes('action="/channels/pause"'), channelPauseButton(pShell, "Specular Studios Bits").includes('action="/channels/resume"')], [true, true]);
+t("…pausing asks first; resuming doesn't", [channelPauseButton(shellFix, "Specular Studios Bits").includes("confirm("), channelPauseButton(pShell, "Specular Studios Bits").includes("confirm(")], [true, false]);
+const pRec = renderRecurring(pShell, { date: "2026-09-26", rows: [{ channel: "Specular Studios Bits", total: 5, done: 0, removed: 0, paused: true }, { channel: "Specular Anime Bits", total: 5, done: 2, removed: 0 }] },
+  { date: "2026-09-27", rows: [{ channel: "Specular Studios Bits", total: 0, done: 0, removed: 0, paused: true }, { channel: "Specular Anime Bits", total: 5, done: 0, removed: 0 }] }, []);
+t("a paused recurring channel shows as paused on the Recurring tab, with Resume", [pRec.includes('class="batch chpaused"'), pRec.includes("Paused since 9/26/2026"), pRec.includes('action="/channels/resume"')], [true, true, true]);
+t("…and leaves the day's count and the 'not open yet' count", [pRec.includes("2/5 uploads"), pRec.includes("Open the 1 channel")], [true, false]);
+t("the sidebar's Paused link counts paused channels too", renderList(pShell, "Queue", "", []).includes("Paused · 0 · 1 channel"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

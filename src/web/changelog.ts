@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-26-channel-pause-revision-rows",
+    title: "Pause a whole channel, and tidier revision cards",
+    changes: [
+      { text: "Pause production on a whole channel: its work comes off every deadline, the calendar and the bell, a recurring channel opens no new batches and shows as paused on the Recurring tab, and Uploads still shows it, marked Paused. Resume brings it all back.", href: "/paused" },
+      { text: "Revision cards: every tag is the same size, and the due pill and the four buttons sit on one line.", href: "/revisions" },
+    ],
+  },
+  {
     id: "2026-09-26-gaps-writenext-revisions",
     title: "Revisions scored out of 10, Write next per channel, and nothing-assigned warnings",
     changes: [

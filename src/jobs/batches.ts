@@ -52,12 +52,13 @@ export async function openBatchesFor(
   let opened = 0;
   let alreadyThere = 0;
   const off = await daysOff();
+  const paused = await pausedChannelNames();
 
   for (const channel of recurringChannels().filter(only)) {
     // With no date given, each channel opens its own today.
     const day = date ?? batchDay(channel);
-    // No batches on a day off: nobody's working it.
-    if (off.has(day)) continue;
+    // No batches on a day off (nobody's working it), nor for a paused channel.
+    if (off.has(day) || paused.has(channel.name)) continue;
     const perDay = channel.recurring?.perDay ?? 1;
     const dueAt = channel.recurring?.dueAt ?? DEADLINE_TIME;
     const deadline = instantIn(day, dueAt, ORG_TZ);
@@ -93,6 +94,30 @@ export async function openBatchesFor(
   }
 
   return { date: date ?? shortsDay(), opened, alreadyThere };
+}
+
+async function pausedChannelNames(): Promise<Set<string>> {
+  const { rows } = await pool.query<{ channel: string }>("SELECT channel FROM channel_pauses");
+  return new Set(rows.map((r) => r.channel));
+}
+
+/**
+ * A paused recurring channel resumed: its batches open again from its today
+ * through the furthest day already open for the others.
+ */
+export async function reopenChannel(name: string): Promise<number> {
+  const channel = recurringChannels().find((c) => c.name === name);
+  if (!channel) return 0;
+  const from = batchDay(channel);
+  const { rows } = await pool.query<{ last: string | null }>(
+    `SELECT to_char(MAX(air_date), 'YYYY-MM-DD') AS last FROM records WHERE batch_no IS NOT NULL`,
+  );
+  const last = rows[0]?.last && rows[0].last > from ? rows[0].last : from;
+  let opened = 0;
+  for (let d = from, n = 0; d <= last && n < MAX_AHEAD_DAYS; d = shiftDate(d, 1), n += 1) {
+    opened += (await openBatchesFor(d, (c) => c.name === name)).opened;
+  }
+  return opened;
 }
 
 async function daysOff(): Promise<Set<string>> {
@@ -182,8 +207,9 @@ export function tomorrow(): string {
  * so a reading channel reads 2/5 and a bits channel 0/1.
  */
 export async function batchStatus(date: string): Promise<
-  Array<{ channel: string; total: number; done: number; removed: number }>
+  Array<{ channel: string; total: number; done: number; removed: number; paused?: boolean }>
 > {
+  const paused = await pausedChannelNames();
   // A removed batch leaves the count entirely, so a channel whose only batch
   // was removed reads "removed" rather than waiting to be done.
   const { rows } = await pool.query<{ channel: string; total: string; done: string; removed: string }>(
@@ -205,6 +231,7 @@ export async function batchStatus(date: string): Promise<
       total: Number(row?.total ?? 0),
       done: Number(row?.done ?? 0),
       removed: Number(row?.removed ?? 0),
+      paused: paused.has(c.name),
     };
   });
 }
@@ -216,7 +243,7 @@ export async function batchStatus(date: string): Promise<
  */
 export async function todayStatus(at: Date = new Date()): Promise<{
   date: string;
-  rows: Array<{ channel: string; total: number; done: number; removed: number; date: string }>;
+  rows: Array<{ channel: string; total: number; done: number; removed: number; date: string; paused?: boolean }>;
 }> {
   const shorts = shortsDay(at);
   const calendar = dateIn(ORG_TZ, at);
