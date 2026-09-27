@@ -863,6 +863,7 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .revmini .rch i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
 .revmini .rframe { background: rgba(91,108,240,.28) !important; color: #D6DBFD !important; }
 .revmini .rframe:hover { background: #5B6CF0 !important; color: #fff !important; }
+.legend .revkey i { background: repeating-linear-gradient(45deg, #7D8AF5 0 3px, #B9C1FA 3px 5px) !important; }
 .revmini { container-type: inline-size; }
 .revmini .rfoot { display: flex; align-items: center; gap: 6px; }
 @container (max-width: 330px) { .revmini .rwhen .tm { display: none; } }
@@ -2594,6 +2595,12 @@ function wavePath(x0: number, x1: number, y: number, floor: number, lambda: numb
   return `${d} L${(x1 + half).toFixed(1)} ${floor.toFixed(1)} Z`;
 }
 
+/** Revisions' own colour, the blue-violet of their cards and tags. */
+const REVISION_COLOUR = "#7D8AF5";
+/** The chart's layers: every category, and revisions on their own. */
+const CHART_COLOURS: Record<string, string> = { ...COLOURS, revisions: REVISION_COLOUR };
+const CHART_LABELS: Record<string, string> = { ...LABELS, revisions: "Revisions" };
+
 function dueChart(buckets: DayBucket[]): string {
   const W = 780, H = 236;
   const PAD_T = 30;          // room for the total above the tallest bar
@@ -2604,7 +2611,10 @@ function dueChart(buckets: DayBucket[]): string {
   const r = barW / 2;
 
   const max = Math.max(3, ...buckets.map((b) => b.total));
-  const order = CATEGORIES.map((c) => c.id);
+  // The categories, Stories first, then revisions as their own layer on top.
+  const order = [...CATEGORIES.map((c) => c.id as string), "revisions"];
+  // Revisions wear a stripe over their colour, so they never read as Stories' blue.
+  const fill = (id: string) => (id === "revisions" ? "url(#revstripe)" : CHART_COLOURS[id] ?? "#8A8F98");
   const today = dateIn(ORG_TZ);
 
   const columns = buckets
@@ -2641,7 +2651,7 @@ function dueChart(buckets: DayBucket[]): string {
           y -= h;
           // A 2px seam of track shows between one layer and the one below.
           const floor = n === 0 ? base + 2 : y + h - 2;
-          const tip = `<title>${esc(`${LABELS[id]}: ${count}`)}</title>`;
+          const tip = `<title>${esc(`${CHART_LABELS[id] ?? id}: ${count}`)}</title>`;
           const top = n === layers.length - 1;
           if (top && !full) {
             // The surface: a wave twice the pill's width, slid sideways by
@@ -2649,15 +2659,15 @@ function dueChart(buckets: DayBucket[]): string {
             // A paler wave behind, half a wavelength out and drifting the
             // other way, gives the surface depth.
             return `<path class="wave back" d="${wavePath(x - barW * 1.5, x + barW * 2, y - 1.5, floor, barW)}"
-              fill="${COLOURS[id]}" opacity=".4"/>
+              fill="${fill(id)}" opacity=".4"/>
               <path class="wave" d="${wavePath(x - barW, x + barW * 2, y, floor, barW)}"
-              fill="${COLOURS[id]}">${tip}</path>`;
+              fill="${fill(id)}">${tip}</path>`;
           }
           // Full to the brim, the top layer runs past the rim and the clip
           // rounds it; below the surface, layers are flat.
           const yTop = top ? PAD_T - 2 : y;
           return `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW}"
-            height="${Math.max(1, floor - yTop).toFixed(1)}" fill="${COLOURS[id]}">${tip}</rect>`;
+            height="${Math.max(1, floor - yTop).toFixed(1)}" fill="${fill(id)}">${tip}</rect>`;
         })
         .join("");
 
@@ -2714,9 +2724,11 @@ function dueChart(buckets: DayBucket[]): string {
   const ahead = buckets.reduce((n, b) => (b.date ? n + b.total : n), 0);
   const late = buckets.find((b) => b.date === null)?.total ?? 0;
 
-  const legend = CATEGORIES.map(
-    (c) => `<span style="--c:${c.color}"><i></i>${esc(c.label)}</span>`,
-  ).join("");
+  const legend = order
+    .map((id) => `<span${id === "revisions" ? ' class="revkey"' : ""} style="--c:${CHART_COLOURS[id] ?? "#8A8F98"}"><i></i>${esc(CHART_LABELS[id] ?? id)}</span>`)
+    .join("");
+  const defs = `<defs><pattern id="revstripe" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="${REVISION_COLOUR}"/><rect width="2.4" height="6" fill="#B9C1FA"/></pattern></defs>`;
 
   return `<div class="chart">
     <div class="chart-head">
@@ -2728,7 +2740,7 @@ function dueChart(buckets: DayBucket[]): string {
     </div>
     <div class="chartscroll">
       <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="--lambda:${barW}px"
-        aria-label="Work due by day, stacked by category. Press a day to open it.">${divider}${columns}</svg>
+        aria-label="Work due by day, stacked by category with revisions on top. Press a day to open it.">${defs}${divider}${columns}</svg>
     </div>
   </div>`;
 }
@@ -2853,12 +2865,14 @@ export function renderDashboard(
     .join("");
 
   const today = data.byDay[1];
-  const todayLines = CATEGORIES.map((c) => {
-    const n = today?.counts[c.id] ?? 0;
-    return `<div class="line" style="--c:${c.color}">
+  const todayLines = [...CATEGORIES.map((c) => ({ id: c.id as string, label: c.label, color: c.color })), { id: "revisions", label: "Revisions", color: REVISION_COLOUR }]
+    .map((c) => {
+      const n = today?.counts[c.id] ?? 0;
+      return `<div class="line" style="--c:${c.color}">
       <span class="dot"></span>${esc(c.label)}<span class="n">${n}</span>
     </div>`;
-  }).join("");
+    })
+    .join("");
 
   // Categories side by side, in the order they were last arranged. Every
   // category is rendered; the ones not picked are hidden, so ticking one in

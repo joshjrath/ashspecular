@@ -1469,6 +1469,18 @@ const colDash = renderDashboard({ ...shellFix, active: "dashboard" }, { stats: {
 t("revisions sit in the top row, between the chart and today", /class="split withrev"[\s\S]*?Work due by day[\s\S]*?class="panel revpanel dashpart"[\s\S]*?class="panel today"/.test(colDash), true);
 t("…each card the same shape: title, chips, then the time and the buttons", (colDash.match(/<article class="revmini[^"]*">\s*<a class="rt"[\s\S]*?<div class="rchips">[\s\S]*?<div class="rfoot"><span class="rwhen/g) ?? []).length, 2);
 
+section("Work due by day counts revisions as their own layer");
+const rtoday = shiftDate(dateIn("America/New_York"), 0);
+const chartDash = renderDashboard({ ...shellFix, active: "dashboard" }, {
+  stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never,
+  byDay: [{ date: null, counts: { revisions: 1 }, total: 1 }, { date: rtoday, counts: { stories: 2, revisions: 3 }, total: 5 }],
+  grouped: new Map(), channels: {},
+});
+t("each pill has a revisions layer, in the revisions colour", [chartDash.includes("<title>Revisions: 3</title>"), chartDash.includes("<title>Revisions: 1</title>"), chartDash.includes('fill="url(#revstripe)"')], [true, true, true]);
+t("…stacked on top of the categories", chartDash.indexOf("<title>Stories: 2</title>") < chartDash.indexOf("<title>Revisions: 3</title>"), true);
+t("…in the legend, after the categories", /Movies<\/span><span class="revkey" style="--c:#7D8AF5"><i><\/i>Revisions<\/span>/.test(chartDash), true);
+t("…and today's panel counts them", /Revisions<span class="n">3<\/span>/.test(chartDash), true);
+
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
 );

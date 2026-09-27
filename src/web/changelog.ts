@@ -23,6 +23,7 @@ export const RELEASES: Release[] = [
     title: "Revisions in their own column; daily batches are never late",
     changes: [
       { text: "Revisions now sit in a column between Work due by day and today's panel, every card the same shape whatever its title.", href: "/" },
+      { text: "Work due by day counts revisions as their own striped layer in each pill, and today's panel has a Revisions line.", href: "/" },
       { text: "Daily batches can't be late any more: a day gone by leaves the open work and every late count, and the Recurring tab keeps its record.", href: "/recurring" },
     ],
   },

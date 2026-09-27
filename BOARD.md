@@ -171,7 +171,10 @@ as empty rather than as missing. Overdue work collects in its own pink column
 at the left, behind a dashed rule; today's column is yellow, matching the tile
 above it. Each bar carries its own count, so there is no y-axis to read a
 number off. Where a day holds more than one category the bar is one pill with
-2px gaps between them.
+2px gaps between them. **Revisions** are their own layer at the top of each
+pill, striped blue-violet so they never read as Stories. They're counted on
+the day they're due for review (or in the late column), not under their
+channel's category, and today's panel has a Revisions line too.
 
 Each pill fills like a glass: the work is liquid poured in from the bottom,
 always the pill's own rounded shape, rising into place when the page loads. A

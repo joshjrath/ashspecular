@@ -631,7 +631,8 @@ export async function dueByDay(zone: string, days = 14): Promise<DayBucket[]> {
     `SELECT
        CASE WHEN ${DUE} < now() AND ${CAN_BE_LATE} THEN NULL
             ELSE to_char(${DUE} AT TIME ZONE $1, 'YYYY-MM-DD') END AS day,
-       category, COUNT(*) AS n
+       -- Revisions are their own layer, not their channel's category.
+       CASE WHEN kind = 'review' THEN 'revisions' ELSE category END AS category, COUNT(*) AS n
      FROM records
      WHERE status = 'open' AND ${LIVE} AND ${DUE} IS NOT NULL
        AND ${DUE} < (now() + ($2 || ' days')::interval)
