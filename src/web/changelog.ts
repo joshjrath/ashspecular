@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-27-tasks",
+    title: "Tasks: forward anything into #tasks and it's remembered here",
+    changes: [
+      { text: "Anything posted or forwarded into #tasks in Discord becomes a task. Its category, priority, person and due date are read from the message, and you can change any of them.", href: "/tasks" },
+      { text: "Categories: Payment, Response, Team, Production, Channel, Business, Priority, General. Priority (URGENT / HIGH / NORMAL / LOW) is separate, so a task can be Payment + Urgent.", href: "/tasks" },
+      { text: "Each task has Complete, Snooze and Open Discord, which goes to the original message for a forward. You can also add a task from the box on the page.", href: "/tasks" },
+      { text: "Tasks show up on My Day with estimates (Pay ~2 min, Respond ~5 min). Urgent ones sit in Today with your VOs, and each task can be timed.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-09-27-my-day-vo-queue-focus",
     title: "My Day, the VO Queue, Focus Mode and a forgotten-work detector",
     changes: [

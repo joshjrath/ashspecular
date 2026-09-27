@@ -6,12 +6,13 @@ import {
   type Message,
   type OmitPartialGroupDMChannel,
 } from "discord.js";
-import { client, isIntakeChannel } from "./client.js";
+import { client, isIntakeChannel, isTasksChannel } from "./client.js";
 import { classify, type ClassifyInput } from "../parse/classify.js";
 import { derive, type DerivedRecord } from "../parse/derive.js";
 import { cardRows, recordEmbed } from "./render.js";
 import { config, hasDatabase } from "../config.js";
 import { CHANNELS } from "../catalog.js";
+import { ORG_TZ } from "../parse/derive.js";
 
 type Msg = OmitPartialGroupDMChannel<Message<boolean>>;
 
@@ -44,7 +45,9 @@ export function registerIntake(): void {
 
 async function handle(message: Msg): Promise<void> {
   if (message.author.id === client.user?.id) return;
-  if (!isIntakeChannel(message.channelId)) return;
+  const channelName = message.channel && "name" in message.channel ? message.channel.name : null;
+  if (isTasksChannel(message.channelId, channelName)) return captureTask(message);
+  if (!isIntakeChannel(message.channelId, channelName)) return;
 
   const input = flatten(message);
   if (!input.content && !input.forwardedFrom && !input.attachments?.length) return;
@@ -100,6 +103,66 @@ async function handle(message: Msg): Promise<void> {
           : "Filed by rules — set the channel below if it needs one."
         : `\`${ms}ms${cost}${how}\`${link}`,
     allowedMentions: { repliedUser: false },
+  });
+}
+
+/**
+ * #tasks: whatever lands there is a to-do. Read it by rules (instant, free),
+ * store it, and say what was read in one line. The board does the remembering.
+ */
+async function captureTask(message: Msg): Promise<void> {
+  if (message.author.bot) return;
+  const input = flatten(message);
+  if (!input.content && !input.forwardedFrom && !input.attachments?.length) return;
+
+  const { parseTask, TASK_CATEGORY, PRIORITY } = await import("../tasks/parse.js");
+  // Mentions name who it's about — as the server knows them, not their @handle.
+  const mentions = [...message.mentions.members?.values() ?? []].map((m) => m.displayName)
+    .concat(message.mentions.members?.size ? [] : [...message.mentions.users.values()].map((u) => u.globalName ?? u.username))
+    .filter((n) => n && n !== client.user?.username);
+
+  let people: string[] = [];
+  if (hasDatabase) {
+    const { knownPeople } = await import("../db/tasks.js");
+    people = await knownPeople().catch(() => []);
+  }
+  const task = parseTask({
+    comment: [input.content, ...(input.attachments ?? [])].filter(Boolean).join("\n"),
+    forwarded: input.forwardedFrom,
+    mentions,
+    people,
+  });
+
+  // A forward keeps the original's address, so "Open Discord" goes to the real thread.
+  const ref = message.reference;
+  const sourceUrl =
+    ref?.messageId && ref.channelId && input.forwardedFrom
+      ? `https://discord.com/channels/${ref.guildId ?? "@me"}/${ref.channelId}/${ref.messageId}`
+      : null;
+
+  let saved: number | null = null;
+  if (hasDatabase) {
+    const { addTask } = await import("../db/tasks.js");
+    saved = await addTask({
+      ...task,
+      sourceUrl,
+      captureUrl: message.url,
+      sourceMessageId: message.id,
+      author: message.author.username,
+    });
+  }
+  await message.react(saved !== null || !hasDatabase ? "✅" : "⚠️").catch(() => {});
+
+  const cat = TASK_CATEGORY.get(task.category)!;
+  const pri = PRIORITY.get(task.priority)!;
+  const due = task.due
+    ? ` · due ${new Date(task.due).toLocaleString("en-US", { timeZone: ORG_TZ, month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+    : "";
+  const who = task.person ? ` · ${task.person}` : "";
+  const link = config.publicUrl ? ` · <${config.publicUrl}/tasks>` : "";
+  await message.reply({
+    content: `${pri.dot} **${task.title}** · ${cat.emoji} ${cat.label}${who}${due}${link}${hasDatabase ? "" : " · (not stored: no database)"}`,
+    allowedMentions: { repliedUser: false, parse: [] },
   });
 }
 

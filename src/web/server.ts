@@ -84,9 +84,11 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
-import { minutesByDay, minutesSpent, runningTimer, startTimer, stopTimer } from "../db/timers.js";
+import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent } from "../db/timers.js";
+import { addTask, deleteTask, editTask, getTask, knownPeople, listTasks, openTasks, setTaskStatus, snoozeTask, tasksDoneToday } from "../db/tasks.js";
+import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
 import {
-  dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, toItem, voQueue, whatNext,
+  dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, voQueue, whatNext,
   type WorkItem,
 } from "./work.js";
 import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
@@ -110,7 +112,7 @@ import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
-import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, type TimerState } from "./page.js";
+import { renderForgotten, renderMyDay, renderRecording, renderTasks, renderVoQueue, type TimerState } from "./page.js";
 import { DAY_SPAN, RAIL_ITEMS, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
@@ -173,29 +175,46 @@ async function refreshScriptIndex(): Promise<void> {
  * sidebar's counts.
  */
 async function loadWork(now = new Date()) {
-  const [open, done, running, revs, paused] = await Promise.all([
+  const [open, done, running, revs, paused, tasks, tasksDone] = await Promise.all([
     openWork(),
     doneToday(),
     runningTimer(),
     revisionKeys(),
     pausedChannels().catch(() => new Map<string, Date>()),
+    openTasks().catch(() => []),
+    tasksDoneToday(ORG_TZ).catch(() => []),
   ]);
-  const spent = await minutesSpent([...open, ...done].map((r) => r.id));
-  const items = open.map((r) => toItem(r, spent.get(r.id) ?? 0)).filter((i): i is WorkItem => i !== null);
-  const doneItems = done.map((r) => toItem(r, spent.get(r.id) ?? 0)).filter((i): i is WorkItem => i !== null);
+  const [spent, taskSpent] = await Promise.all([
+    minutesSpent([...open, ...done].map((r) => r.id)),
+    taskMinutesSpent([...tasks, ...tasksDone].map((t) => t.id)).catch(() => new Map<number, number>()),
+  ]);
+  // Tasks from #tasks sit alongside the production work, timed the same way.
+  const items = open
+    .map((r) => toItem(r, spent.get(r.id) ?? 0))
+    .filter((i): i is WorkItem => i !== null)
+    .concat(tasks.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)));
+  const doneItems = done
+    .map((r) => toItem(r, spent.get(r.id) ?? 0))
+    .filter((i): i is WorkItem => i !== null)
+    .concat(tasksDone.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)));
   const norm = (t: string) => t.toLowerCase().replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const forgotten = forgottenWork(open, now, {
     script: (r) => Boolean(scriptFor({ id: r.id, code: r.code, title: r.title })),
     revision: (r) => Boolean((r.code && revs.codes.has(r.code.toUpperCase())) || (r.title && revs.titles.has(norm(r.title)))),
   });
   let timer: TimerState | null = null;
-  if (running) {
+  if (running?.taskId) {
+    const t = tasks.find((x) => x.id === running.taskId) ?? (await getTask(running.taskId));
+    const item = t ? taskItem(t, now, 0) : null;
+    const before = (taskSpent.get(running.taskId) ?? 0) - (now.getTime() - running.startedAt.getTime()) / 60_000;
+    timer = { recordId: null, taskId: running.taskId, startedAt: running.startedAt, title: t?.title ?? "Task", est: item?.est ?? 0, spentBefore: Math.max(0, before) };
+  } else if (running) {
     const rec = running.recordId ? (open.find((r) => r.id === running.recordId) ?? (await getRecordById(running.recordId))) : null;
     const item = rec ? toItem(rec, 0) : null;
     const before = running.recordId ? (spent.get(running.recordId) ?? 0) - (now.getTime() - running.startedAt.getTime()) / 60_000 : 0;
     timer = { recordId: running.recordId, startedAt: running.startedAt, title: item?.title ?? rec?.title ?? "Work", est: item?.est ?? 0, spentBefore: Math.max(0, before) };
   }
-  return { open, items, doneItems, timer, forgotten, paused };
+  return { open, items, doneItems, timer, forgotten, paused, tasks };
 }
 
 async function shell(active: string): Promise<Shell> {
@@ -229,6 +248,8 @@ async function shell(active: string): Promise<Shell> {
       behind,
       vo: work ? work.items.filter((i) => i.type === "vo").length : undefined,
       forgotten: work ? work.forgotten.length + gaps.length : undefined,
+      tasks: work ? work.tasks.length : undefined,
+      tasksUrgent: work ? work.tasks.filter((t) => t.priority === "urgent" || (t.due && t.due.getTime() < Date.now())).length : undefined,
     },
     lastIntake: at,
     removed,
@@ -1293,9 +1314,9 @@ export async function startWeb(): Promise<void> {
     );
   });
 
-  app.post<{ Body: { id?: string; back?: string } }>("/timer/start", async (request, reply) => {
+  app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/start", async (request, reply) => {
     const id = Number(request.body?.id);
-    if (hasDatabase && id) await startTimer(id);
+    if (hasDatabase && id) await (request.body?.kind === "task" ? startTaskTimer(id) : startTimer(id));
     return reply.redirect(safeBack(request.body?.back, "/my-day"));
   });
   app.post<{ Body: { back?: string } }>("/timer/stop", async (request, reply) => {
@@ -1303,9 +1324,12 @@ export async function startWeb(): Promise<void> {
     return reply.redirect(safeBack(request.body?.back, "/my-day"));
   });
   // Done: the timer stops and the work is cleared.
-  app.post<{ Body: { id?: string; back?: string } }>("/timer/done", async (request, reply) => {
+  app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/done", async (request, reply) => {
     const id = Number(request.body?.id);
-    if (hasDatabase && id) {
+    if (hasDatabase && id && request.body?.kind === "task") {
+      // Clearing a task stops its timer too.
+      await setTaskStatus(id, true);
+    } else if (hasDatabase && id) {
       const running = await runningTimer();
       if (running?.recordId === id) await stopTimer();
       await setStatus(id, "done");
@@ -1347,6 +1371,74 @@ export async function startWeb(): Promise<void> {
     }
     const skip = (request.body?.skip ?? "").replace(/[^0-9,]/g, "");
     return reply.redirect(`/vo/record${skip ? `?skip=${skip}` : ""}`);
+  });
+
+  // ── Tasks: anything forwarded into #tasks, or added here ───────────────
+  const taskFields = (b: Record<string, string | undefined>) => {
+    const category = (TASK_CATEGORY.has(b.category ?? "") ? b.category : "general") as TaskCategory;
+    const priority = (PRIORITY.has(b.priority ?? "") ? b.priority : "normal") as Priority;
+    // The form's date and time are the studio's wall clock.
+    const day = (b.due_date ?? "").trim();
+    const due = /^\d{4}-\d{2}-\d{2}$/.test(day) ? instantIn(day, /^\d{2}:\d{2}$/.test(b.due_time ?? "") ? b.due_time! : DEADLINE_TIME, ORG_TZ) : null;
+    const est = Number(b.est);
+    return {
+      title: (b.title ?? "").trim().slice(0, 200) || "Task",
+      category,
+      priority,
+      person: (b.person ?? "").trim().slice(0, 60) || null,
+      due,
+      estMin: Number.isFinite(est) && est > 0 ? Math.min(600, Math.round(est)) : null,
+    };
+  };
+  const taskBack = (b: unknown) => safeBack(b, "/tasks");
+
+  app.get("/tasks", async (_request, reply) => {
+    const now = new Date();
+    const [s, lists, work] = await Promise.all([shell("tasks"), hasDatabase ? listTasks() : Promise.resolve({ todo: [], snoozed: [], done: [] }), loadWork(now)]);
+    return reply.type("text/html").send(renderTasks(s, { now, ...lists, running: work.timer }));
+  });
+  // Quick add: one line, read the same way as a message in #tasks.
+  app.post<{ Body: { text?: string } }>("/tasks", async (request, reply) => {
+    const text = (request.body?.text ?? "").trim();
+    if (hasDatabase && text) {
+      const t = parseTask({ comment: text, people: await knownPeople().catch(() => []) });
+      await addTask({ ...t, sourceUrl: null, captureUrl: null, sourceMessageId: null, author: "board" });
+    }
+    return reply.redirect("/tasks");
+  });
+  app.post<{ Params: { id: string; action: string }; Body: Record<string, string | undefined> }>("/tasks/:id/:action", async (request, reply) => {
+    const id = Number(request.params.id);
+    const b = request.body ?? {};
+    if (!hasDatabase || !id) return reply.redirect("/tasks");
+    switch (request.params.action) {
+      case "done":
+        await setTaskStatus(id, true);
+        break;
+      case "reopen":
+        await setTaskStatus(id, false);
+        break;
+      case "snooze": {
+        // 1h, this evening, tomorrow morning, next week — or back now.
+        const now = new Date();
+        const today = dateIn(ORG_TZ, now);
+        const at = (day: string, hhmm: string) => instantIn(day, hhmm, ORG_TZ);
+        const until =
+          b.for === "1h" ? new Date(now.getTime() + 3_600_000)
+          : b.for === "3h" ? new Date(now.getTime() + 3 * 3_600_000)
+          : b.for === "tomorrow" ? at(shiftDate(today, 1), "09:00")
+          : b.for === "week" ? at(shiftDate(today, 7), "09:00")
+          : null;
+        await snoozeTask(id, until);
+        break;
+      }
+      case "edit":
+        await editTask(id, taskFields(b));
+        break;
+      case "delete":
+        await deleteTask(id);
+        break;
+    }
+    return reply.redirect(taskBack(b.back));
   });
 
   app.get("/forgotten", async (_request, reply) => {

@@ -32,10 +32,12 @@ import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
 import {
-  ESTIMATE_MIN, TYPE_BY_ID, VO_WPM, WORK_TYPES, readMinutes, remaining, whyNow,
+  ESTIMATE_MIN, TYPE_BY_ID, VO_WPM, WORK_TYPES, itemKey, readMinutes, remaining, whyNow,
   type DayLoad, type FocusPick, type Forgotten, type WorkItem,
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
+import { PRIORITIES, PRIORITY, TASK_CATEGORIES, TASK_CATEGORY } from "../tasks/parse.js";
+import type { Task } from "../db/tasks.js";
 import type { RevisionReview } from "../db/revisions.js";
 import { severityOf, themeLabel } from "../revisions/score.js";
 import type { ChannelHistory, HistorySort } from "../revisions/history.js";
@@ -2012,6 +2014,60 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .split.withrev > .revpanel { grid-column: auto; grid-row: auto; max-height: none; }
   .split.withrev > .revpanel .revlist { display: flex; }
 }
+/* ── Tasks ── */
+.tadd { display: flex; gap: 8px; margin: 0 0 6px; }
+.tadd input, .tedit input, .tedit select { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
+  background: var(--raised); color: var(--ink); font: inherit; font-size: 13.5px; color-scheme: dark; }
+.tadd input { flex: 1; padding: 11px 14px; border-radius: 12px; background: var(--sunk); font-size: 14px; }
+.tadd input:focus, .tedit input:focus, .tedit select:focus { outline: 0; border-color: var(--salmon); }
+.tedit input, .tedit select { width: 100%; background: var(--card); }
+.taddhint { font-size: 12px; color: var(--ink3); margin: 0 0 16px; }
+.tgroup { margin-bottom: 16px; }
+.tghead { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; color: var(--ink2); }
+.tghead .tpri { padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--pc) 20%, transparent); color: color-mix(in srgb, var(--pc) 55%, #fff); }
+.tghead span.n { color: var(--ink3); font-weight: 600; letter-spacing: 0; }
+.tlist { display: flex; flex-direction: column; gap: 6px; }
+.task { border-radius: 14px; background: var(--sunk); box-shadow: inset 3px 0 0 var(--pc); scroll-margin-top: 80px; }
+.task:target { box-shadow: inset 3px 0 0 var(--pc), 0 0 0 1.5px var(--yellow); }
+.task.on { background: rgba(86,201,144,.10); }
+.task .trow { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.task .tmain { flex: 1; min-width: 0; }
+.task .ttitle { font-family: var(--display); font-weight: 700; font-size: 14.5px; letter-spacing: -0.02em; color: var(--ink); }
+.task .ttitle .tcat { font-family: var(--ui); font-weight: 600; font-size: 12.5px; color: var(--ink2); letter-spacing: 0; white-space: nowrap; }
+.task .tmeta { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 3px; font-size: 12px; color: var(--ink3); }
+.task .tmeta .late { color: #FF8F86; font-weight: 700; }
+.task .tmeta .soon { color: var(--ink2); font-weight: 700; }
+.tacts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.tacts form { margin: 0; }
+.tacts .wbtn { text-decoration: none; }
+.tacts .wbtn svg { width: 14px; height: 14px; }
+.tmenu { position: relative; }
+.tmenu > summary { list-style: none; cursor: pointer; }
+.tmenu > summary::-webkit-details-marker { display: none; }
+.tmenu .tpop { position: absolute; right: 0; top: 38px; z-index: 20; display: flex; flex-direction: column; min-width: 150px; padding: 6px;
+  border-radius: 12px; background: var(--raised); box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 0 1px var(--line); }
+.tmenu .tpop form { margin: 0; }
+.tmenu .tpop button { width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.tmenu .tpop button:hover { background: var(--sunk); }
+.tmenu .tpop.tedit-pop { display: none; }
+.tmenu[open] > summary.wbtn { border-color: var(--yellow); color: var(--yellow); }
+.tedit { padding: 0 12px 12px; }
+.tedit form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.tedit label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--ink3); font-weight: 600; }
+.tedit label.wide { grid-column: span 3; }
+.tedit label.half { grid-column: span 2; }
+.tedit .tbtns { grid-column: 1 / -1; display: flex; gap: 8px; }
+.tedit .tbody { grid-column: 1 / -1; font-size: 12px; color: var(--ink3); white-space: pre-wrap; max-height: 140px; overflow: auto; background: var(--bg); border-radius: 10px; padding: 8px 10px; margin: 0; }
+.tfold { margin-top: 10px; }
+.tfold > summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--ink2); padding: 6px 0; }
+.task.done .ttitle { color: var(--ink3); text-decoration: line-through; text-decoration-color: var(--ink3); }
+@media (max-width: 760px) {
+  .task .trow { flex-wrap: wrap; gap: 8px; }
+  .task .tmain { flex-basis: 100%; }
+  .tacts { margin-left: auto; }
+  .tedit form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tedit label.wide, .tedit label.half { grid-column: 1 / -1; }
+}
 `;
 
 export interface Shell {
@@ -2022,7 +2078,7 @@ export interface Shell {
   /** Channels with production paused, and the day each was paused (YYYY-MM-DD). */
   pausedChannels?: Record<string, string>;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number; tasks?: number; tasksUrgent?: number };
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
@@ -2077,6 +2133,7 @@ function layout(title: string, shell: Shell | null, body: string): string {
 export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "Categories" | "Also" }> = [
   { key: "dashboard", label: "Dashboard", group: "Pages" },
   { key: "myday", label: "My Day", group: "Pages" },
+  { key: "tasks", label: "Tasks", group: "Pages" },
   { key: "vo", label: "VO Queue", group: "Pages" },
   { key: "forgotten", label: "Forgotten", group: "Pages" },
   { key: "calendar", label: "Calendar", group: "Pages" },
@@ -2129,6 +2186,13 @@ function sidebar(s: Shell): string {
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
       ${item("/my-day", "My Day", null, "myday")}
+      ${
+        off.has("tasks")
+          ? ""
+          : `<a class="${s.active === "tasks" ? "on" : ""}" href="/tasks">Tasks${
+              s.nav.tasksUrgent ? `<span class="sideflag" title="${s.nav.tasksUrgent} urgent or late">${s.nav.tasksUrgent}</span>` : ""
+            }${s.nav.tasks ? `<span class="n">${s.nav.tasks}</span>` : ""}</a>`
+      }
       ${item("/vo", "VO Queue", s.nav.vo ?? null, "vo")}
       ${
         off.has("forgotten")
@@ -6763,6 +6827,7 @@ export function fmtMin(m: number): string {
 
 export interface TimerState {
   recordId: number | null;
+  taskId?: number | null;
   startedAt: Date;
   title: string;
   est: number;
@@ -6778,7 +6843,7 @@ function timerBar(t: TimerState | null, back: string): string {
     <span class="tclock" data-start="${t.startedAt.getTime()}" data-before="${Math.round(t.spentBefore * 60)}">0:00</span>
     <span class="test">of ${esc(fmtMin(t.est))} est.</span>
     <form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="clear secondary">Stop</button></form>
-    ${t.recordId ? `<form method="post" action="/timer/done"><input type="hidden" name="id" value="${t.recordId}"><input type="hidden" name="back" value="${esc(back)}"><button class="clear">✓ Done</button></form>` : ""}
+    ${t.recordId || t.taskId ? `<form method="post" action="/timer/done"><input type="hidden" name="id" value="${t.taskId ?? t.recordId}">${t.taskId ? '<input type="hidden" name="kind" value="task">' : ""}<input type="hidden" name="back" value="${esc(back)}"><button class="clear">✓ Done</button></form>` : ""}
   </div>
   <script>
   (function () {
@@ -6796,18 +6861,29 @@ function timerBar(t: TimerState | null, back: string): string {
   </script>`;
 }
 
+/** The running timer's key, as itemKey gives it: "r12" for a record, "t5" for a task. */
+const runKey = (t: TimerState | null) => (t?.taskId ? `t${t.taskId}` : t?.recordId ? `r${t.recordId}` : null);
+
+/** Where a piece of work opens: its record, or its task on the Tasks page. */
+const workHref = (i: WorkItem) => (i.task ? `/tasks#t${i.id}` : i.id ? `/r/${i.id}` : "/recurring");
+
 /** A piece of work as a row: its kind, what it is, why now, estimate vs tracked, and start / done. */
-function workRow(i: WorkItem, now: Date, running: number | null, back: string, extra = ""): string {
+function workRow(i: WorkItem, now: Date, running: string | null, back: string, extra = ""): string {
   const t = TYPE_BY_ID.get(i.type)!;
   const pct = Math.min(100, Math.round((i.spent / i.est) * 100));
   const over = i.spent > i.est;
-  const why = whyNow(i, now);
+  const why = i.task && !i.due ? PRIORITY.get(i.task.priority)!.label.toLowerCase() : whyNow(i, now);
   const late = why.endsWith("late");
-  const on = i.id !== null && running === i.id;
+  const on = i.id !== null && running === itemKey(i);
+  const kind = i.task ? '<input type="hidden" name="kind" value="task">' : "";
+  if (i.task) {
+    const c = TASK_CATEGORY.get(i.task.category)!;
+    extra = `<span class="wtcat">${c.emoji} ${esc(c.label)}</span>${i.task.person ? `<span>${esc(i.task.person)}</span>` : ""}${extra}`;
+  }
   return `<div class="wrow${on ? " on" : ""}${late ? " late" : ""}" style="--wc:${t.colour}">
     <span class="wtype">${esc(t.short)}</span>
     <div class="wmain">
-      <a class="wt" href="${i.id ? `/r/${i.id}` : "/recurring"}">${esc(i.title)}</a>
+      <a class="wt" href="${workHref(i)}">${esc(i.title)}</a>
       <div class="wmeta">${i.channel && i.type !== "batch" && i.type !== "longform" ? `<span class="wch" style="--ch:${channelColour(i.channel)}"><i></i>${esc(i.channel.replace(/^Specular /, ""))}</span>` : ""}<span class="wwhy${late ? " late" : ""}">${esc(why)}</span>${extra}</div>
     </div>
     <div class="wtime" title="${esc(`${fmtMin(i.spent)} tracked of ${fmtMin(i.est)} estimated`)}">
@@ -6820,8 +6896,8 @@ function workRow(i: WorkItem, now: Date, running: number | null, back: string, e
         : `${
             on
               ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
-              : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
-          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
+              : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
+          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
     }</div>
   </div>`;
 }
@@ -6831,7 +6907,7 @@ function workRow(i: WorkItem, now: Date, running: number | null, back: string, e
  * 2h left"), opened to tick them one by one — a dozen 10-minute rows would
  * bury the VOs.
  */
-function groupBatches(items: WorkItem[], now: Date, running: number | null, back: string): string {
+function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string): string {
   const batches = items.filter((i) => i.type === "batch");
   const rest = items.filter((i) => i.type !== "batch");
   if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
@@ -6840,7 +6916,7 @@ function groupBatches(items: WorkItem[], now: Date, running: number | null, back
   const left = batches.reduce((n, i) => n + remaining(i), 0);
   const t = TYPE_BY_ID.get("batch")!;
   const pct = Math.min(100, Math.round((spent / est) * 100));
-  const group = `<details class="wgroup"${batches.some((i) => i.id === running) ? " open" : ""}>
+  const group = `<details class="wgroup"${batches.some((i) => itemKey(i) === running) ? " open" : ""}>
     <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
       <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${ESTIMATE_MIN.batch}m each</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
@@ -6894,7 +6970,7 @@ export interface MyDayData {
  * once today's is done.
  */
 export function renderMyDay(shell: Shell, d: MyDayData): string {
-  const running = d.running?.recordId ?? null;
+  const running = runKey(d.running);
   const back = "/my-day";
   const estToday = d.loads.find((l) => l.day === d.today);
   const leftToday = d.required.reduce((n, i) => n + remaining(i), 0);
@@ -6922,8 +6998,8 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
           ? `<p class="freason">${pick.ahead ? "Everything due is done, so this is from Do ahead. " : ""}${esc(pick.reason)} · <b>${esc(fmtMin(pick.minutes))}</b></p>
              <div class="wlist">${pick.items.map((i) => workRow(i, d.now, running, back)).join("")}</div>
              ${
-               pick.items[0]?.id && running !== pick.items[0].id
-                 ? `<form method="post" action="/timer/start" class="fstart"><input type="hidden" name="id" value="${pick.items[0].id}"><input type="hidden" name="back" value="${back}"><button class="clear">${PLAY_ICON} Start on it</button></form>`
+               pick.items[0]?.id && running !== itemKey(pick.items[0])
+                 ? `<form method="post" action="/timer/start" class="fstart"><input type="hidden" name="id" value="${pick.items[0].id}">${pick.items[0].task ? '<input type="hidden" name="kind" value="task">' : ""}<input type="hidden" name="back" value="${back}"><button class="clear">${PLAY_ICON} Start on it</button></form>`
                  : ""
              }`
           : `<p class="freason">Nothing to do. Everything open is done.</p>`
@@ -6932,7 +7008,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
 
   const max = Math.max(60, ...d.loads.map((l) => l.est));
   const week = `<section class="panel"><h2>The week ahead <span class="sub">— estimated minutes a day, by kind of work</span></h2>
-    <div class="llegend">${WORK_TYPES.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} · ${ESTIMATE_MIN[t.id]}m</span>`).join("")}</div>
+    <div class="llegend">${WORK_TYPES.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} · ${t.id === "task" ? "2–15m" : `${ESTIMATE_MIN[t.id]}m`}</span>`).join("")}</div>
     <div class="lrows">${d.loads.map((l) => loadBar(l, max, d.today, d.trackedToday)).join("")}</div>
   </section>`;
 
@@ -6953,7 +7029,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
           const t = TYPE_BY_ID.get(i.type)!;
           const diff = i.spent >= 1 ? Math.round(i.spent - i.est) : null;
           return `<div class="wrow done" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
-            <div class="wmain"><a class="wt" href="/r/${i.id}">${esc(i.title)}</a></div>
+            <div class="wmain"><a class="wt" href="${workHref(i)}">${esc(i.title)}</a></div>
             <div class="wnum">${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
               diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
             }</div></div>`;
@@ -6999,7 +7075,7 @@ export function renderVoQueue(shell: Shell, d: VoQueueData): string {
   ]
     .map((t) => `<div class="stat"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
     .join("");
-  const running = d.running?.recordId ?? null;
+  const running = runKey(d.running);
   const list = d.queue
     .map((i, n) => {
       const hit = i.id ? scriptFor({ id: i.id, code: i.code, title: i.title }) : null;
@@ -7127,4 +7203,155 @@ export function renderForgotten(shell: Shell, d: ForgottenData): string {
     <div class="stats">${tiles}</div>
     ${total ? `${gapsPanel}${sections}` : `<div class="empty">Nothing's slipping. Every upload is covered and nothing's overdue.</div>`}`,
   );
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────
+
+export interface TasksData {
+  now: Date;
+  todo: Task[];
+  snoozed: Task[];
+  done: Task[];
+  running: TimerState | null;
+}
+
+/** "9/28 3:00 PM" in the studio's zone. */
+function taskWhen(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: ORG_TZ, month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(d);
+}
+
+/** When a task is due, in words: late, today, or a date. */
+function taskDue(t: Task, now: Date): string {
+  if (!t.due) return "";
+  const h = (t.due.getTime() - now.getTime()) / 3_600_000;
+  const at = taskWhen(t.due);
+  if (h < 0) return `<span class="late">late · was due ${esc(at)}</span>`;
+  if (dateIn(ORG_TZ, t.due) === dateIn(ORG_TZ, now)) return `<span class="soon">due today ${esc(at.split(", ")[1] ?? at)}</span>`;
+  return `<span>due ${esc(at)}</span>`;
+}
+
+const SNOOZE_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="11" r="6"/><path d="M10 8v3l2 1.5M4 4.5 6 3M16 4.5 14 3"/></svg>`;
+
+const hidden = (name: string, value: string | number) => `<input type="hidden" name="${name}" value="${esc(String(value))}">`;
+
+/** One task: title · category, who and when, and Complete / Snooze / Open Discord / timer / Edit. */
+function taskRow(t: Task, now: Date, running: string | null): string {
+  const c = TASK_CATEGORY.get(t.category) ?? TASK_CATEGORY.get("general")!;
+  const p = PRIORITY.get(t.priority) ?? PRIORITY.get("normal")!;
+  const est = t.estMin ?? c.est;
+  const on = running === `t${t.id}`;
+  const back = hidden("back", `/tasks#t${t.id}`);
+  const discord = t.sourceUrl ?? t.captureUrl;
+  const post = (action: string, label: string, extra = "") => `<form method="post" action="/tasks/${t.id}/${action}">${extra}${hidden("back", "/tasks")}<button>${label}</button></form>`;
+  const localDay = t.due ? dateIn(ORG_TZ, t.due) : "";
+  const localTime = t.due ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due) : "";
+  const meta = [
+    t.person ? `<span>${esc(t.person)}</span>` : "",
+    taskDue(t, now),
+    `<span>~${esc(fmtMin(est))}</span>`,
+    t.snoozedUntil && t.snoozedUntil.getTime() > now.getTime() ? `<span>back ${esc(taskWhen(t.snoozedUntil))}</span>` : "",
+    t.status === "done" && t.doneAt ? `<span>done ${esc(taskWhen(t.doneAt))}</span>` : "",
+  ].filter(Boolean).join("");
+
+  const acts =
+    t.status === "done"
+      ? `<form method="post" action="/tasks/${t.id}/reopen">${back}<button class="wbtn" title="Reopen">↺</button></form>
+         <form method="post" action="/tasks/${t.id}/delete">${hidden("back", "/tasks")}<button class="wbtn" title="Delete for good">×</button></form>`
+      : `${
+          on
+            ? `<form method="post" action="/timer/stop">${back}<button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
+            : `<form method="post" action="/timer/start">${hidden("id", t.id)}${hidden("kind", "task")}${back}<button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
+        }
+        ${discord ? `<a class="wbtn" href="${esc(discord)}" target="_blank" rel="noopener" title="Open in Discord">↗</a>` : ""}
+        <details class="tmenu"><summary class="wbtn" title="Snooze">${SNOOZE_ICON}</summary><div class="tpop">
+          ${post("snooze", "1 hour", hidden("for", "1h"))}${post("snooze", "3 hours", hidden("for", "3h"))}${post("snooze", "Tomorrow 9 AM", hidden("for", "tomorrow"))}${post("snooze", "Next week", hidden("for", "week"))}${
+            t.snoozedUntil ? post("snooze", "Back now", hidden("for", "now")) : ""
+          }
+        </div></details>
+        <form method="post" action="/tasks/${t.id}/done">${hidden("back", "/tasks")}<button class="wbtn ok" title="Complete">✓</button></form>`;
+
+  return `<div class="task${on ? " on" : ""}${t.status === "done" ? " done" : ""}" id="t${t.id}" style="--pc:${p.colour}">
+    <div class="trow">
+      <div class="tmain">
+        <div class="ttitle">${esc(t.title)} <span class="tcat">· ${c.emoji} ${esc(c.label)}</span></div>
+        <div class="tmeta">${meta}</div>
+      </div>
+      <div class="tacts">${acts}
+        <details class="tmenu"><summary class="wbtn" title="Edit">✎</summary><div class="tpop tedit-pop"></div></details>
+      </div>
+    </div>
+    <div class="tedit" data-for="${t.id}" hidden>
+      <form method="post" action="/tasks/${t.id}/edit">${back}
+        <label class="wide">Title<input name="title" value="${esc(t.title)}" required maxlength="200"></label>
+        <label class="half">Person<input name="person" value="${esc(t.person ?? "")}" maxlength="60"></label>
+        <label>Minutes<input name="est" type="number" min="1" max="600" value="${est}"></label>
+        <label class="half">Category<select name="category">${TASK_CATEGORIES.map((x) => `<option value="${x.id}"${x.id === t.category ? " selected" : ""}>${x.emoji} ${esc(x.label)}</option>`).join("")}</select></label>
+        <label>Priority<select name="priority">${PRIORITIES.map((x) => `<option value="${x.id}"${x.id === t.priority ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>
+        <label class="half">Due date<input name="due_date" type="date" value="${esc(localDay)}"></label>
+        <label>Time<input name="due_time" type="time" value="${esc(localTime)}"></label>
+        ${t.body && t.body.trim() !== t.title ? `<pre class="tbody">${esc(t.body)}</pre>` : ""}
+        <div class="tbtns"><button class="clear">Save</button>
+          <button class="clear secondary" formaction="/tasks/${t.id}/delete" formnovalidate>Delete</button></div>
+      </form>
+    </div>
+  </div>`;
+}
+
+/**
+ * Tasks: everything forwarded into #tasks, grouped by priority — Complete,
+ * Snooze, Open Discord, a timer, and every field editable. Snoozed ones come
+ * back on their own; done ones stay a while to reopen.
+ */
+export function renderTasks(shell: Shell, d: TasksData): string {
+  const running = d.running?.taskId ? `t${d.running.taskId}` : null;
+  const groups = PRIORITIES.map((p) => {
+    const list = d.todo.filter((t) => t.priority === p.id);
+    if (!list.length) return "";
+    return `<section class="tgroup"><div class="tghead" style="--pc:${p.colour}"><span class="tpri">${p.dot} ${esc(p.label)}</span><span class="n">${list.length}</span></div>
+      <div class="tlist">${list.map((t) => taskRow(t, d.now, running)).join("")}</div></section>`;
+  }).join("");
+  const minutes = d.todo.reduce((n, t) => n + (t.estMin ?? TASK_CATEGORY.get(t.category)?.est ?? 5), 0);
+  const body = `${pageHeader(`To do · ${d.todo.length}`, `<a class="clear secondary" href="/my-day">My Day</a>`)}
+    ${timerBar(d.running, "/tasks")}
+    <section class="panel">
+      <form class="tadd" method="post" action="/tasks">
+        <input name="text" placeholder="Add a task — e.g. Pay Divas by Friday, urgent" aria-label="New task" autocomplete="off" required maxlength="500">
+        <button class="clear">Add</button>
+      </form>
+      <p class="taddhint">Or forward anything into <b>#tasks</b> in Discord. Category, priority, person and due date are read from it — change any of them with ✎. ${
+        d.todo.length ? `About <b>${esc(fmtMin(minutes))}</b> of tasks open.` : ""
+      }</p>
+      ${groups || `<div class="empty">Nothing to do. Forward something into #tasks and it lands here.</div>`}
+      ${
+        d.snoozed.length
+          ? `<details class="tfold"><summary>Snoozed · ${d.snoozed.length}</summary><div class="tlist">${d.snoozed.map((t) => taskRow(t, d.now, running)).join("")}</div></details>`
+          : ""
+      }
+      ${
+        d.done.length
+          ? `<details class="tfold"><summary>Done · ${d.done.length}</summary><div class="tlist">${d.done.map((t) => taskRow(t, d.now, running)).join("")}</div></details>`
+          : ""
+      }
+    </section>
+    <script>
+    (function () {
+      // ✎ opens the task's edit form under it; the other menus close when one opens.
+      document.querySelectorAll(".tmenu").forEach(function (m) {
+        m.addEventListener("toggle", function () {
+          var pop = m.querySelector(".tedit-pop");
+          if (pop) {
+            var task = m.closest(".task"), form = task && task.querySelector(".tedit");
+            if (form) form.hidden = !m.open;
+            if (m.open) { var f = form && form.querySelector("input"); if (f) f.focus(); }
+            return;
+          }
+          if (m.open) document.querySelectorAll(".tmenu[open]").forEach(function (o) { if (o !== m && !o.querySelector(".tedit-pop")) o.open = false; });
+        });
+      });
+      document.addEventListener("click", function (e) {
+        document.querySelectorAll(".tmenu[open]").forEach(function (o) { if (!o.querySelector(".tedit-pop") && !o.contains(e.target)) o.open = false; });
+      });
+    })();
+    </script>`;
+  return layout("Tasks", shell, body);
 }

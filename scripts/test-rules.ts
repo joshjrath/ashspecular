@@ -60,6 +60,10 @@ import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
 import { ESTIMATE_MIN, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
+import { renderTasks } from "../src/web/page.js";
+import { taskItem, isRequired } from "../src/web/work.js";
+import { parseTask } from "../src/tasks/parse.js";
+import type { Task } from "../src/db/tasks.js";
 import { scriptFor, setScriptIndex } from "../src/web/scriptindex.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../src/revisions/comments.js";
@@ -1019,7 +1023,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 11 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 12 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -1656,6 +1660,35 @@ const flags = forgottenWork([lateVo, soonNoScript, soonWithCut, voClose, oldUnso
 t("flags: overdue VO, overdue revision, not started, VO close to air, unsorted — not what's paused", flags.map((f) => `${f.kind}:${f.record.id}`), ["overdue-vo:201", "not-started:210", "vo-close:212", "unsorted:213", "overdue-revision:214"]);
 const fPage = renderForgotten(shellFix, { gaps: channelGaps("Specular Anime", 4, ["2026-09-24"], wToday), flags });
 t("the Forgotten page: nothing assigned, then each kind with why", [fPage.includes("Nothing assigned"), fPage.includes("Overdue VOs"), fPage.includes("no script, no cut yet"), fPage.includes("Unsorted")], [true, true, true, true]);
+
+section("Tasks");
+const tkNow = new Date("2026-09-27T20:00:00Z"); // 4 PM ET, a Sunday
+const tk = (comment: string, forwarded?: string) => parseTask({ comment, forwarded, now: tkNow });
+t("Pay Divas: Payment, Divas", [tk("Pay Divas").category, tk("Pay Divas").person], ["payment", "Divas"]);
+t("Respond to Seb sponsorship thread: Response, Seb", [tk("Respond to Seb sponsorship thread").category, tk("Respond to Seb sponsorship thread").person], ["response", "Seb"]);
+t("Check editor revision thread: Production", tk("Check editor revision thread").category, "production");
+t("Follow up with Vyasa about X: Response, Vyasa", [tk("Follow up with Vyasa about X").category, tk("Follow up with Vyasa about X").person], ["response", "Vyasa"]);
+t("sponsor contract: Business; hiring: Team; monetization: Channel", [tk("Sign the sponsor contract").category, tk("Interview the new editor candidate").category, tk("Turn on monetization for the new channel").category], ["business", "team", "channel"]);
+t("priority is separate from category: Payment + Urgent", [tk("Pay Divas urgent").category, tk("Pay Divas urgent").priority], ["payment", "urgent"]);
+t("urgency and timing words leave the title", [tk("Pay Divas urgent").title, tk("Pay Divas by Friday, urgent").title, tk("Renew the LLC report whenever").title], ["Pay Divas", "Pay Divas", "Renew the LLC report"]);
+t("a date is read, and a near one raises the priority", [Boolean(tk("Pay Divas by Friday").due), tk("Respond to Seb today").priority, tk("Whenever you can, tidy the drive").priority], [true, "urgent", "low"]);
+t("urgent with nowhere else to go is the Priority category", tk("urgent: the thing with the thing").category, "priority");
+t("just 'urgent!!' on a forward: the title comes from the forward", [tk("urgent!!", "Copyright claim on the new upload").title, tk("urgent!!", "Copyright claim on the new upload").category], ["Copyright claim on the new upload", "channel"]);
+t("a known person is recognised", parseTask({ comment: "sort the invoice for divas", people: ["Divas"], now: tkNow }).person, "Divas");
+
+const mkTask = (o: Partial<Task>): Task => ({
+  id: 1, title: "T", body: "", category: "general", priority: "normal", person: null, due: null, estMin: null, status: "open",
+  snoozedUntil: null, sourceUrl: null, captureUrl: null, author: null, createdAt: tkNow, doneAt: null, ...o,
+});
+const payTask = mkTask({ id: 1, title: "Pay Divas", category: "payment", priority: "urgent", person: "Divas", sourceUrl: "https://discord.com/channels/1/2/3" });
+const replyTask = mkTask({ id: 2, title: "Respond to Seb", category: "response", priority: "high" });
+const lowTask = mkTask({ id: 3, title: "Tidy the drive", category: "general", priority: "low" });
+t("tasks as work: estimate from the category (Pay 2m, Respond 5m) or set by hand", [taskItem(payTask, tkNow).est, taskItem(replyTask, tkNow).est, taskItem(mkTask({ estMin: 25 }), tkNow).est], [2, 5, 25]);
+t("an urgent task counts toward today beside the VOs; others go ahead or stay on Tasks", [isRequired(taskItem(payTask, tkNow), "2026-09-27"), isRequired(taskItem(replyTask, tkNow), "2026-09-27"), doAhead([taskItem(replyTask, tkNow), taskItem(lowTask, tkNow)], tkNow).map((i) => i.id)], [true, false, [2]]);
+const tasksPage = renderTasks(shellFix, { now: tkNow, todo: [payTask, replyTask, lowTask], snoozed: [mkTask({ id: 4, title: "Later", snoozedUntil: new Date(tkNow.getTime() + 3_600_000) })], done: [mkTask({ id: 5, title: "Old", status: "done", doneAt: tkNow })], running: null });
+t("the Tasks page: To do · N, grouped by priority, category beside the title", [tasksPage.includes("To do · 3"), tasksPage.includes("URGENT"), tasksPage.includes("HIGH"), tasksPage.includes("LOW"), tasksPage.includes("· 💰 Payment")], [true, true, true, true, true]);
+t("…Complete, Snooze, Open Discord, a timer and Edit on each", [tasksPage.includes('action="/tasks/1/done"'), tasksPage.includes('action="/tasks/1/snooze"'), tasksPage.includes('href="https://discord.com/channels/1/2/3"'), tasksPage.includes('name="kind" value="task"'), tasksPage.includes('action="/tasks/1/edit"')], [true, true, true, true, true]);
+t("…snoozed and done folded away", [tasksPage.includes("Snoozed · 1"), tasksPage.includes("Done · 1"), tasksPage.includes('action="/tasks/5/reopen"')], [true, true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

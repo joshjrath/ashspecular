@@ -366,6 +366,41 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Tasks — forward it to #tasks and forget about it
+
+Anything posted or forwarded into a Discord channel called **#tasks** (or the
+channels in `TASKS_CHANNEL_IDS`) becomes a task on **/tasks**, not a
+production record. The production intake never reads that channel. The bot
+reacts ✅ and replies with one line saying what it read:
+`🔴 **Pay Divas** · 💰 Payment · Divas · <link>`.
+
+It's read by rules, so it's instant and costs nothing:
+
+| Field | How it's read |
+|---|---|
+| Title | Your own words if you wrote any, otherwise the forwarded message's first line. Urgency and timing words at the end ("urgent", "by Friday") are dropped. |
+| Category | 💰 Payment · 💬 Response · 👥 Team · 🎬 Production · 📺 Channel · 🤝 Business · ⚠️ Priority · 📌 General. The leading verb counts most ("Pay …", "Respond to …"). |
+| Priority | URGENT / HIGH / NORMAL / LOW, kept separate from the category ("urgent", "asap", "!!" → URGENT; "today", "important" → HIGH; "whenever", "no rush" → LOW). A due time within 12 hours makes it URGENT, and within 2 days makes it HIGH. URGENT with no other category goes under ⚠️ Priority. |
+| Person | An @mention, a name an earlier task used, or the name after "pay", "respond to", "follow up with", … |
+| Due | Any date or time in the message ("by Friday", "10/3 at 5pm"). |
+
+Every field can be changed with ✎. Each task has **Complete** (✓), **Snooze**
+(1 hour, 3 hours, tomorrow 9 AM, next week), **Open Discord** (↗, which goes
+to the original message for a forward) and a timer (▶). Snoozed and Done
+tasks are folded at the bottom, and a done task can be reopened. You can also
+add a task from the box at the top, and it's read the same way.
+
+On **My Day**, tasks are work like everything else. Each one's estimate comes
+from its category: Payment 2 min, Response 5, General 5, Team 10, Channel 10,
+Priority 10, Production 15, Business 15. You can set your own in ✎.
+- An URGENT task, or one due today or earlier, sits in Today alongside the
+  VOs and counts in What should I do next?
+- A HIGH task, or one with a later date, goes in Do ahead.
+- Anything else stays on the Tasks page.
+
+The sidebar shows how many tasks are open, with a red flag for urgent or
+late ones.
+
 ## My Day, the VO Queue, Focus and forgotten work — Ash's own work
 
 Everything that's Ash's to do, as time. Each piece has an estimate:
@@ -1007,6 +1042,9 @@ In the service you already have:
 5. **Variables → New Variable →** `PUBLIC_URL`, the domain from step 4 with
    `https://` in front. This is what makes each Discord reply link straight to
    its record.
+6. For Tasks, make a Discord channel named `#tasks`, or set
+   `TASKS_CHANNEL_IDS` to the channel's ID. The bot needs to be able to see
+   it.
 
 Redeploy. The log should say:
 

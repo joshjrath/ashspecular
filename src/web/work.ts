@@ -9,6 +9,7 @@
  *   Gaming video          45 min
  *   Revision review       15 min
  *   Specular long-form    45 min   (the daily long-form batch, like a Gaming video)
+ *   Task                  by its category (Pay 2, Respond 5, …) unless set by hand
  *
  * A day's load is the estimate of everything due that day, plus the daily
  * batches every recurring channel will open that day that aren't open yet.
@@ -18,11 +19,14 @@
 import { CATEGORIES, CHANNELS, isLongFormRecurring } from "../catalog.js";
 import { ORG_TZ, dateIn, shortsDay } from "../parse/derive.js";
 import type { StoredRecord } from "../db/records.js";
+import type { Task } from "../db/tasks.js";
+import { TASK_CATEGORY } from "../tasks/parse.js";
 import { addDays, daysBetween } from "./cadence.js";
 
-export type WorkType = "vo" | "gaming" | "batch" | "longform" | "revision";
+export type WorkType = "vo" | "gaming" | "batch" | "longform" | "revision" | "task";
 
-export const ESTIMATE_MIN: Record<WorkType, number> = { vo: 40, gaming: 45, batch: 10, longform: 45, revision: 15 };
+/** A task's estimate is its own; this is only the fallback. */
+export const ESTIMATE_MIN: Record<WorkType, number> = { vo: 40, gaming: 45, batch: 10, longform: 45, revision: 15, task: 5 };
 
 const catColour = (id: string) => CATEGORIES.find((c) => c.id === id)?.color ?? "#8A8F98";
 
@@ -33,6 +37,7 @@ export const WORK_TYPES: Array<{ id: WorkType; label: string; short: string; col
   { id: "batch", label: "Bits / Reading batch", short: "Batch", colour: catColour("bits") },
   { id: "longform", label: "Specular long-form", short: "Long-form", colour: catColour("movies") },
   { id: "revision", label: "Revision review", short: "Revision", colour: "#7D8AF5" },
+  { id: "task", label: "Task", short: "Task", colour: "#4FC4B0" },
 ];
 export const TYPE_BY_ID = new Map(WORK_TYPES.map((t) => [t.id, t]));
 
@@ -57,6 +62,38 @@ export interface WorkItem {
   wordCount: number | null;
   projected: boolean;
   record?: StoredRecord;
+  /** Set when the piece is a task from #tasks rather than a record. */
+  task?: Task;
+}
+
+/** A piece's key across records and tasks — "r12", "t5" — for the running timer. */
+export const itemKey = (i: WorkItem) => (i.id === null ? null : `${i.task ? "t" : "r"}${i.id}`);
+
+/**
+ * A task as work: its own estimate, else its category's (Pay 2 min, Respond
+ * 5, …). An urgent one counts toward today even without a date, so it sits
+ * beside the VOs; one with a date counts toward that day.
+ */
+export function taskItem(t: Task, now: Date, spent = 0): WorkItem {
+  const today = dateIn(ORG_TZ, now);
+  const cat = TASK_CATEGORY.get(t.category);
+  const dueDay = t.due ? dateIn(ORG_TZ, t.due) : null;
+  return {
+    id: t.id,
+    type: "task",
+    title: t.title,
+    channel: null,
+    category: t.category,
+    code: null,
+    due: t.due,
+    day: dueDay ?? (t.priority === "urgent" ? today : null),
+    airDate: null,
+    est: t.estMin ?? cat?.est ?? ESTIMATE_MIN.task,
+    spent,
+    wordCount: null,
+    projected: false,
+    task: t,
+  };
 }
 
 /** What kind of Ash's work a record is — or null when it isn't hers. */
@@ -152,7 +189,8 @@ export function dayLoads(items: WorkItem[], days: string[], today: string): DayL
 export function urgency(i: WorkItem, now: Date): number {
   const hours = i.due ? (i.due.getTime() - now.getTime()) / 3_600_000 : i.day ? daysBetween(dateIn(ORG_TZ, now), i.day) * 24 + 12 : 24 * 30;
   const base = hours < 0 ? 1000 + Math.min(-hours, 240) : 1000 - Math.min(hours, 999);
-  return base + (i.type === "vo" ? 6 : i.type === "revision" ? 3 : 0);
+  const pri = i.task ? { urgent: 8, high: 2, normal: -4, low: -10 }[i.task.priority] : 0;
+  return base + (i.type === "vo" ? 6 : i.type === "revision" ? 3 : 0) + pri;
 }
 
 /** Why a piece is where it is, in a few words. */
@@ -170,7 +208,7 @@ export function whyNow(i: WorkItem, now: Date): string {
   return "no deadline";
 }
 
-/** Required now: overdue, or due by the end of today (a batch on its day). */
+/** Required now: overdue, or due by the end of today (a batch on its day, an urgent task). */
 export function isRequired(i: WorkItem, today: string): boolean {
   return i.day !== null && i.day <= today;
 }
@@ -230,10 +268,12 @@ export function whatNext(items: WorkItem[], now: Date, budget: number | null): F
  */
 export function doAhead(items: WorkItem[], now: Date, limit = 12): WorkItem[] {
   const today = dateIn(ORG_TZ, now);
-  const unlock: Record<WorkType, number> = { vo: 0, revision: 1, gaming: 2, longform: 3, batch: 4 };
+  // A high task is quick and someone's waiting, so it goes right after the VOs;
+  // a task with no date and no hurry stays on the Tasks page.
+  const rank = (i: WorkItem) => (i.task ? (i.task.priority === "high" ? 0.5 : 5) : { vo: 0, revision: 1, gaming: 2, longform: 3, batch: 4, task: 5 }[i.type]);
   return items
-    .filter((i) => i.id !== null && remaining(i) > 0 && !isRequired(i, today) && i.day !== null)
-    .sort((a, b) => unlock[a.type] - unlock[b.type] || (a.day ?? "").localeCompare(b.day ?? "") || (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0))
+    .filter((i) => i.id !== null && remaining(i) > 0 && !isRequired(i, today) && (i.day !== null || i.task?.priority === "high"))
+    .sort((a, b) => rank(a) - rank(b) || (a.day ?? "9").localeCompare(b.day ?? "9") || (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0))
     .slice(0, limit);
 }
 
