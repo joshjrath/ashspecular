@@ -86,8 +86,9 @@ in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
 
 **Nothing assigned.** Every channel with a posting target (each Stories
-channel, one every four days) is expected to post again that many days after
-its last video, uploaded or scheduled. A channel already behind is expected
+channel, one every four days; each Gaming channel, its own usual gap) is
+expected to post again that many days after its last video, uploaded or
+scheduled. A channel already behind is expected
 today. When an expected day is within the next **8 days** (the VO's six-day
 buffer plus two to assign it) and no video is on it, you'll see it in four
 places:
@@ -230,6 +231,12 @@ page) sums up a cut's notes and scores it **out of 10**:
 
   Each card then shows its score (red at 5 or below, green at 8 and up).
 
+**Reviewed** (at the top of the History tab) lists every revision you've
+✓'d, newest first: its version, channel, when it was reviewed, and its score,
+or **★ Score it** when it was reviewed without a summary. A revision needs a
+score to be on its channel's timeline, so this is where an unscored one is
+kept; scoring it puts it on the timeline.
+
 **History** (the second tab on the Revisions page) is a timeline for each
 channel: every video's score in the order they came in (a video's latest
 version counts), through a red band (5 and below) and a green one (8 and
@@ -368,7 +375,7 @@ changes to suit it:
 |---|---|---|---|
 | **Stories** | long form only | one every 4 days per channel | timeline lanes, gaps red when over 4 days |
 | **Movies** | long form only | Specular one a day; Specular Sleep tracked | the same lanes, Specular's gaps red when over a day |
-| **Gaming** | long form only | none yet — tracked | the same lanes, no late gaps |
+| **Gaming** | long form only | each channel's own usual gap (the median over 90 days) | the same lanes, gaps red when over the channel's usual, and its [series](#gaming--series-and-each-channels-own-pace) |
 | **Bits, Reading** | **Shorts only** | each channel's daily number (the Recurring page's `units`) | a heatmap: a row per channel, a square per day, shaded by how much of that day's number went up |
 
 **Each channel on its own.** Click any channel's name — in the lanes, the
@@ -390,7 +397,9 @@ other channel in the category a click away along the top:
   and for a Stories channel, Story Lab's ideas that fit it — the worlds,
   heroes and formats it already does (a channel named for a world, like
   Specular FNAF, leans to it from the start), each saying why and opening
-  its blueprint, and none already public on any channel.
+  its blueprint, and none already public on any channel. For a Gaming
+  channel, the next episode of each of its series worth going on with, and
+  its Series panel.
 
 **Bits and Reading days run 3 AM to 3 AM Eastern.** A Short posted at
 1:30 AM counts toward the day before, and until 3 AM the Uploads heatmap and
@@ -406,7 +415,9 @@ on each tab.
 **Ideas.** Every tab has an Ideas panel built from that category's own
 numbers. Each video counts as how it did against its channel's usual, and
 titles are taken apart into a *format* (What If, Could … Survive, Ranked,
-Versus, How, Why, Explained…), *subjects* (the names in it — Gojo, Deadpool,
+Versus, How, Why, Explained…, and gaming's own: Series episode, 100 Days,
+Challenge, Hardcore / Survival, Speedrun, Manhunt, Build / Tycoon, Obby /
+Escape), *subjects* (the names in it — Gojo, Deadpool,
 FNAF) and the *day* it went up. The panel shows which formats, subjects,
 days and title lengths run above or below the usual, and by how much;
 suggests ideas — strong formats paired with strong subjects not done in 60
@@ -462,6 +473,57 @@ normal band shaded; hover a dot for the title and numbers), the **top and
 bottom** Shorts, each channel's **health** (this week's median against last
 week's, share beating its usual, tiers) and **posting slots** — how Shorts
 do by the three-hour Eastern window they went up in, best first.
+
+## Gaming — series, and each channel's own pace
+
+Gaming is episodic: Specular Minecraft and Specular Roblox run numbered
+series. The Gaming tab on **Uploads** (and each Gaming channel's own page)
+holds each channel to its own pace and reads every series from the titles.
+
+**Its own pace.** A Gaming channel has no set target, so it's held to its
+own usual gap between long-form uploads: the median over the last 90 days,
+once it has three gaps to go on (read again every ten minutes). A channel
+that usually posts every three days is late on the fourth, just as a
+Stories channel is late after four:
+
+- the lanes show a gap over it in red, with the next one due as the diamond
+- the table's status, streak and on-time share go by it
+- the rail's behind count includes it (the count now goes by each channel's
+  own target: Stories four days, Specular one, Gaming its usual)
+- **Nothing assigned** covers it, on the dashboard, the calendar and the bell
+
+A channel with too little history is tracked with no target until it has
+one. For a fixed target instead, set `gaming: { kind: "every", days: N }` in
+`src/web/targets.ts`.
+
+**Series.** Every title with an episode number — *Ep 3*, *Episode 3*,
+*Part 2*, *Day 5*, *#4* at the end of a name, *S2 E5* — belongs to a series,
+named by the rest of the title: "Minecraft Hardcore Ep 4: The Nether",
+"Episode 4 | Minecraft Hardcore" and "I Built a Castle (Minecraft Hardcore
+#3)" are all Minecraft Hardcore, in any word order. "I Survived 100 Days" is
+a count, not an episode, and "#1 Fan" isn't one either. The Series panel
+shows, for each series, live first:
+
+- its episodes (*Ep 1–12 · 12 up · every 3d*) and a bar for each against the
+  channel's usual at the same age: up above it, down below
+- its median episode against the channel's usual
+- **Growing** or **Fading** once four episodes are judged: the latest
+  episodes (up to three) against the ones before, 25% either way. A fading
+  series says so: *change it up, or wrap it up*
+- the next episode and when it's due at the series' own pace (amber today,
+  red once past)
+- **Resting** once nothing's come for twice its usual gap (two weeks at
+  least), with a nudge to bring it back if it did 1.2× the usual or better
+
+**What to make next** on each Gaming channel's page: the next episode of
+every running series that isn't fading or well below the channel's usual
+(0.7× or less), titled and ready ("Skyblock #8"),
+best first, then any resting series worth bringing back. Each says why:
+how its episodes do, whether it's growing, when it's due.
+
+The tiles count the series running, growing and fading, and how many of
+the uploads are episodes rather than one-offs. It's all in
+`src/web/gaming/series.ts`; no model or key.
 
 ## Story Lab — what to write next for Stories, and how to build it
 
@@ -578,6 +640,14 @@ What's on the page:
   third on every measure.
 - **The formats** and **What's been done** (heroes × worlds).
 
+**Unassigned videos** (near the top of Story Lab): every Stories upload
+with no script anywhere (attached, in Story Lab, or delivered on the Scripts
+tab), newest first, with a count. Click it to open the list; a channel picker
+narrows it, and sixty show until *Show all*. **Link a script** on any video
+takes its Google Doc link or the script pasted in, filed under the video's
+title (which is how the board finds a video's script). The video leaves the
+list, and the script counts in Story Lab like any other added one.
+
 **Adding scripts:** straight from the board, with no rebuild needed.
 
 - **On a video's page**, the **Script** box takes the script pasted in (with
@@ -625,7 +695,9 @@ many are behind.
 - **Latest uploads**, newest first.
 
 Counted in whole days in New York time. Shorts and live streams don't count:
-the board reads each channel's long-form-only upload list.
+the board reads each channel's long-form-only upload list. Gaming works the
+same way against each channel's own usual gap; see
+[Gaming](#gaming--series-and-each-channels-own-pace).
 
 **Setting it up.** Open *Channel links* at the bottom of the page and paste
 each Stories channel's YouTube link (its page, `youtube.com/@name`, is
@@ -754,8 +826,8 @@ The tick beside a channel clears its whole day in one press.
 **Every channel counts uploads.** A reading channel's day is five uploads; a
 bits channel's depends on the channel — Studios, Anime, FNAF, Animation,
 Gaming, Undertale and Pokemon Bits five, Specular & Kay Bits one. Each row
-is one segment per upload. Tap the third to mark three done; tap the last
-filled one again to step back one. When every segment is filled the channel is
+is one segment per upload. Tap the third to mark three done (the fifth marks
+all five); tap the last filled one again to step back one. When every segment is filled the channel is
 cleared and counts once toward "cleared this week"; stepping back reopens it.
 Each group header totals its uploads — "7/25", "12/27". Change a number with
 `units` on the channel in `src/catalog.ts`.

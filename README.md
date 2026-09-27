@@ -28,7 +28,7 @@ From the studio's master channel list, in its order.
 
 | Category | Channels |
 |---|---|
-| **Gaming** | Specular Minecraft, Specular Roblox |
+| **Gaming** | Specular Minecraft, Specular Roblox — each held to its own usual pace, its numbered series read from the titles |
 | **Stories** | Specular Studios, Anime, Comics, Animation, Law, Manga, FNAF, Force, Verse, Horror, YOU, Battles, Survives, Documentaries |
 | **Reading** | Specular DC, Torch, Action, Balls, Nove — ~25 uploads a day between them |
 | **Bits** | Specular Studios, Anime, FNAF, Animation, Gaming, Undertale Bits and Specular & Kay Bits — one numbered batch each, opened automatically every morning |

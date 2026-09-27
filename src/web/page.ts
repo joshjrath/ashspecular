@@ -16,7 +16,8 @@ import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
 import { compactViews, formatMultiple, type Performance } from "./performance.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor, isOwnPace } from "./targets.js";
+import type { NextUp, Series } from "./gaming/series.js";
 import type { DailyCadence } from "./cadence.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "./shorts-perf.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "./ideas.js";
@@ -860,6 +861,25 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 .revmini .rv { background: rgba(91,108,240,.24) !important; color: #C9CFFB !important; }
 .revmini .rv svg { width: 8px; height: 8px; }
 .revmini .rscore { background: color-mix(in srgb, var(--sc) 20%, transparent) !important; color: var(--sc) !important; font-weight: 800; }
+.revdone { margin-bottom: 14px; }
+.rdlist { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; max-height: 420px; overflow-y: auto; }
+.rdrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 180px 88px; gap: 10px; align-items: center; padding: 9px 6px; border-top: 1px solid #26262C; font-size: 13px; }
+.rdrow .rdt { font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rdrow .rdt:hover { text-decoration: underline; }
+.rdrow .rv, .rdrow .rch { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: var(--raised); color: var(--ink2); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.rdrow .rv svg { width: 11px; height: 11px; color: #8E9BF7; }
+.rdrow .rch i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); }
+.rdrow .rch.none { color: var(--ink3); }
+.rdrow .rdwhen { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.rdrow .rscore, .rdrow .rdscore { justify-self: end; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.rdrow .rscore { background: color-mix(in srgb, var(--sc) 20%, transparent); color: var(--sc); }
+.rdrow .rdscore { background: rgba(243,233,108,.12); color: var(--yellow); font-weight: 700; }
+.rdrow .rdscore:hover { background: rgba(243,233,108,.22); }
+@media (max-width: 760px) {
+  .rdrow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .rdrow .rdt { grid-column: 1 / 3; }
+  .rdrow .rv, .rdrow .rch { display: none; }
+}
 .revmini .rch i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
 .revmini .rframe { background: rgba(91,108,240,.28) !important; color: #D6DBFD !important; }
 .revmini .rframe:hover { background: #5B6CF0 !important; color: #fff !important; }
@@ -1410,6 +1430,35 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .chlab .isugg b { font-family: var(--display); font-size: 15px; letter-spacing: -0.02em; }
 .chlab .lf { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #B5BEF7; }
 .chlab .why { color: var(--ink3); font-size: 12px; line-height: 1.5; }
+.chlab .lf.ep { color: #8FE3B6; }
+.chlab .isugg .due { color: #F8C58F; } .chlab .isugg .due.late { color: #FF9C94; }
+.series { position: relative; margin-bottom: 14px; }
+.series .utiles { margin: 12px 0 14px; }
+.series .utile { background: var(--sunk); padding: 16px 18px; }
+.series .utile .n { font-size: 30px; }
+.slist { display: flex; flex-direction: column; }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 132px 64px 150px; gap: 14px; align-items: center;
+  padding: 11px 8px; border-top: 1px solid #26262C; font-size: 13px; }
+.srow.resting { opacity: 1; }
+.srow.resting .sn { color: var(--ink2); }
+.srow .sname { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.srow .sn { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .sch { color: var(--ink3); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.srow .sadv { color: var(--ink2); font-size: 12px; line-height: 1.45; }
+.srow .seps { color: var(--ink2); white-space: nowrap; }
+.srow .seps small { display: block; color: var(--ink3); font-size: 11.5px; }
+.srow .smed { font-family: var(--display); font-weight: 800; font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink2); }
+.srow .smed.up { color: #8FE3B6; } .srow .smed.down { color: #FF9C94; }
+.srow .snext { white-space: nowrap; font-size: 12.5px; }
+.srow .snext b { display: block; color: var(--ink); font-weight: 700; }
+.srow .snext small { color: var(--ink3); } .srow .snext small.late { color: #FF9C94; } .srow .snext small.soon { color: #F8C58F; }
+.strend { display: inline-flex; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--raised); color: var(--ink2); width: fit-content; }
+.strend.rising { background: rgba(86,201,144,.14); color: #8FE3B6; }
+.strend.fading { background: rgba(242,104,94,.14); color: #FF9C94; }
+.strend.resting { background: var(--raised); color: var(--ink3); }
+.spark { display: block; width: 132px; height: 32px; overflow: visible; }
+.spark .mid { stroke: #3A3A42; stroke-width: 1; }
+.spark rect { fill: #6E6E78; } .spark rect.up { fill: #8FE3B6; } .spark rect.down { fill: #FF7A70; } .spark rect.na { fill: #3A3A42; }
 @media (max-width: 760px) {
   .outliers .utiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .evrow { grid-template-columns: 50px minmax(0, 1fr) auto; row-gap: 2px; }
@@ -1418,6 +1467,10 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .evrow .evv { grid-column: 3; grid-row: 2; }
   .evrow .evm { grid-row: span 2; }
   .evrow .evtier { display: none; }
+  .srow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .srow .sname { grid-column: 1 / 3; }
+  .srow .spark { grid-row: 2; }
+  .srow .seps, .srow .smed { display: none; }
   .chswitch { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .chswitch a { flex: none; }
 }
@@ -1594,6 +1647,43 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .relchanges a { color: var(--nc); font-weight: 700; white-space: nowrap; }
 .scripterr { background: #3A1D1D; color: #FFB4B4; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
 .sform .or { font-size: 12px; color: var(--ink3); text-align: center; }
+.unassigned { margin-bottom: 14px; }
+.unassigned > summary { list-style: none; cursor: pointer; }
+.unassigned > summary::-webkit-details-marker { display: none; }
+.unassigned > summary h2 { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.unassigned > summary h2::before { content: "▸"; color: var(--ink3); font-size: 14px; transition: transform .15s; }
+.unassigned[open] > summary h2::before { transform: rotate(90deg); }
+.unassigned[open] > summary { margin-bottom: 12px; }
+.uacount { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--yellow); color: #101012; font-family: var(--ui); font-size: 12px; font-weight: 800; letter-spacing: 0; }
+.uabar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; color: var(--ink2); }
+.uabar select { margin-left: 6px; padding: 7px 10px; border-radius: 10px; background: var(--raised); color: var(--ink); border: 1px solid #2E2E35; font: inherit; }
+.uabar .hint-inline { color: var(--ink3); font-size: 12px; }
+.ualist { list-style: none; margin: 0; padding: 0; }
+.uarow { border-top: 1px solid #26262C; }
+.uarow[hidden] { display: none; }
+.uahead { display: grid; grid-template-columns: 12px minmax(0, 1fr) 110px 150px auto; gap: 10px; align-items: center; padding: 8px 4px; font-size: 13px; }
+.uahead .uat { font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uahead .uat:hover { text-decoration: underline; }
+.uahead .uach { color: var(--ink2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uahead .uad { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.ualink { justify-self: end; }
+.ualink > summary { list-style: none; display: inline-block; cursor: pointer; font-size: 12px; font-weight: 700; padding: 5px 12px;
+  border-radius: 999px; background: var(--raised); color: var(--ink); white-space: nowrap; }
+.ualink > summary:hover { background: var(--line); }
+.ualink[open] > summary { background: var(--salmon); color: #101012; }
+.ualink > summary::-webkit-details-marker { display: none; }
+.ualink[open] { grid-column: 1 / -1; justify-self: stretch; }
+.ualink[open] > summary { margin-bottom: 8px; }
+.uaform { padding: 0 0 6px; }
+.ualinked { background: #173226; color: #9FE8C2; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
+.uamore { margin-top: 10px; }
+@media (max-width: 760px) {
+  .uahead { grid-template-columns: 12px minmax(0, 1fr) auto; row-gap: 4px; }
+  .uahead .uach { display: none; }
+  .uahead .uad { grid-column: 2; grid-row: 2; }
+  .ualink { grid-column: 3; grid-row: 1 / 3; }
+}
 .shook { margin: 0; background: var(--sunk); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
 .idrafts { margin: 0; padding-left: 20px; font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.9; }
 .idrafts a:hover { text-decoration: underline; }
@@ -4583,6 +4673,9 @@ export interface ChannelFocus {
   all: Upload[];
   /** Stories only: Story Lab ideas ranked by how well they fit this channel, and why. */
   lab?: Array<{ idea: LabIdea; fit: string[] }>;
+  /** Gaming only: every series on the channel, and the next episode of each worth making. */
+  series?: Series[];
+  next?: NextUp[];
 }
 
 /** A channel's own Uploads page. */
@@ -4803,6 +4896,98 @@ function channelLabPanel(f: ChannelFocus): string {
   </div>`;
 }
 
+/** Gaming: what a channel could make next — the next episode of each series worth going on with. */
+function gamingNextPanel(f: ChannelFocus, now: Date): string {
+  const today = dayOf(now);
+  const items = (f.next ?? [])
+    .slice(0, 6)
+    .map((n) => {
+      const due = n.series.nextDue;
+      const dueCls = due && due < today ? "due late" : due && daysBetween(today, due) <= 1 ? "due" : "";
+      return `<li><a href="#series-${esc(n.series.key.replace(/\s+/g, "-"))}">
+        <b>${esc(n.title)}</b>
+        <span class="lf ep">${n.series.live ? `Next episode · ${n.series.episodes.length} up so far` : "Bring it back"}</span>
+        ${n.why.length ? `<span class="why">${n.why.map((w) => (dueCls && /^due/.test(w) ? `<span class="${dueCls}">${esc(w)}</span>` : esc(w))).join(" · ")}</span>` : ""}
+      </a></li>`;
+    })
+    .join("");
+  return `<div class="panel ideas chlab">
+    <h2>What ${esc(f.channel)} could make next <span class="sub">— the next episode of each series worth going on with, best first; a fading or weak one is left to the Series panel below</span></h2>
+    ${items ? `<ul class="isugg">${items}</ul>` : f.series?.some((s) => s.live) ? `<p class="hint">Nothing to go on with: every running series is fading or well below the channel's usual. See why in <a href="#series">Series</a> below.</p>` : `<p class="hint">No series running yet. A title with an episode number — Ep 3, Part 2, Day 5, #4 — starts one.</p>`}
+  </div>`;
+}
+
+/** A series' episodes as bars round the channel's usual: up is above it, down below. */
+function seriesSpark(s: Series): string {
+  const eps = s.episodes.slice(-20);
+  const W = 132, H = 32, mid = H / 2;
+  const step = W / Math.max(eps.length, 6);
+  const bars = eps
+    .map((e, i) => {
+      const x = (i * step + 1).toFixed(1);
+      const w = Math.max(2, step - 2).toFixed(1);
+      const tip = `${s.marker === "#" ? "#" : `${s.marker} `}${e.episode} · ${e.title} · ${usDate(dayOf(e.publishedAt))}${e.views !== null ? ` · ${e.views.toLocaleString()} views` : ""}${e.multiple !== null ? ` · ${formatMultiple(e.multiple)} usual` : " · not judged yet"}`;
+      if (e.multiple === null) return `<rect x="${x}" y="${mid - 1}" width="${w}" height="2" class="na" data-tip="${esc(tip)}"/>`;
+      const h = Math.max(1.5, (Math.min(2, Math.abs(Math.log2(e.multiple))) / 2) * (mid - 1));
+      const up = e.multiple >= 1;
+      return `<rect x="${x}" y="${(up ? mid - h : mid).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" class="${e.multiple >= 1.2 ? "up" : e.multiple <= 0.8 ? "down" : ""}" data-tip="${esc(tip)}"/>`;
+    })
+    .join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${s.name}: each episode against the channel's usual`)}"><line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="mid"/>${bars}</svg>`;
+}
+
+/**
+ * Gaming's series: every numbered series read from the titles, live first,
+ * with how its episodes are holding the audience and when the next is due.
+ */
+function seriesPanel(list: Series[], opts: { oneOffs: number; single: boolean }, now: Date): string {
+  const today = dayOf(now);
+  const live = list.filter((s) => s.live);
+  const fading = live.filter((s) => s.trend === "fading").length;
+  const growing = live.filter((s) => s.trend === "rising").length;
+  const episodes = list.reduce((n, s) => n + s.episodes.length, 0);
+  const tiles = [
+    { n: String(live.length), l: "series running", cls: "" },
+    { n: String(growing), l: "growing", cls: growing ? "t-ok" : "" },
+    { n: String(fading), l: "fading", cls: fading ? "t-late" : "" },
+    { n: episodes + opts.oneOffs ? `${Math.round((episodes / (episodes + opts.oneOffs)) * 100)}%` : "—", l: "of uploads are episodes", cls: "" },
+  ]
+    .map((t) => `<div class="utile ${t.cls}"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+  const rowsHtml = list
+    .map((s) => {
+      const first = s.episodes[0]!.episode;
+      const trend = !s.live
+        ? `<span class="strend resting">Resting</span>`
+        : s.trend
+          ? `<span class="strend ${s.trend}">${s.trend === "rising" ? "▲ Growing" : s.trend === "fading" ? "▼ Fading" : "Holding"}</span>`
+          : "";
+      const due = s.nextDue;
+      const dueNote = !s.live
+        ? `<small>last ${esc(usDate(s.lastDay))} · ${esc(relativeDay(s.lastDay))}</small>`
+        : due
+          ? `<small class="${due < today ? "late" : daysBetween(today, due) <= 1 ? "soon" : ""}">due ${esc(usDate(due))} · ${esc(relativeDay(due))}</small>`
+          : `<small>last ${esc(relativeDay(s.lastDay))}</small>`;
+      return `<div class="srow${s.live ? "" : " resting"}" id="series-${esc(s.key.replace(/\s+/g, "-"))}">
+        <div class="sname"><span class="sn" title="${esc(s.name)}">${esc(s.name)}</span>
+          ${opts.single ? "" : `<a class="sch chlink" href="${chanHref(s.channel)}"><span class="cdot" style="--ch:${channelColour(s.channel)}"></span>${esc(s.channel)}</a>`}
+          ${trend}<span class="sadv">${esc(s.advice)}</span></div>
+        <div class="seps">${first === s.latest ? `${esc(s.marker === "#" ? "#" : `${s.marker} `)}${s.latest}` : `${esc(s.marker === "#" ? "#" : `${s.marker} `)}${first}–${s.latest}`}<small>${s.episodes.length} up${s.gap ? ` · every ${s.gap === 1 ? "day" : `${s.gap}d`}` : ""}</small></div>
+        ${seriesSpark(s)}
+        <div class="smed ${s.median === null ? "" : s.median >= 1.2 ? "up" : s.median <= 0.8 ? "down" : ""}" title="The median episode against the channel's usual">${s.median === null ? "—" : esc(formatMultiple(s.median))}</div>
+        <div class="snext"><b>${esc(s.live ? `Next: ${s.draft.replace(s.name, "").trim()}` : s.draft.replace(s.name, "").trim() + " to bring it back")}</b>${dueNote}</div>
+      </div>`;
+    })
+    .join("");
+  return `<div class="panel ideas series" id="series">
+    <h2>Series <span class="sub">— every numbered series, read from the titles (Ep 3, Part 2, Day 5, #4): whether each is holding the audience its first episodes found, and when the next is due at its pace</span></h2>
+    <div class="utiles">${tiles}</div>
+    ${rowsHtml ? `<div class="slist">${rowsHtml}</div>` : `<p class="hint">No numbered series yet — ${opts.oneOffs} upload${opts.oneOffs === 1 ? "" : "s"}, all one-offs. A title with an episode number (Ep 3, Part 2, Day 5, #4) starts one.</p>`}
+    <p class="hint">Each bar is an episode against the channel's usual at the same age: up is above it, down below. A series is running while its latest episode is within twice its usual gap (two weeks at least); after that it's resting. <b>Growing</b> and <b>Fading</b> compare the latest episodes with the earlier ones, once four are judged.</p>
+    <div class="uptip" hidden></div>
+  </div>`;
+}
+
 /**
  * The Uploads tab: whether each Stories channel is keeping to one long-form
  * upload every four days. Tiles for the headline, a timeline lane per channel
@@ -4840,6 +5025,8 @@ export function renderUploads(
     hooks?: Map<string, string>;
     /** One channel on its own page: every upload it has, and Story Lab ideas that fit it. */
     focus?: ChannelFocus;
+    /** Gaming: every numbered series across the category, and how many uploads are one-offs. */
+    series?: { series: Series[]; oneOffs: number };
   },
   now = new Date(),
 ): string {
@@ -4857,6 +5044,8 @@ export function renderUploads(
   // One target shared by every channel reads as a heading; a mix doesn't.
   const uniform = everyValues.length === 1 && targeted.length === data.channels.length;
   const everyText = (d: number) => (d === 1 ? "one a day" : `every ${d} days`);
+  // Gaming is held to each channel's own usual gap, and says so.
+  const ownNote = targeted.some(isOwnPace) ? " — each channel's own usual pace" : "";
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "Stories";
   const q = (extra = "") => `/uploads?cat=${category}${extra}`;
@@ -5019,7 +5208,7 @@ export function renderUploads(
 
   const timeline = `<div class="panel uplanes">
     <div class="uphead">
-      <h2>${focus ? (hasTarget ? `${cap(everyText(every))} · every upload and the gaps between` : "Every upload and the gaps between") : uniform ? `${cap(everyText(every))}, per channel` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}` : "Uploads per channel"}</h2>
+      <h2>${focus ? (hasTarget ? `${cap(everyText(every))} · every upload and the gaps between` : "Every upload and the gaps between") : uniform ? `${cap(everyText(every))}, per channel${ownNote}` : hasTarget ? `Uploads per channel · ${targeted.map((n) => `${n.replace(/^Specular /, "")} ${everyText(everyOf(n)!)}`).join(" · ")}${ownNote}` : "Uploads per channel"}</h2>
       <div class="ulegend" aria-label="Legend">
         <span><i class="lg-dot"></i>Upload</span>
         ${hasTarget ? `<span><i class="lg-ok"></i>✓ Gap on pace${uniform ? ` (≤${every}d)` : ""}</span>
@@ -5157,7 +5346,9 @@ export function renderUploads(
           .join("")}
       </nav>
       <div class="usub">${channelPausedTag(shell, focus.channel)}<span class="cdot" style="--ch:${channelColour(focus.channel)}"></span>${esc(catLabel)} · ${esc(
-        everyOf(focus.channel) !== null ? everyText(everyOf(focus.channel)!) : target.kind === "daily" ? `${describeTarget(category)}` : "no target"
+        everyOf(focus.channel) !== null
+          ? `${everyText(everyOf(focus.channel)!)}${isOwnPace(focus.channel) ? " — its own usual pace over 90 days" : ""}`
+          : target.kind === "daily" ? `${describeTarget(category)}` : isOwnPace(focus.channel) ? "no target yet — held to its own usual pace once it has four uploads in 90 days" : "no target"
       )}${focusLink?.youtubeId ? ` · <a href="https://www.youtube.com/channel/${esc(focusLink.youtubeId)}" target="_blank" rel="noreferrer">${esc(focusLink.title ?? "on YouTube")} ↗</a>` : ""}${
         checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
       }</div>`
@@ -5190,6 +5381,9 @@ export function renderUploads(
     ${focus && linked.length ? outlierPanel(focus, perf, data.shorts?.scores ?? null, typical.get(focus.channel) ?? null, now) : ""}
     ${focus && linked.length ? everyVideoPanel(focus, perf, data.shorts?.scores ?? null, now) : ""}
     ${focus?.lab ? channelLabPanel(focus) : ""}
+    ${focus?.next ? gamingNextPanel(focus, now) : ""}
+    ${focus?.series && linked.length ? seriesPanel(focus.series, { oneOffs: focus.all.length - focus.series.reduce((n, s) => n + s.episodes.length, 0), single: true }, now) : ""}
+    ${!focus && data.series && linked.length ? seriesPanel(data.series.series, { oneOffs: data.series.oneOffs, single: false }, now) : ""}
     ${category === "stories" && !focus ? `<a class="labcta" href="/story-lab"><b>Story Lab</b><span>What to write next, with a part-by-part blueprint for each — learned from the Stories scripts →</span></a>` : ""}
     ${data.ideas ? ideasPanel(category, data.ideas, data.idea ?? null, data.channels, data.ideaChannel ?? null, data.hooks) : ""}
     ${latest && !focus ? `<div class="panel"><h2>Latest uploads</h2><div class="ulatest-list">${latest}</div></div>` : ""}
@@ -5698,8 +5892,9 @@ export function renderRecurring(
         var path = new URL(form.action, location.href).pathname;
         if (path !== "/recurring/progress" && path !== "/recurring/clear") return;
         e.preventDefault();
-        fill(form);
+        // Read what was tapped before fill() turns the segment into "step back one".
         var body = new URLSearchParams(new FormData(form));
+        fill(form);
         busy = busy.then(function () {
           return fetch(form.action, { method: "POST", body: body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
         }).then(function (r) {
@@ -5737,6 +5932,14 @@ export interface StoryLabData {
   writeNext?: Array<{ channel: string; cards: Array<IdeaCard & { blueprint: Blueprint | null }>; saved: IdeaMark[]; skipped: number }>;
   /** The scripts added on the board, and how many came from the Drive. */
   library?: { scripts: StoredScript[]; drive: number; error: string };
+  /** Stories uploads with no script anywhere, newest first, to link one to. */
+  unassigned?: {
+    videos: Array<{ title: string; channel: string; url: string; publishedAt: Date; views: number | null }>;
+    total: number;
+    open: boolean;
+    linked: string;
+    error: string;
+  };
   /** 🎲 What was rolled, what was just added, and what's been added so far. */
   dice?: {
     rolled: DiceCard | null;
@@ -5847,6 +6050,69 @@ function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Sh
  * The scripts Story Lab learns from: the Drive's, plus every one added on the
  * board — a Stories video's own, or one added here on its own.
  */
+/**
+ * Unassigned videos: every Stories upload with no script anywhere, newest
+ * first — collapsed to one line until opened. Each can have its script linked
+ * right there (a Google Doc or pasted in), filed under the video's title, which
+ * is how the board finds a video's script; it then leaves this list.
+ */
+function unassignedPanel(u: NonNullable<StoryLabData["unassigned"]>): string {
+  const LIMIT = 60;
+  const channels = [...new Set(u.videos.map((v) => v.channel))].sort((a, b) => a.localeCompare(b));
+  const rowsHtml = u.videos
+    .map((v, i) => `<li class="uarow" data-ch="${esc(v.channel)}"${i >= LIMIT ? " hidden data-more" : ""}>
+      <div class="uahead">
+        <span class="cdot" style="--ch:${channelColour(v.channel)}"></span>
+        <a class="uat" href="${esc(v.url)}" target="_blank" rel="noreferrer" title="${esc(v.title)} — on YouTube">${esc(v.title)}</a>
+        <span class="uach">${esc(v.channel.replace(/^Specular /, ""))}</span>
+        <span class="uad">${esc(usDate(dayOf(v.publishedAt)))}${v.views !== null ? ` · ${esc(compactViews(v.views))} views` : ""}</span>
+        <details class="ualink"><summary>Link a script</summary>
+          <form class="sform uaform" method="post" action="/story-lab/scripts">
+            <input type="hidden" name="from" value="unassigned">
+            <input type="hidden" name="title" value="${esc(v.title)}">
+            <input type="text" name="url" placeholder="Its Google Doc link — shared as “Anyone with the link can view”" autocomplete="off">
+            <div class="or">or</div>
+            <textarea name="text" rows="4" placeholder="Paste the script, with its INTRO / PART 1 / … / OUTRO headers"></textarea>
+            <button class="clear">Link to this video</button>
+          </form>
+        </details>
+      </div>
+    </li>`)
+    .join("");
+  return `<details class="panel ideas unassigned" id="unassigned"${u.open ? " open" : ""}>
+    <summary><h2>Unassigned videos <span class="uacount">${u.videos.length}</span> <span class="sub">— Stories uploads with no script attached, ${u.total ? `${u.total - u.videos.length} of ${u.total} have one` : "none uploaded yet"}</span></h2></summary>
+    ${u.linked ? `<div class="ualinked" role="status">✓ Script linked to <b>${esc(u.linked)}</b>. It's that video's script now, and Story Lab learns from it once it's 150 words or more.</div>` : ""}
+    ${u.error ? `<div class="scripterr" role="alert">${esc(u.error)}</div>` : ""}
+    ${
+      u.videos.length
+        ? `<div class="uabar">
+            <label>Channel <select class="uapick"><option value="">Every channel</option>${channels.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>
+            <span class="hint-inline">Linking files the script under the video's title — how the board finds a video's script — and it joins what Story Lab learns from.</span>
+          </div>
+          <ul class="ualist">${rowsHtml}</ul>
+          ${u.videos.length > LIMIT ? `<button type="button" class="clear secondary uamore">Show all ${u.videos.length}</button>` : ""}
+          <script>
+          (function () {
+            var box = document.getElementById("unassigned");
+            var pick = box.querySelector(".uapick"), more = box.querySelector(".uamore"), all = false;
+            function draw() {
+              var ch = pick.value, n = 0;
+              box.querySelectorAll(".uarow").forEach(function (row) {
+                var show = !ch || row.getAttribute("data-ch") === ch;
+                if (show) n += 1;
+                row.hidden = !show || (!all && !ch && n > ${LIMIT});
+              });
+              if (more) more.hidden = all || !!ch;
+            }
+            pick.addEventListener("change", draw);
+            if (more) more.addEventListener("click", function () { all = true; draw(); });
+          })();
+          </script>`
+        : `<p class="hint">Every Stories upload has its script. New uploads land here until theirs is linked.</p>`
+    }
+  </details>`;
+}
+
 function libraryPanel(lib: NonNullable<StoryLabData["library"]>): string {
   const learning = lib.scripts.filter((sc) => corpus().some((c) => c.board?.id === sc.id)).length;
   const cards = lib.scripts
@@ -6053,6 +6319,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     shell,
     `${pageHeader("Story Lab", `<a class="clear secondary" href="/uploads?cat=stories">Stories uploads</a>`)}
     <p class="labsub">Learned from ${d.scripts} Stories scripts (${Math.round(d.words / 1000)}K words): how each format is built part by part, how every world's institution, roster and apex are used, and each hero's ability ladder. Ideas are ranked on the channel's own results${d.matched ? ` (${d.matched} scripts matched to their uploads)` : ""}, fit and freshness.</p>
+    ${d.unassigned ? unassignedPanel(d.unassigned) : ""}
     ${
       d.blueprint
         ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${
@@ -6202,7 +6469,7 @@ export function renderRevisions(
   shell: Shell,
   revisions: StoredRecord[],
   sort?: SortState,
-  history?: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort } | null,
+  history?: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort; reviewed?: Array<StoredRecord & { reviewedAt: Date | null }> } | null,
 ): string {
   const shown = sort ? sortRecords(revisions, sort.key, sort.dir) : revisions;
   const tabs = `<div class="tabs revtabs"><a class="tab${history ? "" : " on"}" href="/revisions">Waiting <span class="n">${revisions.length}</span></a><a class="tab${
@@ -6216,8 +6483,8 @@ export function renderRevisions(
     shell,
     `${pageHeader("Revisions")}${tabs}
     <p class="labsub">Each revision is due for review ${REVIEW_HOURS} hours after it comes in, unless its message gives a
-      deadline. ✓ marks it reviewed. ★ summarizes its Frame.io notes and scores the cut out of 10 — the scores build each channel's
-      <a href="/revisions?view=history">history</a>.</p>
+      deadline. ✓ marks it reviewed and moves it to <a href="/revisions?view=history">History</a>. ★ summarizes its Frame.io notes and
+      scores the cut out of 10 — the scores build each channel's timeline there.</p>
     ${revisions.length > 1 ? sortBar(sort) : ""}
     ${rows(shown, "No revisions waiting. Forward a Frame.io link into the intake channel.")}`,
   );
@@ -6249,7 +6516,34 @@ function timelineSvg(h: ChannelHistory): string {
     ${grid}<path d="${line}" class="tlline"/>${dots}</svg></div>`;
 }
 
-function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort }): string {
+/**
+ * Every revision marked reviewed, newest first: its score, or a way to give
+ * it one. A revision ✓'d without a summary has no score for the timeline, and
+ * this is where it's kept, so nothing reviewed disappears.
+ */
+function reviewedPanel(list: Array<StoredRecord & { reviewedAt: Date | null }>): string {
+  const unscored = list.filter((r) => typeof r.reviewScore !== "number").length;
+  const items = list
+    .map((r) => {
+      const score = typeof r.reviewScore === "number"
+        ? `<a class="rscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}" title="Its summary">${esc(fmtScore(r.reviewScore))}/10</a>`
+        : `<a class="rdscore" href="/r/${r.id}#summary" title="Summarize its notes and score it — it joins its channel's timeline">★ Score it</a>`;
+      return `<li class="rdrow">
+        <a class="rdt" href="/r/${r.id}" title="${esc(displayTitle(r))}">${esc(displayTitle(r))}</a>
+        <span class="rv">${REV_ICON}v${r.version ?? 1}</span>
+        ${r.channel ? `<span class="rch" style="--ch:${channelColour(r.channel)}"><i></i>${esc(r.channel.replace(/^Specular /, ""))}</span>` : `<span class="rch none">No channel</span>`}
+        <span class="rdwhen">${r.reviewedAt ? `reviewed ${esc(usDate(dayOf(r.reviewedAt)))} · ${esc(timeAgo(r.reviewedAt))}` : "reviewed"}</span>
+        ${score}
+      </li>`;
+    })
+    .join("");
+  return `<section class="panel revdone" id="reviewed">
+    <h2>Reviewed <span class="sub">— every revision you've ✓'d, newest first${unscored ? ` · ${unscored} without a score: ★ Score it puts one on its channel's timeline` : ""}</span></h2>
+    ${items ? `<ul class="rdlist">${items}</ul>` : `<p class="hint">Nothing reviewed yet. ✓ on a waiting revision moves it here.</p>`}
+  </section>`;
+}
+
+function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch: string; sort: HistorySort; reviewed?: Array<StoredRecord & { reviewedAt: Date | null }> }): string {
   const opt = (v: string, label: string, sel: string) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(label)}</option>`;
   const picker = `<form class="histpick" method="get" action="/revisions">
       <input type="hidden" name="view" value="history">
@@ -6280,6 +6574,7 @@ function revisionHistoryHtml(d: { channels: ChannelHistory[]; all: string[]; ch:
   };
   return `<p class="labsub">Every summarized revision's score, video by video (a video's latest version counts), for each channel. Red is 5 or below, green 8 and up. Three in a row at 5 or below is cause for concern; three at 8 or higher earns a trophy. Click a point for its summary.</p>
     ${picker}
+    ${d.reviewed ? reviewedPanel(d.reviewed) : ""}
     ${d.channels.length ? d.channels.map(section).join("") : `<div class="empty">Nothing scored yet. Open a revision and press Summarize — its score starts the channel's timeline.</div>`}`;
 }
 

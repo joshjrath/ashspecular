@@ -4,7 +4,9 @@
  *   Stories         long form, one upload every four days per channel
  *   Movies          long form; Specular one a day (its daily long-form batch
  *                   on the Recurring page), Specular Sleep tracked with no target
- *   Gaming          long form, tracked with no target (set one here)
+ *   Gaming          long form, each channel held to its own usual pace: the
+ *                   median gap between its uploads over 90 days (usualGap in
+ *                   cadence.ts). Set { kind: "every" } here for a fixed one.
  *   Bits, Reading   Shorts only, against each channel's daily number — the same `units` the Recurring
  *                   page ticks off: five for most, three or one for a few
  */
@@ -13,11 +15,13 @@ import { CATEGORIES, CHANNELS, isLongFormRecurring, type CategoryId } from "../c
 export type Target =
   | { kind: "every"; days: number }
   | { kind: "daily" }
+  /** Each channel's own usual gap, read from its uploads. */
+  | { kind: "own" }
   | { kind: "none" };
 
 export const UPLOAD_TARGETS: Record<CategoryId, Target> = {
   stories: { kind: "every", days: 4 },
-  gaming: { kind: "none" },
+  gaming: { kind: "own" },
   movies: { kind: "none" },
   bits: { kind: "daily" },
   reading: { kind: "daily" },
@@ -29,15 +33,37 @@ export function formatFor(category: CategoryId): "long" | "short" {
 }
 
 /**
+ * The usual gap of each channel held to its own pace, read from its uploads
+ * by the server (at most every ten minutes). A channel with too little
+ * history to say has none, and is tracked with no target until it does.
+ */
+let ownPaces = new Map<string, number | null>();
+export function setOwnPaces(paces: Map<string, number | null>): void {
+  ownPaces = new Map(paces);
+}
+
+/** Whether a channel is held to its own usual pace rather than a set one. */
+export function isOwnPace(channel: string): boolean {
+  const ch = CHANNELS.find((c) => c.name === channel);
+  return Boolean(ch && !isLongFormRecurring(ch) && UPLOAD_TARGETS[ch.category].kind === "own");
+}
+
+/** The channels whose target is their own pace. */
+export function ownPaceChannels(): string[] {
+  return CHANNELS.filter((c) => isOwnPace(c.name)).map((c) => c.name);
+}
+
+/**
  * A long-form channel's own target, in days between uploads, or null for
- * none: a channel with a daily long-form batch (Specular) is one a day;
- * otherwise its category's target.
+ * none: a channel with a daily long-form batch (Specular) is one a day; a
+ * Gaming channel its own usual gap; otherwise its category's target.
  */
 export function everyFor(channel: string): number | null {
   const ch = CHANNELS.find((c) => c.name === channel);
   if (!ch) return null;
   if (isLongFormRecurring(ch)) return 1;
   const t = UPLOAD_TARGETS[ch.category];
+  if (t.kind === "own") return ownPaces.get(channel) ?? null;
   return t.kind === "every" ? t.days : null;
 }
 
@@ -61,6 +87,7 @@ export function describeTarget(category: CategoryId): string {
   const t = UPLOAD_TARGETS[category];
   if (t.kind === "every") return `one long-form upload every ${t.days} days per channel`;
   if (t.kind === "daily") return "Shorts per channel per day (days run 3 AM to 3 AM ET), against each channel's daily number";
+  if (t.kind === "own") return "long form · each channel held to its own usual gap between uploads (the median over 90 days)";
   const daily = CHANNELS.filter((c) => c.category === category && isLongFormRecurring(c));
   if (daily.length)
     return `long form · ${daily.map((c) => c.name).join(", ")}: one a day (midnight to midnight) · the rest tracked with no target`;

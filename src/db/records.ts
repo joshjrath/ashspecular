@@ -529,6 +529,19 @@ export async function listReviews(limit = 50): Promise<StoredRecord[]> {
   return rows.map(hydrate);
 }
 
+/**
+ * Revisions marked reviewed (✓), the latest first, with when. They leave the
+ * Waiting list; History keeps every one, scored or not.
+ */
+export async function listReviewed(limit = 60): Promise<Array<StoredRecord & { reviewedAt: Date | null }>> {
+  const { rows } = await pool.query<Row & { reviewed_at: Date | null }>(
+    `SELECT ${COLUMNS}, done_at AS reviewed_at FROM records WHERE status = 'done' AND kind = 'review'
+     ORDER BY done_at DESC NULLS LAST, created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({ ...hydrate(r), reviewedAt: r.reviewed_at ?? null }));
+}
+
 /** One channel's everything — what you get by clicking a channel name. */
 export async function listByChannel(channel: string, limit = 100): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
