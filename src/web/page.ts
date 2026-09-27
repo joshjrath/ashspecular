@@ -32,8 +32,8 @@ import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
 import {
-  ESTIMATE_MIN, TYPE_BY_ID, VO_WPM, WORK_TYPES, itemKey, readMinutes, remaining, whyNow,
-  type DayLoad, type FocusPick, type Forgotten, type WorkItem,
+  DEFAULT_ESTIMATES, batchType, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
+  type DayLoad, type FocusPick, type WorkType, type Forgotten, type WorkItem,
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
 import { PRIORITIES, PRIORITY, TASK_CATEGORIES, TASK_CATEGORY } from "../tasks/parse.js";
@@ -2014,6 +2014,24 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .split.withrev > .revpanel { grid-column: auto; grid-row: auto; max-height: none; }
   .split.withrev > .revpanel .revlist { display: flex; }
 }
+/* ── Time estimates ── */
+.estgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.estgrid fieldset { border: 0; margin: 0; padding: 12px; border-radius: 16px; background: var(--sunk); min-width: 0; }
+.estgrid legend { float: left; width: 100%; padding: 0 0 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.estgrid legend .sub { display: block; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--ink3); margin-top: 2px; }
+.estsub { clear: both; font-size: 11px; font-weight: 700; color: var(--ink3); margin: 10px 0 4px; }
+.estrow { clear: both; display: grid; grid-template-columns: 10px minmax(0, 1fr) 92px; grid-template-areas: "dot nm in" ". src in"; align-items: center; gap: 0 8px; padding: 6px 4px; border-radius: 10px; }
+.estrow:hover { background: var(--raised); }
+.estrow > i { grid-area: dot; width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px var(--ring); }
+.estrow .nm { grid-area: nm; font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estrow .src { grid-area: src; font-size: 11px; color: var(--ink3); }
+.estin { grid-area: in; display: flex; align-items: center; gap: 5px; }
+.estin input { width: 60px; padding: 7px 8px; border-radius: 9px; border: 1px solid transparent; background: var(--card); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 700; text-align: right; color-scheme: dark; }
+.estin input::placeholder { color: var(--ink3); font-weight: 500; }
+.estin input:focus { outline: 0; border-color: var(--salmon); }
+.estin em { font-style: normal; font-size: 11.5px; color: var(--ink3); }
+.lset { margin-left: auto; font-weight: 700; color: var(--ink2); } .lset:hover { color: var(--ink); text-decoration: underline; }
+@media (max-width: 1100px) { .estgrid { grid-template-columns: minmax(0, 1fr); } }
 /* ── Tasks ── */
 .tadd { display: flex; gap: 8px; margin: 0 0 6px; }
 .tadd input, .tedit input, .tedit select { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
@@ -6563,7 +6581,7 @@ export function renderSettings(
   shell: Shell,
   data: {
     railHide: string[]; dashHide: string[]; daysOff: string[]; shifted: StoredRecord[]; saved: boolean; scripts: boolean;
-    colours?: ColourRow[]; coloursSaved?: string;
+    colours?: ColourRow[]; coloursSaved?: string; estimatesSaved?: boolean;
   },
 ): string {
   const off = new Set(data.railHide);
@@ -6606,8 +6624,53 @@ export function renderSettings(
       <h2>Days off <span class="sub">— no work that day: anything due on it is due the working day before</span></h2>
       ${daysOffStrip(data.daysOff, data.shifted)}
     </section>
+    ${estimateSettings(data.estimatesSaved ?? false)}
     ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "") : ""}`,
   );
+}
+
+/**
+ * Time estimates: how long each kind of work takes, the one place every page
+ * counts time from. Blank is the default; a recurring channel left blank takes
+ * its kind's (Reading, Bits), and a task without its own takes its category's.
+ */
+function estimateSettings(saved: boolean): string {
+  const set = estimateOverrides();
+  const field = (key: string, label: string, value: number, fallback: number, colour: string, note = "") =>
+    `<label class="estrow" style="--c:${colour}"><i></i><span class="nm">${esc(label)}</span>
+      <span class="estin"><input type="number" name="e:${esc(key)}" min="1" max="600" inputmode="numeric" value="${set.has(key) ? value : ""}" placeholder="${fallback}" aria-label="${esc(label)}, minutes"><em>min</em></span>
+      <span class="src">${set.has(key) ? `set · default ${fallback}` : esc(note || "default")}</span></label>`;
+  const core: WorkType[] = ["vo", "moviesvo", "gaming", "reading", "bits", "revision"];
+  const coreRows = core
+    .map((id) => { const t = TYPE_BY_ID.get(id)!; return field(`type:${id}`, t.label, typeEstimate(id), DEFAULT_ESTIMATES[id], t.colour); })
+    .join("");
+  const recurring = CHANNELS.filter((c) => c.recurring);
+  const recRows = CATEGORIES.map((cat) => {
+    const list = recurring.filter((c) => c.category === cat.id);
+    if (!list.length) return "";
+    return `<div class="estsub">${esc(cat.label)}</div>${list
+      .map((c) => {
+        const kind = batchType(c);
+        const fallback = kind === "longform" ? typeEstimate("longform") : typeEstimate(kind);
+        return field(`channel:${c.name}`, c.name.replace(/^Specular (?=.)/, "") || c.name, channelEstimate(c.name), fallback, c.color, kind === "longform" ? "long-form default" : `${TYPE_BY_ID.get(kind)!.label}`);
+      })
+      .join("")}`;
+  }).join("");
+  const taskRows = TASK_CATEGORIES.map((c) => field(`task:${c.id}`, `${c.emoji} ${c.label}`, taskCategoryEstimate(c.id), c.est, c.colour)).join("");
+  const dailyBatches = recurring.reduce((n, c) => n + channelEstimate(c.name), 0);
+  return `<form class="panel setgroup settings estset" id="estimates" method="post" action="/settings/estimates" style="margin-top:14px">
+    <h2>Time estimates <span class="sub">— how long each kind of work takes you. My Day, Focus, the VO Queue, the week's load and Tasks all count from these, so a change applies everywhere straight away. Leave one blank for its default.</span></h2>
+    <div class="estgrid">
+      <fieldset><legend>Work</legend>${coreRows}</fieldset>
+      <fieldset><legend>Recurring <span class="sub">— each channel's daily batch · ${esc(fmtMin(dailyBatches))} a day in all</span></legend>${recRows}</fieldset>
+      <fieldset><legend>Tasks <span class="sub">— by category; a task can have its own on the Tasks page</span></legend>${taskRows}</fieldset>
+    </div>
+    <div class="setsave">
+      <button class="clear">Save estimates</button>
+      <button class="clear secondary" name="reset" value="1" formnovalidate>Back to defaults</button>
+      ${saved ? `<span class="saved" role="status">Saved — everything's recalculated.</span>` : ""}
+    </div>
+  </form>`;
 }
 
 /**
@@ -6884,7 +6947,7 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
     <span class="wtype">${esc(t.short)}</span>
     <div class="wmain">
       <a class="wt" href="${workHref(i)}">${esc(i.title)}</a>
-      <div class="wmeta">${i.channel && i.type !== "batch" && i.type !== "longform" ? `<span class="wch" style="--ch:${channelColour(i.channel)}"><i></i>${esc(i.channel.replace(/^Specular /, ""))}</span>` : ""}<span class="wwhy${late ? " late" : ""}">${esc(why)}</span>${extra}</div>
+      <div class="wmeta">${i.channel && !isBatch(i.type) && i.type !== "longform" ? `<span class="wch" style="--ch:${channelColour(i.channel)}"><i></i>${esc(i.channel.replace(/^Specular /, ""))}</span>` : ""}<span class="wwhy${late ? " late" : ""}">${esc(why)}</span>${extra}</div>
     </div>
     <div class="wtime" title="${esc(`${fmtMin(i.spent)} tracked of ${fmtMin(i.est)} estimated`)}">
       <span class="wbar"><i style="width:${pct}%"${over ? ' class="over"' : ""}></i></span>
@@ -6908,17 +6971,18 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
  * bury the VOs.
  */
 function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string): string {
-  const batches = items.filter((i) => i.type === "batch");
-  const rest = items.filter((i) => i.type !== "batch");
+  const batches = items.filter((i) => isBatch(i.type));
+  const rest = items.filter((i) => !isBatch(i.type));
   if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
   const est = batches.reduce((n, i) => n + i.est, 0);
   const spent = batches.reduce((n, i) => n + i.spent, 0);
   const left = batches.reduce((n, i) => n + remaining(i), 0);
-  const t = TYPE_BY_ID.get("batch")!;
+  const t = TYPE_BY_ID.get(batches.every((i) => i.type === "reading") ? "reading" : "bits")!;
+  const each = new Set(batches.map((i) => i.est)).size === 1 ? `${batches[0]!.est}m each` : `~${Math.round(est / batches.length)}m each`;
   const pct = Math.min(100, Math.round((spent / est) * 100));
   const group = `<details class="wgroup"${batches.some((i) => itemKey(i) === running) ? " open" : ""}>
-    <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
-      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${ESTIMATE_MIN.batch}m each</span></div></div>
+    <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">Batch</span>
+      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
       <div class="wacts"><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
     </summary>
@@ -6929,6 +6993,17 @@ function groupBatches(items: WorkItem[], now: Date, running: string | null, back
   const before = rest.filter((i) => items.indexOf(i) < at);
   const after = rest.filter((i) => items.indexOf(i) > at);
   return [...before.map((i) => workRow(i, now, running, back)), group, ...after.map((i) => workRow(i, now, running, back))].join("");
+}
+
+/** A kind of work's estimate for the legend: tasks and recurring channels can each have their own. */
+function legendEstimate(id: WorkType): string {
+  if (id === "task") return "per task";
+  if (id === "reading" || id === "bits" || id === "longform") {
+    const each = [...new Set(CHANNELS.filter((c) => c.recurring && batchType(c) === id).map((c) => channelEstimate(c.name)))];
+    if (each.length > 1) return `${Math.min(...each)}–${Math.max(...each)}m`;
+    if (each.length === 1) return `${each[0]}m`;
+  }
+  return `${typeEstimate(id)}m`;
 }
 
 /** One day's load as a stacked bar, by kind of work. */
@@ -7008,7 +7083,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
 
   const max = Math.max(60, ...d.loads.map((l) => l.est));
   const week = `<section class="panel"><h2>The week ahead <span class="sub">— estimated minutes a day, by kind of work</span></h2>
-    <div class="llegend">${WORK_TYPES.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} · ${t.id === "task" ? "2–15m" : `${ESTIMATE_MIN[t.id]}m`}</span>`).join("")}</div>
+    <div class="llegend">${WORK_TYPES.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} · ${esc(legendEstimate(t.id))}</span>`).join("")}<a class="lset" href="/settings#estimates">Edit estimates</a></div>
     <div class="lrows">${d.loads.map((l) => loadBar(l, max, d.today, d.trackedToday)).join("")}</div>
   </section>`;
 
@@ -7062,14 +7137,14 @@ export interface VoQueueData {
   running: TimerState | null;
 }
 
-/** The VO queue: every open Stories VO, most pressing first, with what it'll take. */
+/** The VO queue: every open VO, Stories and Movies, most pressing first, with what it'll take. */
 export function renderVoQueue(shell: Shell, d: VoQueueData): string {
   const words = d.queue.reduce((n, i) => n + (i.wordCount ?? 0), 0);
   const read = d.queue.reduce((n, i) => n + (readMinutes(i.wordCount) ?? 0), 0);
   const est = d.queue.reduce((n, i) => n + remaining(i), 0);
   const tiles = [
     { n: String(d.queue.length), l: "VOs to record" },
-    { n: fmtMin(est), l: `left · ${ESTIMATE_MIN.vo} min a VO` },
+    { n: fmtMin(est), l: `left · Stories ${typeEstimate("vo")}m · Movies ${typeEstimate("moviesvo")}m a VO` },
     { n: words ? words.toLocaleString("en-US") : "—", l: "words" },
     { n: read ? fmtMin(read) : "—", l: `reading time · ${VO_WPM} wpm` },
   ]
@@ -7093,7 +7168,7 @@ export function renderVoQueue(shell: Shell, d: VoQueueData): string {
     `${pageHeader("VO Queue", d.queue.length ? `<a class="clear" href="/vo/record">${PLAY_ICON} Recording mode</a>` : "")}
     ${timerBar(d.running, "/vo")}
     <div class="stats">${tiles}</div>
-    <p class="labsub">Every open Stories VO, most pressing first: late ones, then by VO deadline, then by air date. Recording mode takes them one at a time: it times each one, and ✓ Recorded clears it and moves to the next.</p>
+    <p class="labsub">Every open VO, Stories and Movies, most pressing first: late ones, then by VO deadline, then by air date. Recording mode takes them one at a time: it times each one, and ✓ Recorded clears it and moves to the next.</p>
     <section class="panel">${list ? `<div class="wlist">${list}</div>` : `<div class="empty">No VOs to record.</div>`}</section>`,
   );
 }
@@ -7135,11 +7210,11 @@ export function renderRecording(shell: Shell, d: RecordingData): string {
         <span class="wwhy${why.endsWith("late") ? " late" : ""}">VO ${esc(why)}</span>
         ${c.airDate ? `<span>airs ${esc(usDate(c.airDate))}</span>` : ""}
         <span>${c.wordCount ? `${c.wordCount.toLocaleString("en-US")} words · ~${readMinutes(c.wordCount)} min read` : "no word count"}</span>
-        <span>${ESTIMATE_MIN.vo} min est.</span>
+        <span>${c.est} min est.</span>
       </div>
       ${hit ? `<a class="clear secondary recscript" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}>${SCRIPT_ICON} Open the script <small>(${esc(hit.where.join(" · "))})</small></a>` : `<p class="hint" style="padding:0">No script found for it — not attached, not in Story Lab, not on the Scripts tab.</p>`}
       ${d.brief ? `<details class="recbrief"><summary>Story brief</summary><div class="brief">${esc(d.brief)}</div></details>` : ""}
-      <div class="recclock"><span class="tclock" data-start="${d.running?.startedAt.getTime() ?? Date.now()}" data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${ESTIMATE_MIN.vo} min</small></div>
+      <div class="recclock"><span class="tclock" data-start="${d.running?.startedAt.getTime() ?? Date.now()}" data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${c.est} min</small></div>
       <div class="recacts">
         <form method="post" action="/vo/record/done"><input type="hidden" name="id" value="${c.id}"><input type="hidden" name="skip" value="${esc(skip)}"><button class="clear recbig">✓ Recorded — next</button></form>
         <a class="clear secondary" href="/vo/record?skip=${esc([...d.skipped, c.id].join(","))}">Skip for now</a>
@@ -7238,7 +7313,7 @@ const hidden = (name: string, value: string | number) => `<input type="hidden" n
 function taskRow(t: Task, now: Date, running: string | null): string {
   const c = TASK_CATEGORY.get(t.category) ?? TASK_CATEGORY.get("general")!;
   const p = PRIORITY.get(t.priority) ?? PRIORITY.get("normal")!;
-  const est = t.estMin ?? c.est;
+  const est = t.estMin ?? taskCategoryEstimate(t.category);
   const on = running === `t${t.id}`;
   const back = hidden("back", `/tasks#t${t.id}`);
   const discord = t.sourceUrl ?? t.captureUrl;
@@ -7284,7 +7359,7 @@ function taskRow(t: Task, now: Date, running: string | null): string {
       <form method="post" action="/tasks/${t.id}/edit">${back}
         <label class="wide">Title<input name="title" value="${esc(t.title)}" required maxlength="200"></label>
         <label class="half">Person<input name="person" value="${esc(t.person ?? "")}" maxlength="60"></label>
-        <label>Minutes<input name="est" type="number" min="1" max="600" value="${est}"></label>
+        <label>Minutes<input name="est" type="number" min="1" max="600" value="${t.estMin ?? ""}" placeholder="${taskCategoryEstimate(t.category)} (${esc(c.label)})"></label>
         <label class="half">Category<select name="category">${TASK_CATEGORIES.map((x) => `<option value="${x.id}"${x.id === t.category ? " selected" : ""}>${x.emoji} ${esc(x.label)}</option>`).join("")}</select></label>
         <label>Priority<select name="priority">${PRIORITIES.map((x) => `<option value="${x.id}"${x.id === t.priority ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>
         <label class="half">Due date<input name="due_date" type="date" value="${esc(localDay)}"></label>
@@ -7310,7 +7385,7 @@ export function renderTasks(shell: Shell, d: TasksData): string {
     return `<section class="tgroup"><div class="tghead" style="--pc:${p.colour}"><span class="tpri">${p.dot} ${esc(p.label)}</span><span class="n">${list.length}</span></div>
       <div class="tlist">${list.map((t) => taskRow(t, d.now, running)).join("")}</div></section>`;
   }).join("");
-  const minutes = d.todo.reduce((n, t) => n + (t.estMin ?? TASK_CATEGORY.get(t.category)?.est ?? 5), 0);
+  const minutes = d.todo.reduce((n, t) => n + (t.estMin ?? taskCategoryEstimate(t.category)), 0);
   const body = `${pageHeader(`To do · ${d.todo.length}`, `<a class="clear secondary" href="/my-day">My Day</a>`)}
     ${timerBar(d.running, "/tasks")}
     <section class="panel">

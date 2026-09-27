@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-27-time-estimates",
+    title: "Time estimates: set how long each kind of work takes you",
+    changes: [
+      { text: "Settings → Time estimates: Stories VO, Movies VO, Gaming video, Reading batch, Bits batch and Revision, each editable.", href: "/settings#estimates" },
+      { text: "Each recurring channel's daily batch can have its own time, or it follows its kind's.", href: "/settings#estimates" },
+      { text: "Task categories have editable times, and a single task can still have its own.", href: "/settings#estimates" },
+      { text: "These are the one source for My Day, Focus, Do ahead, the week's load, the VO Queue and Tasks. A change recalculates everything straight away.", href: "/my-day" },
+      { text: "Movies VOs now count as work, and they're in the VO Queue alongside Stories.", href: "/vo" },
+    ],
+  },
+  {
     id: "2026-09-27-tasks",
     title: "Tasks: forward anything into #tasks and it's remembered here",
     changes: [

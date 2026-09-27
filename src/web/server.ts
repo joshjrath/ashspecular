@@ -85,10 +85,11 @@ import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
 import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent } from "../db/timers.js";
+import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { addTask, deleteTask, editTask, getTask, knownPeople, listTasks, openTasks, setTaskStatus, snoozeTask, tasksDoneToday } from "../db/tasks.js";
 import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
 import {
-  dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, voQueue, whatNext,
+  dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, isVo, setEstimates, voQueue, whatNext, WORK_TYPES,
   type WorkItem,
 } from "./work.js";
 import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
@@ -174,7 +175,14 @@ async function refreshScriptIndex(): Promise<void> {
  * checks. Shared by My Day, the VO Queue, recording mode, Forgotten and the
  * sidebar's counts.
  */
+/** The time estimates from Settings, into the work model, before anything counts time. */
+async function refreshEstimates(): Promise<void> {
+  if (!hasDatabase) return;
+  setEstimates(await readEstimates());
+}
+
 async function loadWork(now = new Date()) {
+  await refreshEstimates().catch((err) => console.error("[estimates] couldn't read them:", err));
   const [open, done, running, revs, paused, tasks, tasksDone] = await Promise.all([
     openWork(),
     doneToday(),
@@ -246,7 +254,7 @@ async function shell(active: string): Promise<Shell> {
       recurring: batchesOpen,
       calendar: month.length,
       behind,
-      vo: work ? work.items.filter((i) => i.type === "vo").length : undefined,
+      vo: work ? work.items.filter((i) => isVo(i.type)).length : undefined,
       forgotten: work ? work.forgotten.length + gaps.length : undefined,
       tasks: work ? work.tasks.length : undefined,
       tasksUrgent: work ? work.tasks.filter((t) => t.priority === "urgent" || (t.due && t.due.getTime() < Date.now())).length : undefined,
@@ -1303,7 +1311,7 @@ export async function startWeb(): Promise<void> {
     const budget = [15, 30, 60, 120].includes(Number(request.query.budget)) ? Number(request.query.budget) : null;
     const asked = request.query.next !== undefined;
     const required = work.items.filter((i) => isRequired(i, today)).sort((a, b) => (a.due?.getTime() ?? Infinity) - (b.due?.getTime() ?? Infinity));
-    const vos = work.items.filter((i) => i.type === "vo");
+    const vos = work.items.filter((i) => isVo(i.type));
     return reply.type("text/html").send(
       renderMyDay(s, {
         now, today, required, ahead: doAhead(work.items, now, 10), done: work.doneItems,
@@ -1821,7 +1829,30 @@ export async function startWeb(): Promise<void> {
   }
 
   // Settings: the sidebar's items, the dashboard's lists, the days off.
-  app.get<{ Querystring: { saved?: string; colours?: string } }>("/settings", async (request, reply) => {
+  // Time estimates: the one place every page counts time from. Blank is the default.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/estimates", async (request, reply) => {
+    const body = request.body ?? {};
+    if (!hasDatabase) return reply.redirect("/settings#estimates");
+    if (body.reset) {
+      await resetEstimates();
+    } else {
+      const valid = new Set([
+        ...WORK_TYPES.map((t) => `type:${t.id}`),
+        ...CHANNELS.filter((c) => c.recurring).map((c) => `channel:${c.name}`),
+        ...[...TASK_CATEGORY.keys()].map((k) => `task:${k}`),
+      ]);
+      const entries: Array<[string, number | null]> = [];
+      for (const [field, raw] of Object.entries(body)) {
+        if (!field.startsWith("e:") || !valid.has(field.slice(2))) continue;
+        const n = Math.round(Number(raw));
+        entries.push([field.slice(2), raw?.trim() && Number.isFinite(n) && n >= 1 ? Math.min(600, n) : null]);
+      }
+      await saveEstimates(entries);
+    }
+    return reply.redirect("/settings?estimates=saved#estimates");
+  });
+
+  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string } }>("/settings", async (request, reply) => {
     const [s, shifted, sources] = await Promise.all([shell("settings"), listOffShifted(), colourSources()]);
     const sampled = new Set(sampledChannels());
     return reply.type("text/html").send(
@@ -1839,6 +1870,7 @@ export async function startWeb(): Promise<void> {
             sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
           };
         }),
+        estimatesSaved: request.query.estimates === "saved",
         coloursSaved:
           request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
       }),

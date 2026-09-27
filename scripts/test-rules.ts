@@ -58,7 +58,7 @@ import jpegJs from "jpeg-js";
 import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
-import { ESTIMATE_MIN, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
+import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelEstimate, taskCategoryEstimate, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
 import { taskItem, isRequired } from "../src/web/work.js";
@@ -1614,7 +1614,8 @@ const gameVid = mk({ id: 204, category: "gaming", title: "SMP ep 10", deadline: 
 const batchToday = mk({ id: 205, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-27", deadline: new Date("2026-09-27T22:00:00Z") });
 const revToday = mk({ id: 206, kind: "review", category: "stories", title: "Rev", deadline: new Date("2026-09-27T20:00:00Z") });
 const wLongForm = mk({ id: 207, category: "movies", channel: "Specular", batchNo: 1, title: "Specular", airDate: "2026-09-30", deadline: new Date("2026-09-30T22:00:00Z") });
-t("each kind of work has its estimate: VO 40, batch 10, Gaming 45", [typeOf(lateVo), ESTIMATE_MIN.vo, typeOf(batchToday), ESTIMATE_MIN.batch, typeOf(gameVid), ESTIMATE_MIN.gaming, typeOf(revToday), typeOf(wLongForm)], ["vo", 40, "batch", 10, "gaming", 45, "revision", "longform"]);
+t("each kind of work has its estimate: VO 40, Bits batch 10, Gaming 45", [typeOf(lateVo), ESTIMATE_MIN.vo, typeOf(batchToday), ESTIMATE_MIN.bits, typeOf(gameVid), ESTIMATE_MIN.gaming, typeOf(revToday), typeOf(wLongForm)], ["vo", 40, "bits", 10, "gaming", 45, "revision", "longform"]);
+t("Reading batches and Movies VOs are their own kinds", [typeOf(mk({ category: "reading", channel: "Specular DC", batchNo: 1 })), typeOf(mk({ category: "movies", title: "A Movie" }))], ["reading", "moviesvo"]);
 const wItems = [lateVo, todayVo, aheadVo, gameVid, batchToday, revToday, wLongForm].map((r) => toItem(r, r.id === 202 ? 25 : 0)!);
 const loads = dayLoads(wItems, ["2026-09-27", "2026-09-28", "2026-10-01"], wToday);
 t("today's load counts what's due today and anything late", [loads[0]!.est, loads[0]!.byType.vo.n, loads[0]!.left], [40 + 40 + 45 + 10 + 15, 2, 40 + 15 + 45 + 10 + 15]);
@@ -1689,6 +1690,17 @@ const tasksPage = renderTasks(shellFix, { now: tkNow, todo: [payTask, replyTask,
 t("the Tasks page: To do · N, grouped by priority, category beside the title", [tasksPage.includes("To do · 3"), tasksPage.includes("URGENT"), tasksPage.includes("HIGH"), tasksPage.includes("LOW"), tasksPage.includes("· 💰 Payment")], [true, true, true, true, true]);
 t("…Complete, Snooze, Open Discord, a timer and Edit on each", [tasksPage.includes('action="/tasks/1/done"'), tasksPage.includes('action="/tasks/1/snooze"'), tasksPage.includes('href="https://discord.com/channels/1/2/3"'), tasksPage.includes('name="kind" value="task"'), tasksPage.includes('action="/tasks/1/edit"')], [true, true, true, true, true]);
 t("…snoozed and done folded away", [tasksPage.includes("Snoozed · 1"), tasksPage.includes("Done · 1"), tasksPage.includes('action="/tasks/5/reopen"')], [true, true, true]);
+
+section("Time estimates — one source for every page");
+setEstimates(new Map([["type:reading", 8], ["channel:Specular Anime Bits", 14], ["task:payment", 3], ["type:vo", 35]]));
+t("a changed kind applies to every channel of that kind; a channel can have its own", [channelEstimate("Specular DC"), channelEstimate("Specular Anime Bits"), channelEstimate("Specular FNAF Bits"), typeEstimate("vo")], [8, 14, 10, 35]);
+t("…records and projected batches take them", [toItem(lateVo)!.est, toItem(batchToday)!.est, projectBatches(["2026-09-28"], [], { paused: new Set(), daysOff: new Set() }).find((i) => i.channel === "Specular DC")!.est], [35, 14, 8]);
+t("…and tasks: the category's, unless the task has its own", [taskCategoryEstimate("payment"), taskItem(mkTask({ category: "payment" }), tkNow).est, taskItem(mkTask({ category: "payment", estMin: 7 }), tkNow).est], [3, 3, 7]);
+const estPage = renderSettings(shellFix, { railHide: [], dashHide: [], daysOff: [], shifted: [], saved: false, scripts: false, estimatesSaved: true });
+t("the Settings page: Time estimates with work, each recurring channel, and task categories", [estPage.includes('id="estimates"'), estPage.includes('name="e:type:moviesvo"'), estPage.includes('name="e:channel:Specular DC"'), estPage.includes('name="e:task:payment"'), estPage.includes("everything's recalculated")], [true, true, true, true, true]);
+t("…a changed one shows its value, an unchanged one its default as a placeholder", [/name="e:type:reading"[^>]*value="8"/.test(estPage), /name="e:type:gaming"[^>]*value="" placeholder="45"/.test(estPage)], [true, true]);
+setEstimates(new Map());
+t("…and back to defaults", [channelEstimate("Specular DC"), typeEstimate("vo")], [10, 40]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

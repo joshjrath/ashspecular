@@ -403,15 +403,28 @@ late ones.
 
 ## My Day, the VO Queue, Focus and forgotten work — Ash's own work
 
-Everything that's Ash's to do, as time. Each piece has an estimate:
+Everything that's Ash's to do, as time. Each piece has an estimate, set in
+**Settings → Time estimates**. That's the one place every page counts time
+from: My Day, Focus, Do ahead, the week's load, the VO Queue and Tasks. A
+change applies everywhere on the next page load, including future days'
+projected batches.
 
-| Work | Estimate |
+| Work | Default |
 |---|---|
 | Stories VO | 40 min |
-| Bits / Reading batch | 10 min |
+| Movies VO | 60 min |
 | Gaming video | 45 min |
+| Reading batch | 10 min |
+| Bits batch | 10 min |
 | Revision review | 15 min |
 | Specular long-form (the daily batch) | 45 min |
+
+Each **recurring channel** can have its own time for its daily batch. Left
+blank, it uses its kind's time (Reading batch, Bits batch or long-form), so
+changing Reading batch from 10 to 8 moves every Reading channel that isn't
+set on its own. **Tasks** use their category's time (Payment 2, Response 5,
+and so on, all editable) unless a task has its own minutes set with ✎ on
+the Tasks page. Back to defaults clears every change.
 
 (The last two weren't given; they're set in `src/web/work.ts`, where all five
 can be changed.)
