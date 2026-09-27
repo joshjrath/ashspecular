@@ -366,6 +366,75 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## My Day, the VO Queue, Focus and forgotten work — Ash's own work
+
+Everything that's Ash's to do, as time. Each piece has an estimate:
+
+| Work | Estimate |
+|---|---|
+| Stories VO | 40 min |
+| Bits / Reading batch | 10 min |
+| Gaming video | 45 min |
+| Revision review | 15 min |
+| Specular long-form (the daily batch) | 45 min |
+
+(The last two weren't given; they're set in `src/web/work.ts`, where all five
+can be changed.)
+
+**My Day** (sidebar) has:
+
+- **Tiles:** today's load, what's left today, time tracked today, and VOs left
+  with their time.
+- **What should I do next?** One press picks the most pressing piece: late
+  first, then due soonest, with a VO a little ahead of its peers because the
+  editors are waiting on it. Choose **15 min / 30 min / 1 hr / 2 hrs** and it
+  finds the most pressing pieces that fit, most pressing first. If nothing
+  fits, it gives the top one anyway so you can start it. When everything due
+  is done, it picks from Do ahead. **Start on it** starts the timer. The
+  dashboard's header has the same button.
+- **Today:** everything late or due today. Each piece shows tracked time
+  against its estimate on a bar, with ▶ to time it and ✓ to clear it.
+  Today's Bits/Reading batches fold into one line you can open.
+- **The week ahead:** each of the next seven days' estimated load as a bar,
+  split by kind of work. It includes the batches every recurring channel will
+  open that day but hasn't yet. Paused channels and days off open none.
+- **Done today:** what you cleared, estimated against tracked, and by how
+  much it ran over or under.
+- **Do ahead:** work not due yet, best to do early first. VOs lead, since the
+  editors can start once they're recorded; then revisions, Gaming, long-form
+  and batches, soonest first within each.
+
+**Timers:** one runs at a time; starting another stops it. A green bar at the
+top of My Day and the VO Queue shows what's running, with a live clock,
+**Stop** and **✓ Done** (which stops it and clears the piece). Tracked time is
+the "actual" everywhere.
+
+**VO Queue** (sidebar, with a count) lists every open Stories VO in priority
+order: late ones, then by VO time, then by air date. Each shows its word
+count, a reading-time estimate at 150 words a minute, its air date, and its
+script mark. The tiles show VOs to record, total time left, total words and
+reading time. **Recording mode** takes them one at a time:
+
+- the title, channel, how late or soon, air date, words and reading time
+- **Open the script** when one is found (attached, Story Lab or the Scripts
+  tab), and the story brief
+- a big clock, started when the VO comes up
+- **✓ Recorded — next** clears it and moves on, **Skip for now** moves on
+  without clearing it, and *Up next* shows the three after it
+
+**Forgotten** (sidebar, red count) collects what's slipping through the
+cracks, checked on every page load:
+
+- **Nothing assigned:** an expected upload in the next 8 days with no video
+  on the day (see the calendar)
+- **Overdue VOs** and **overdue revisions**
+- **Not started, and airing soon:** airs within 7 days with no script
+  anywhere and no cut on Frame.io yet
+- **VO still open close to air:** airs within 3 days
+- **Unsorted:** filed 2+ days ago and still not in a category
+
+Paused work never counts in any of these.
+
 ## Uploads — every category, its own way
 
 The switch at the top of **Uploads** picks a category, and the whole page

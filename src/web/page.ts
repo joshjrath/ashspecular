@@ -31,6 +31,10 @@ import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
+import {
+  ESTIMATE_MIN, TYPE_BY_ID, VO_WPM, WORK_TYPES, readMinutes, remaining, whyNow,
+  type DayLoad, type FocusPick, type Forgotten, type WorkItem,
+} from "./work.js";
 import { scriptFor } from "./scriptindex.js";
 import type { RevisionReview } from "../db/revisions.js";
 import { severityOf, themeLabel } from "../revisions/score.js";
@@ -438,8 +442,8 @@ button.clear, a.clear {
   border-radius: 999px; padding: 11px 22px; font-size: 13px; cursor: pointer; font-weight: 700;
 }
 button.clear:hover, a.clear:hover { filter: brightness(1.05); }
-button.clear.secondary { background: var(--sunk); color: var(--ink2); }
-button.clear.secondary:hover { background: var(--line); filter: none; }
+button.clear.secondary, a.clear.secondary { background: var(--sunk); color: var(--ink2); }
+button.clear.secondary:hover, a.clear.secondary:hover { background: var(--line); filter: none; }
 
 /* ── calendar ──────────────────────────────────────────────────────────── */
 .calbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; padding: 0 4px; }
@@ -1041,6 +1045,120 @@ header.page .checknow button { white-space: nowrap; }
 .scriptmark.icon { padding: 0; width: 20px; justify-content: center; }
 .ut .scriptmark, .vt .scriptmark { margin-left: 6px; vertical-align: -3px; height: 17px; width: 17px; }
 .row.revision .meta .scriptmark { height: 22px; }
+/* ── My Day, the VO Queue, recording mode ───────────────────────────────── */
+.timerbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px; border-radius: 18px;
+  background: rgba(86,201,144,.10); box-shadow: inset 0 0 0 1.5px rgba(86,201,144,.45); color: #CFF5E0; font-size: 13.5px; }
+.timerbar .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s ease-in-out infinite; }
+.timerbar .tlabel b { color: #fff; }
+.timerbar .tclock { font-family: var(--display); font-size: 22px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.timerbar .test { color: #9FD9BA; font-size: 12.5px; }
+.timerbar form { margin: 0; } .timerbar form:first-of-type { margin-left: auto; }
+.timerbar button { padding: 8px 16px; }
+@keyframes pulse { 50% { opacity: .35; } }
+.wlist { display: flex; flex-direction: column; gap: 6px; }
+.wrow { display: grid; grid-template-columns: 88px minmax(0, 1fr) 150px auto; align-items: center; gap: 12px; padding: 10px 12px;
+  border-radius: 14px; background: var(--sunk); box-shadow: inset 3px 0 0 var(--wc); }
+.wrow.on { background: rgba(86,201,144,.10); box-shadow: inset 3px 0 0 var(--ok), inset 0 0 0 1.5px rgba(86,201,144,.4); }
+.wrow.late { background: rgba(242,104,94,.08); }
+.wrow.done { grid-template-columns: 88px minmax(0, 1fr) auto; opacity: .85; }
+.wgroup > summary { list-style: none; cursor: pointer; }
+.wgroup > summary::-webkit-details-marker { display: none; }
+.wgroup > summary .wt::after { content: " ▾"; color: var(--ink3); font-size: 12px; }
+.wgroup[open] > summary .wt::after { content: " ▴"; }
+.wgroup .wlist { margin: 6px 0 0 18px; }
+.wtype { justify-self: start; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--wc) 24%, transparent); color: color-mix(in srgb, var(--wc) 45%, #fff); white-space: nowrap; }
+.wmain { min-width: 0; }
+.wt { display: block; font-family: var(--display); font-weight: 650; font-size: 14.5px; letter-spacing: -0.02em; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt:hover { text-decoration: underline; text-decoration-color: var(--ink3); }
+.wmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--ink3); margin-top: 3px; }
+.wch { display: inline-flex; align-items: center; gap: 5px; color: var(--ink2); font-weight: 600; }
+.wch i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
+.wwhy { font-weight: 700; color: var(--ink2); } .wwhy.late { color: #FF8F86; }
+.wtime { display: flex; flex-direction: column; gap: 5px; align-items: stretch; }
+.wbar { height: 6px; border-radius: 999px; background: #34343B; overflow: hidden; }
+.wbar i { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.wbar i.over { background: var(--warn); }
+.wnum { font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.wnum b.late { color: #FF8F86; } .wnum b.ok { color: #8FE3B6; }
+.wacts { display: flex; gap: 6px; }
+.wacts form { margin: 0; }
+.wbtn { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid #45454D; background: transparent; color: #C9C9D0; cursor: pointer;
+  display: grid; place-items: center; font-size: 13px; }
+.wbtn svg { width: 12px; height: 12px; }
+.wbtn:hover { border-color: var(--ok); color: var(--ok); }
+.wbtn.on { background: var(--ok); border-color: var(--ok); color: #06170E; }
+.wbtn.ok:hover { background: #26805A; border-color: #26805A; color: #fff; }
+.wproj { font-size: 11.5px; color: var(--ink3); white-space: nowrap; }
+.wwords, .wair { color: var(--ink3); }
+.focus { margin-bottom: 14px; }
+.focus .fhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.focus .fhead h2 { margin: 0; }
+.fchips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.fchip { padding: 7px 14px; border-radius: 999px; background: var(--sunk); color: var(--ink2); font-size: 12.5px; font-weight: 700; }
+.fchip:hover { background: var(--line); color: var(--ink); }
+.fchip.on { background: var(--yellow); color: #101012; }
+.fgo { display: inline-block; font-size: 15px; padding: 14px 28px; margin-bottom: 10px; }
+.freason { margin: 0 0 10px; color: var(--ink2); font-size: 13.5px; } .freason b { color: var(--ink); }
+.fstart { margin: 12px 0 0; } .fstart button svg { width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px; }
+.mydaygrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; align-items: start; }
+.panel h2 .sub { font-family: var(--ui); font-size: 12.5px; font-weight: 500; color: var(--ink3); letter-spacing: 0; }
+.panel h2 .sub .late, .panel h2 .sub b.late { color: #FF9C94; }
+.llegend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--ink3); margin-bottom: 12px; }
+.llegend span { display: inline-flex; align-items: center; gap: 6px; }
+.llegend i, .lcounts i { width: 9px; height: 9px; border-radius: 3px; background: var(--wc); }
+.lrows { display: flex; flex-direction: column; gap: 6px; }
+.lrow { display: grid; grid-template-columns: 62px minmax(0, 1fr) 76px; grid-template-areas: "day bar tot" ". counts counts"; align-items: center;
+  gap: 4px 10px; padding: 8px 10px; border-radius: 12px; }
+.lrow:hover { background: var(--sunk); }
+.lrow.today { background: rgba(243,233,108,.07); box-shadow: inset 0 0 0 1px rgba(243,233,108,.25); }
+.lday { grid-area: day; display: flex; flex-direction: column; font-size: 11.5px; color: var(--ink3); line-height: 1.25; }
+.lday b { color: var(--ink); font-size: 12.5px; }
+.lbar { grid-area: bar; display: flex; gap: 2px; height: 16px; border-radius: 999px; background: #26262C; overflow: hidden; }
+.lbar i { display: block; height: 100%; background: var(--wc); }
+.lbar em { font-style: normal; font-size: 11px; color: var(--ink3); padding: 0 10px; line-height: 16px; }
+.ltot { grid-area: tot; text-align: right; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; line-height: 1.2; }
+.ltot b { font-family: var(--display); font-size: 15px; color: var(--ink); }
+.ltot small { font-size: 10.5px; color: #8FE3B6; }
+.lcounts { grid-area: counts; display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; color: var(--ink3); }
+.lcounts span { display: inline-flex; align-items: center; gap: 5px; }
+.vorank { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: center; }
+.vn { font-family: var(--display); font-weight: 800; color: var(--ink3); text-align: right; font-variant-numeric: tabular-nums; }
+.reccard { padding: 30px 32px; box-shadow: inset 4px 0 0 var(--wc); margin-bottom: 14px; }
+.recpos { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
+.rectitle { font-family: var(--display); font-size: 34px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.08; margin: 8px 0 12px; }
+.recmeta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink2); margin-bottom: 16px; }
+.recscript { display: inline-flex; align-items: center; gap: 8px; } .recscript svg { width: 13px; height: 13px; } .recscript small { color: var(--ink3); font-weight: 500; }
+.recbrief { margin-top: 12px; } .recbrief summary { cursor: pointer; color: var(--ink2); font-weight: 700; font-size: 13px; }
+.recclock { margin: 22px 0 18px; display: flex; align-items: baseline; gap: 10px; }
+.recclock .tclock { font-family: var(--display); font-size: 64px; font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; line-height: 1; }
+.recclock small { color: var(--ink3); font-size: 14px; }
+.recacts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.recacts .clear { line-height: 1.2; }
+.recacts > a.clear, .recacts button.clear:not(.recbig) { padding: 12px 22px; }
+.recacts form { margin: 0; }
+.recbig { font-size: 16px; padding: 16px 30px; }
+.recdone h2 { font-size: 26px; }
+.fgsec { margin-bottom: 14px; }
+.fgsec .gapstrip { margin: 0; }
+.fgrow { position: relative; }
+.fgwhy { display: inline-block; margin: 0 0 2px 14px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #FF9C94; }
+header.page .nextbtn { align-self: center; margin-left: 12px; padding: 9px 16px; font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 760px) { header.page .nextbtn { display: inline-block; margin: 10px 0 0; } }
+.sideflag { margin-left: 6px; background: #E2574C; color: #1B0806; border-radius: 999px; padding: 0 7px; font-size: 11px; font-weight: 800; }
+@media (max-width: 1000px) { .mydaygrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .wrow { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "type acts" "main main" "time time"; gap: 6px 10px; }
+  .wrow .wtype { grid-area: type; } .wrow .wacts { grid-area: acts; } .wrow .wmain { grid-area: main; } .wrow .wtime { grid-area: time; }
+  .wrow.done { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "type num" "main main"; }
+  .wrow.done .wnum { grid-area: num; }
+  .wt { white-space: normal; }
+  .rectitle { font-size: 26px; } .recclock .tclock { font-size: 48px; }
+  .reccard { padding: 22px 20px; }
+  .fchips { margin-left: 0; }
+  .timerbar form:first-of-type { margin-left: 0; }
+}
 .row.uploaded { background: rgba(47,182,115,.10); box-shadow: inset 3px 0 0 #2FB673; }
 .uploaded-tag { padding: 1px 8px; border-radius: 6px; background: rgba(47,182,115,.22); color: #9BEBC2; font-weight: 700; font-size: 11px; }
 .paused-tag { padding: 1px 8px; border-radius: 6px; background: rgba(141,155,242,.18); color: #C3CAF8; font-weight: 700; font-size: 11px; }
@@ -1904,7 +2022,7 @@ export interface Shell {
   /** Channels with production paused, and the day each was paused (YYYY-MM-DD). */
   pausedChannels?: Record<string, string>;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number };
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
@@ -1958,6 +2076,9 @@ function layout(title: string, shell: Shell | null, body: string): string {
  */
 export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "Categories" | "Also" }> = [
   { key: "dashboard", label: "Dashboard", group: "Pages" },
+  { key: "myday", label: "My Day", group: "Pages" },
+  { key: "vo", label: "VO Queue", group: "Pages" },
+  { key: "forgotten", label: "Forgotten", group: "Pages" },
   { key: "calendar", label: "Calendar", group: "Pages" },
   { key: "reviews", label: "Revisions", group: "Pages" },
   { key: "queue", label: "Queue", group: "Pages" },
@@ -2007,6 +2128,15 @@ function sidebar(s: Shell): string {
     }
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
+      ${item("/my-day", "My Day", null, "myday")}
+      ${item("/vo", "VO Queue", s.nav.vo ?? null, "vo")}
+      ${
+        off.has("forgotten")
+          ? ""
+          : `<a class="${s.active === "forgotten" ? "on" : ""}" href="/forgotten">Forgotten${
+              s.nav.forgotten ? `<span class="sideflag" title="${s.nav.forgotten} thing${s.nav.forgotten === 1 ? "" : "s"} slipping through the cracks">${s.nav.forgotten}</span>` : ""
+            }</a>`
+      }
       ${
         off.has("calendar")
           ? ""
@@ -3021,7 +3151,7 @@ export function renderDashboard(
   return layout(
     "Dashboard",
     shell,
-    `${pageHeader("Dashboard", bell(data.notices ?? [], data.seen ?? 0))}
+    `${pageHeader("Dashboard", `<a class="clear nextbtn" href="/my-day?next=1#focus" title="The most pressing piece of your work, from My Day">What should I do next?</a>${bell(data.notices ?? [], data.seen ?? 0)}`)}
     <div class="stats">${tiles}</div>
     ${gapStrip(data.gaps ?? [])}
     ${daysOffStrip(shell.daysOff ?? [], data.shifted ?? [])}
@@ -6619,5 +6749,382 @@ export function renderPaused(shell: Shell, list: StoredRecord[]): string {
       dashboard columns, the bell and the reminders. Resume one (▶) and its deadline comes back as it was —
       if that date has passed, change it on its page.</p>
     ${rows(list, "Nothing paused.")}`,
+  );
+}
+
+// ── Ash's own work: My Day, the VO Queue, recording mode, forgotten work ───
+
+/** 40 → "40m", 130 → "2h 10m". */
+export function fmtMin(m: number): string {
+  const n = Math.max(0, Math.round(m));
+  if (n < 60) return `${n}m`;
+  return `${Math.floor(n / 60)}h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}m` : ""}`;
+}
+
+export interface TimerState {
+  recordId: number | null;
+  startedAt: Date;
+  title: string;
+  est: number;
+  spentBefore: number;
+}
+
+/** The timer that's running, as a bar with a live clock, Stop and Done. */
+function timerBar(t: TimerState | null, back: string): string {
+  if (!t) return "";
+  return `<div class="timerbar" role="status">
+    <span class="tdot"></span>
+    <span class="tlabel">Timing <b>${esc(t.title)}</b></span>
+    <span class="tclock" data-start="${t.startedAt.getTime()}" data-before="${Math.round(t.spentBefore * 60)}">0:00</span>
+    <span class="test">of ${esc(fmtMin(t.est))} est.</span>
+    <form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="clear secondary">Stop</button></form>
+    ${t.recordId ? `<form method="post" action="/timer/done"><input type="hidden" name="id" value="${t.recordId}"><input type="hidden" name="back" value="${esc(back)}"><button class="clear">✓ Done</button></form>` : ""}
+  </div>
+  <script>
+  (function () {
+    var el = document.querySelector(".tclock");
+    if (!el) return;
+    var start = Number(el.getAttribute("data-start")), before = Number(el.getAttribute("data-before"));
+    function tick() {
+      var s = Math.max(0, Math.floor((Date.now() - start) / 1000) + before);
+      var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+      el.textContent = (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0");
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+  </script>`;
+}
+
+/** A piece of work as a row: its kind, what it is, why now, estimate vs tracked, and start / done. */
+function workRow(i: WorkItem, now: Date, running: number | null, back: string, extra = ""): string {
+  const t = TYPE_BY_ID.get(i.type)!;
+  const pct = Math.min(100, Math.round((i.spent / i.est) * 100));
+  const over = i.spent > i.est;
+  const why = whyNow(i, now);
+  const late = why.endsWith("late");
+  const on = i.id !== null && running === i.id;
+  return `<div class="wrow${on ? " on" : ""}${late ? " late" : ""}" style="--wc:${t.colour}">
+    <span class="wtype">${esc(t.short)}</span>
+    <div class="wmain">
+      <a class="wt" href="${i.id ? `/r/${i.id}` : "/recurring"}">${esc(i.title)}</a>
+      <div class="wmeta">${i.channel && i.type !== "batch" && i.type !== "longform" ? `<span class="wch" style="--ch:${channelColour(i.channel)}"><i></i>${esc(i.channel.replace(/^Specular /, ""))}</span>` : ""}<span class="wwhy${late ? " late" : ""}">${esc(why)}</span>${extra}</div>
+    </div>
+    <div class="wtime" title="${esc(`${fmtMin(i.spent)} tracked of ${fmtMin(i.est)} estimated`)}">
+      <span class="wbar"><i style="width:${pct}%"${over ? ' class="over"' : ""}></i></span>
+      <span class="wnum">${i.spent >= 1 ? `${esc(fmtMin(i.spent))} / ` : ""}${esc(fmtMin(i.est))}</span>
+    </div>
+    <div class="wacts">${
+      i.id === null
+        ? `<span class="wproj" title="Opens on its day">not open yet</span>`
+        : `${
+            on
+              ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
+              : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
+          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
+    }</div>
+  </div>`;
+}
+
+/**
+ * A list of work with the day's batches folded into one line ("12 batches ·
+ * 2h left"), opened to tick them one by one — a dozen 10-minute rows would
+ * bury the VOs.
+ */
+function groupBatches(items: WorkItem[], now: Date, running: number | null, back: string): string {
+  const batches = items.filter((i) => i.type === "batch");
+  const rest = items.filter((i) => i.type !== "batch");
+  if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
+  const est = batches.reduce((n, i) => n + i.est, 0);
+  const spent = batches.reduce((n, i) => n + i.spent, 0);
+  const left = batches.reduce((n, i) => n + remaining(i), 0);
+  const t = TYPE_BY_ID.get("batch")!;
+  const pct = Math.min(100, Math.round((spent / est) * 100));
+  const group = `<details class="wgroup"${batches.some((i) => i.id === running) ? " open" : ""}>
+    <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
+      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${ESTIMATE_MIN.batch}m each</span></div></div>
+      <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
+      <div class="wacts"><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
+    </summary>
+    <div class="wlist">${batches.map((i) => workRow(i, now, running, back)).join("")}</div>
+  </details>`;
+  // The group sits where its first batch would have.
+  const at = items.indexOf(batches[0]!);
+  const before = rest.filter((i) => items.indexOf(i) < at);
+  const after = rest.filter((i) => items.indexOf(i) > at);
+  return [...before.map((i) => workRow(i, now, running, back)), group, ...after.map((i) => workRow(i, now, running, back))].join("");
+}
+
+/** One day's load as a stacked bar, by kind of work. */
+function loadBar(d: DayLoad, max: number, today: string, trackedToday: number): string {
+  const segs = WORK_TYPES.filter((t) => d.byType[t.id].est > 0)
+    .map((t) => `<i style="--wc:${t.colour};width:${((d.byType[t.id].est / max) * 100).toFixed(2)}%" title="${esc(`${t.label}: ${d.byType[t.id].n} · ${fmtMin(d.byType[t.id].est)}`)}"></i>`)
+    .join("");
+  const at = new Date(`${d.day}T12:00:00Z`);
+  const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(at);
+  const counts = WORK_TYPES.filter((t) => d.byType[t.id].n > 0)
+    .map((t) => `<span style="--wc:${t.colour}"><i></i>${d.byType[t.id].n} ${esc(t.short)}</span>`)
+    .join("");
+  return `<a class="lrow${d.day === today ? " today" : ""}" href="/day/${d.day}?mode=deadlines">
+    <span class="lday"><b>${esc(d.day === today ? "Today" : wd)}</b>${esc(usDate(d.day).replace(/\/\d{4}$/, ""))}</span>
+    <span class="lbar">${segs || '<em>nothing due</em>'}</span>
+    <span class="ltot"><b>${esc(fmtMin(d.est))}</b>${d.day === today && trackedToday >= 1 ? `<small>${esc(fmtMin(trackedToday))} tracked</small>` : ""}</span>
+    <span class="lcounts">${counts}</span>
+  </a>`;
+}
+
+export interface MyDayData {
+  now: Date;
+  today: string;
+  required: WorkItem[];
+  ahead: WorkItem[];
+  done: WorkItem[];
+  loads: DayLoad[];
+  trackedToday: number;
+  running: TimerState | null;
+  focus: FocusPick | null;
+  budget: number | null;
+  asked: boolean;
+  voLeft: { n: number; minutes: number };
+}
+
+/**
+ * My Day: what today holds and how long it takes, the week ahead by kind of
+ * work, a timer on anything, "What should I do next?", and what to do ahead
+ * once today's is done.
+ */
+export function renderMyDay(shell: Shell, d: MyDayData): string {
+  const running = d.running?.recordId ?? null;
+  const back = "/my-day";
+  const estToday = d.loads.find((l) => l.day === d.today);
+  const leftToday = d.required.reduce((n, i) => n + remaining(i), 0);
+  const tiles = [
+    { n: fmtMin(estToday?.est ?? 0), l: "today's load" },
+    { n: fmtMin(leftToday), l: "left today" },
+    { n: fmtMin(d.trackedToday), l: "tracked today" },
+    { n: `${d.voLeft.n}`, l: `VOs left · ${fmtMin(d.voLeft.minutes)}` },
+  ]
+    .map((t) => `<div class="stat"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+
+  const budgets = [15, 30, 60, 120];
+  const chip = (b: number | null, label: string) =>
+    `<a class="fchip${d.asked && d.budget === b ? " on" : ""}" href="/my-day?next=1${b ? `&amp;budget=${b}` : ""}#focus">${label}</a>`;
+  const pick = d.focus;
+  const focus = `<section class="panel focus" id="focus">
+    <div class="fhead"><h2>What should I do next?</h2>
+      <div class="fchips">${chip(null, "Just tell me")}${budgets.map((b) => chip(b, b < 60 ? `${b} min` : b === 60 ? "1 hr" : "2 hrs")).join("")}</div></div>
+    ${
+      !d.asked
+        ? `<a class="clear fgo" href="/my-day?next=1#focus">What should I do next?</a>
+           <p class="hint" style="padding:0">Picks the most pressing piece of your work: late first, then due soonest, VOs a little ahead since the editors are waiting on them. Choose a time and it finds work that fits.</p>`
+        : pick
+          ? `<p class="freason">${pick.ahead ? "Everything due is done, so this is from Do ahead. " : ""}${esc(pick.reason)} · <b>${esc(fmtMin(pick.minutes))}</b></p>
+             <div class="wlist">${pick.items.map((i) => workRow(i, d.now, running, back)).join("")}</div>
+             ${
+               pick.items[0]?.id && running !== pick.items[0].id
+                 ? `<form method="post" action="/timer/start" class="fstart"><input type="hidden" name="id" value="${pick.items[0].id}"><input type="hidden" name="back" value="${back}"><button class="clear">${PLAY_ICON} Start on it</button></form>`
+                 : ""
+             }`
+          : `<p class="freason">Nothing to do. Everything open is done.</p>`
+    }
+  </section>`;
+
+  const max = Math.max(60, ...d.loads.map((l) => l.est));
+  const week = `<section class="panel"><h2>The week ahead <span class="sub">— estimated minutes a day, by kind of work</span></h2>
+    <div class="llegend">${WORK_TYPES.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} · ${ESTIMATE_MIN[t.id]}m</span>`).join("")}</div>
+    <div class="lrows">${d.loads.map((l) => loadBar(l, max, d.today, d.trackedToday)).join("")}</div>
+  </section>`;
+
+  const todayList = `<section class="panel"><h2>Today <span class="sub">— ${d.required.length} to do · ${esc(fmtMin(leftToday))} left${
+    d.required.some((i) => whyNow(i, d.now).endsWith("late")) ? ` · <b class="late">${d.required.filter((i) => whyNow(i, d.now).endsWith("late")).length} late</b>` : ""
+  }</span></h2>
+    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back)}</div>` : `<div class="empty">Everything due today is done. Do ahead is below.</div>`}
+  </section>`;
+
+  const estDone = d.done.reduce((n, i) => n + i.est, 0);
+  const spentDone = d.done.reduce((n, i) => n + i.spent, 0);
+  const doneList = d.done.length
+    ? `<section class="panel"><h2>Done today <span class="sub">— ${d.done.length} · estimated ${esc(fmtMin(estDone))}${
+        spentDone >= 1 ? ` · tracked ${esc(fmtMin(spentDone))}` : ""
+      }</span></h2>
+      <div class="wlist done">${d.done
+        .map((i) => {
+          const t = TYPE_BY_ID.get(i.type)!;
+          const diff = i.spent >= 1 ? Math.round(i.spent - i.est) : null;
+          return `<div class="wrow done" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
+            <div class="wmain"><a class="wt" href="/r/${i.id}">${esc(i.title)}</a></div>
+            <div class="wnum">${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
+              diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
+            }</div></div>`;
+        })
+        .join("")}</div></section>`
+    : "";
+
+  const ahead = `<section class="panel" id="ahead"><h2>Do ahead <span class="sub">— ${
+    d.required.length ? "once today's is done" : "today's is done, so these are next"
+  } · VOs first, since the editors can start once they're recorded</span></h2>
+    ${d.ahead.length ? `<div class="wlist">${d.ahead.map((i) => workRow(i, d.now, running, back)).join("")}</div>` : `<div class="empty">Nothing ahead yet.</div>`}
+  </section>`;
+
+  return layout(
+    "My Day",
+    shell,
+    `${pageHeader("My Day", `<a class="clear secondary" href="/vo">VO Queue</a>`)}
+    ${timerBar(d.running, back)}
+    <div class="stats">${tiles}</div>
+    ${focus}
+    <div class="mydaygrid">${todayList}${week}</div>
+    ${doneList}
+    ${ahead}`,
+  );
+}
+
+export interface VoQueueData {
+  now: Date;
+  queue: WorkItem[];
+  running: TimerState | null;
+}
+
+/** The VO queue: every open Stories VO, most pressing first, with what it'll take. */
+export function renderVoQueue(shell: Shell, d: VoQueueData): string {
+  const words = d.queue.reduce((n, i) => n + (i.wordCount ?? 0), 0);
+  const read = d.queue.reduce((n, i) => n + (readMinutes(i.wordCount) ?? 0), 0);
+  const est = d.queue.reduce((n, i) => n + remaining(i), 0);
+  const tiles = [
+    { n: String(d.queue.length), l: "VOs to record" },
+    { n: fmtMin(est), l: `left · ${ESTIMATE_MIN.vo} min a VO` },
+    { n: words ? words.toLocaleString("en-US") : "—", l: "words" },
+    { n: read ? fmtMin(read) : "—", l: `reading time · ${VO_WPM} wpm` },
+  ]
+    .map((t) => `<div class="stat"><div class="n">${esc(t.n)}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+  const running = d.running?.recordId ?? null;
+  const list = d.queue
+    .map((i, n) => {
+      const hit = i.id ? scriptFor({ id: i.id, code: i.code, title: i.title }) : null;
+      const extra = [
+        `<span class="wwords">${i.wordCount ? `${i.wordCount.toLocaleString("en-US")} words · ~${readMinutes(i.wordCount)}m read` : "no word count"}</span>`,
+        i.airDate ? `<span class="wair">airs ${esc(usDate(i.airDate))}</span>` : "",
+        hit ? `<a class="scriptmark has" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}Script</a>` : "",
+      ].join("");
+      return `<div class="vorank"><span class="vn">${n + 1}</span>${workRow(i, d.now, running, "/vo", extra)}</div>`;
+    })
+    .join("");
+  return layout(
+    "VO Queue",
+    shell,
+    `${pageHeader("VO Queue", d.queue.length ? `<a class="clear" href="/vo/record">${PLAY_ICON} Recording mode</a>` : "")}
+    ${timerBar(d.running, "/vo")}
+    <div class="stats">${tiles}</div>
+    <p class="labsub">Every open Stories VO, most pressing first: late ones, then by VO deadline, then by air date. Recording mode takes them one at a time: it times each one, and ✓ Recorded clears it and moves to the next.</p>
+    <section class="panel">${list ? `<div class="wlist">${list}</div>` : `<div class="empty">No VOs to record.</div>`}</section>`,
+  );
+}
+
+export interface RecordingData {
+  now: Date;
+  current: WorkItem | null;
+  position: number;
+  total: number;
+  next: WorkItem[];
+  running: TimerState | null;
+  skipped: number[];
+  brief: string | null;
+}
+
+/** Recording mode: one VO at a time, timed, and on to the next when it's done. */
+export function renderRecording(shell: Shell, d: RecordingData): string {
+  const c = d.current;
+  const skip = d.skipped.join(",");
+  if (!c) {
+    return layout(
+      "Recording",
+      shell,
+      `${pageHeader("Recording mode", `<a class="clear secondary" href="/vo">← VO Queue</a>`)}
+      <section class="panel recdone"><h2>That's every VO.</h2><p class="hint" style="padding:0">${d.skipped.length ? `${d.skipped.length} skipped — <a href="/vo/record">go back to them</a>.` : "Nothing left to record."}</p></section>`,
+    );
+  }
+  const hit = c.id ? scriptFor({ id: c.id, code: c.code, title: c.title }) : null;
+  const why = whyNow(c, d.now);
+  return layout(
+    "Recording",
+    shell,
+    `${pageHeader("Recording mode", `<a class="clear secondary" href="/vo">← VO Queue</a>`)}
+    <section class="panel reccard" style="--wc:${TYPE_BY_ID.get("vo")!.colour}">
+      <div class="recpos">VO ${d.position} of ${d.total}${d.skipped.length ? ` · ${d.skipped.length} skipped` : ""}</div>
+      <h1 class="rectitle">${esc(c.title)}</h1>
+      <div class="recmeta">
+        ${c.channel ? `<span class="wch" style="--ch:${channelColour(c.channel)}"><i></i>${esc(c.channel)}</span>` : ""}
+        <span class="wwhy${why.endsWith("late") ? " late" : ""}">VO ${esc(why)}</span>
+        ${c.airDate ? `<span>airs ${esc(usDate(c.airDate))}</span>` : ""}
+        <span>${c.wordCount ? `${c.wordCount.toLocaleString("en-US")} words · ~${readMinutes(c.wordCount)} min read` : "no word count"}</span>
+        <span>${ESTIMATE_MIN.vo} min est.</span>
+      </div>
+      ${hit ? `<a class="clear secondary recscript" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}>${SCRIPT_ICON} Open the script <small>(${esc(hit.where.join(" · "))})</small></a>` : `<p class="hint" style="padding:0">No script found for it — not attached, not in Story Lab, not on the Scripts tab.</p>`}
+      ${d.brief ? `<details class="recbrief"><summary>Story brief</summary><div class="brief">${esc(d.brief)}</div></details>` : ""}
+      <div class="recclock"><span class="tclock" data-start="${d.running?.startedAt.getTime() ?? Date.now()}" data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${ESTIMATE_MIN.vo} min</small></div>
+      <div class="recacts">
+        <form method="post" action="/vo/record/done"><input type="hidden" name="id" value="${c.id}"><input type="hidden" name="skip" value="${esc(skip)}"><button class="clear recbig">✓ Recorded — next</button></form>
+        <a class="clear secondary" href="/vo/record?skip=${esc([...d.skipped, c.id].join(","))}">Skip for now</a>
+        <form method="post" action="/timer/stop"><input type="hidden" name="back" value="/vo"><button class="clear secondary">Stop</button></form>
+      </div>
+    </section>
+    ${d.next.length ? `<section class="panel"><h2>Up next</h2><div class="wlist">${d.next.map((i) => workRow(i, d.now, null, "/vo")).join("")}</div></section>` : ""}
+    <script>
+    (function () {
+      var el = document.querySelector(".recclock .tclock");
+      var start = Number(el.getAttribute("data-start")), before = Number(el.getAttribute("data-before"));
+      function tick() {
+        var s = Math.max(0, Math.floor((Date.now() - start) / 1000) + before);
+        el.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+    </script>`,
+  );
+}
+
+export interface ForgottenData {
+  gaps: UploadGap[];
+  flags: Forgotten[];
+}
+
+const FORGOTTEN_KINDS: Array<{ kind: Forgotten["kind"]; label: string; sub: string }> = [
+  { kind: "overdue-vo", label: "Overdue VOs", sub: "past their VO time" },
+  { kind: "overdue-revision", label: "Overdue revisions", sub: "past their review time" },
+  { kind: "not-started", label: "Not started, and airing soon", sub: "airs within 7 days with no script anywhere and no cut on Frame.io yet" },
+  { kind: "vo-close", label: "VO still open close to air", sub: "airs within 3 days" },
+  { kind: "unsorted", label: "Unsorted", sub: "filed 2+ days ago and still not in a category" },
+];
+
+/** What's slipping through the cracks, on one page. */
+export function renderForgotten(shell: Shell, d: ForgottenData): string {
+  const byChannel = new Map<string, UploadGap[]>();
+  for (const g of d.gaps) byChannel.set(g.channel, [...(byChannel.get(g.channel) ?? []), g]);
+  const total = d.flags.length + d.gaps.length;
+  const tiles = [
+    { n: d.gaps.length, l: "nothing assigned" },
+    ...FORGOTTEN_KINDS.slice(0, 3).map((k) => ({ n: d.flags.filter((f) => f.kind === k.kind).length, l: k.label.toLowerCase() })),
+  ]
+    .map((t) => `<div class="stat${t.n ? " alert" : " zero"}"><div class="n">${t.n}</div><div class="l">${esc(t.l)}</div></div>`)
+    .join("");
+  const gapsPanel = d.gaps.length
+    ? `<section class="panel fgsec"><h2>Nothing assigned <span class="sub">— expected uploads in the next 8 days with no video on the day</span></h2>${gapStrip(d.gaps)}</section>`
+    : "";
+  const sections = FORGOTTEN_KINDS.map((k) => {
+    const list = d.flags.filter((f) => f.kind === k.kind);
+    if (!list.length) return "";
+    return `<section class="panel fgsec"><h2>${esc(k.label)} <span class="sub">— ${list.length} · ${esc(k.sub)}</span></h2>
+      <div class="rows">${list.map((f) => `<div class="fgrow"><span class="fgwhy">${esc(f.why)}</span>${row(f.record)}</div>`).join("")}</div></section>`;
+  }).join("");
+  return layout(
+    "Forgotten work",
+    shell,
+    `${pageHeader("Forgotten work")}
+    <p class="labsub">Checked on every page load: upcoming uploads with nothing assigned, overdue VOs and revisions, videos airing within a week with no script and no cut, VOs still open close to air, and anything left unsorted.</p>
+    <div class="stats">${tiles}</div>
+    ${total ? `${gapsPanel}${sections}` : `<div class="empty">Nothing's slipping. Every upload is covered and nothing's overdue.</div>`}`,
   );
 }

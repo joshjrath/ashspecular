@@ -695,6 +695,44 @@ export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
   return grouped;
 }
 
+/**
+ * Everything open that's Ash's to do, soonest first: Stories and Gaming
+ * videos, revisions, and daily batches from today on (a day gone by is gone).
+ * Paused work isn't work right now.
+ */
+export async function openWork(): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'open' AND paused_at IS NULL
+       AND NOT (batch_no IS NOT NULL AND air_date < (CASE WHEN category IN ('bits', 'reading')
+         THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
+         ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))
+     ORDER BY ${DUE} ASC NULLS LAST, created_at ASC LIMIT 800`,
+  );
+  return rows.map(hydrate);
+}
+
+/** Every revision's code and title (open or reviewed) — a cut exists for that video. */
+export async function revisionKeys(): Promise<{ codes: Set<string>; titles: Set<string> }> {
+  const { rows } = await pool.query<{ code: string | null; title: string | null }>(
+    `SELECT code, title FROM records WHERE kind = 'review' AND status <> 'removed'`,
+  );
+  const norm = (t: string) => t.toLowerCase().replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  return {
+    codes: new Set(rows.filter((r) => r.code).map((r) => r.code!.toUpperCase())),
+    titles: new Set(rows.filter((r) => r.title).map((r) => norm(r.title!))),
+  };
+}
+
+/** What was cleared today, in the org's zone — My Day's "done" side. */
+export async function doneToday(): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'done' AND done_at IS NOT NULL
+       AND (done_at AT TIME ZONE '${ORG_TZ}')::date = (now() AT TIME ZONE '${ORG_TZ}')::date
+     ORDER BY done_at DESC LIMIT 300`,
+  );
+  return rows.map(hydrate);
+}
+
 /** One day's batches, newest number first. Bounded by construction. */
 export async function listBatchesOn(date: string): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(

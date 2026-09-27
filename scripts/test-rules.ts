@@ -58,6 +58,8 @@ import jpegJs from "jpeg-js";
 import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, uploadGaps } from "../src/web/gaps.js";
+import { ESTIMATE_MIN, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
+import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { scriptFor, setScriptIndex } from "../src/web/scriptindex.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../src/revisions/comments.js";
@@ -1017,7 +1019,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 8 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 11 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -1596,6 +1598,64 @@ t("…and its channel picker's script compiles", [...uaShut.matchAll(/<script>([
 const uaBack = renderStoryLab(shellFix, { ...labBase, unassigned: { videos: uaVideos.slice(1), total: 10, open: true, linked: "What If Gojo Was In FNAF?", error: "" } });
 t("after linking it comes back open, saying so", [uaBack.includes('id="unassigned" open'), uaBack.includes("Script linked to <b>What If Gojo Was In FNAF?</b>. It's that video's script now")], [true, true]);
 t("…and with nothing unassigned it says so", renderStoryLab(shellFix, { ...labBase, unassigned: { videos: [], total: 3, open: true, linked: "", error: "" } }).includes("Every Stories upload has its script"), true);
+
+section("My Day — Ash's work as time");
+const wNow = new Date("2026-09-27T15:00:00Z"); // 11 AM ET
+const wToday = "2026-09-27";
+const mk = (o: Record<string, unknown>) => ({ ...plainRec, pausedAt: null, noScriptAt: null, uploadedAt: null, pinnedAt: null, batchNo: null, kind: "assignment", status: "open", voDue: null, deadline: null, scriptDue: null, airDate: null, code: null, wordCount: null, createdAt: new Date("2026-09-20T12:00:00Z"), ...o }) as typeof plainRec;
+const lateVo = mk({ id: 201, category: "stories", title: "Late VO", voDue: new Date("2026-09-26T03:59:00Z"), airDate: "2026-09-29", wordCount: 4500 });
+const todayVo = mk({ id: 202, category: "stories", title: "Today VO", voDue: new Date("2026-09-28T03:59:00Z"), airDate: "2026-10-03", wordCount: 3000 });
+const aheadVo = mk({ id: 203, category: "stories", title: "Ahead VO", voDue: new Date("2026-10-02T03:59:00Z"), airDate: "2026-10-08" });
+const gameVid = mk({ id: 204, category: "gaming", title: "SMP ep 10", deadline: new Date("2026-09-27T22:00:00Z") });
+const batchToday = mk({ id: 205, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-27", deadline: new Date("2026-09-27T22:00:00Z") });
+const revToday = mk({ id: 206, kind: "review", category: "stories", title: "Rev", deadline: new Date("2026-09-27T20:00:00Z") });
+const wLongForm = mk({ id: 207, category: "movies", channel: "Specular", batchNo: 1, title: "Specular", airDate: "2026-09-30", deadline: new Date("2026-09-30T22:00:00Z") });
+t("each kind of work has its estimate: VO 40, batch 10, Gaming 45", [typeOf(lateVo), ESTIMATE_MIN.vo, typeOf(batchToday), ESTIMATE_MIN.batch, typeOf(gameVid), ESTIMATE_MIN.gaming, typeOf(revToday), typeOf(wLongForm)], ["vo", 40, "batch", 10, "gaming", 45, "revision", "longform"]);
+const wItems = [lateVo, todayVo, aheadVo, gameVid, batchToday, revToday, wLongForm].map((r) => toItem(r, r.id === 202 ? 25 : 0)!);
+const loads = dayLoads(wItems, ["2026-09-27", "2026-09-28", "2026-10-01"], wToday);
+t("today's load counts what's due today and anything late", [loads[0]!.est, loads[0]!.byType.vo.n, loads[0]!.left], [40 + 40 + 45 + 10 + 15, 2, 40 + 15 + 45 + 10 + 15]);
+t("a future day holds what's due that day", loads[2]!.byType.vo, { n: 1, est: 40 });
+const proj = projectBatches(["2026-09-28"], [batchToday], { paused: new Set(["Specular Studios Bits"]), daysOff: new Set() });
+t("batches that will open on a day count before they're open — a paused channel's don't", [proj.length > 5, proj.every((i) => i.projected && i.id === null), proj.some((i) => i.channel === "Specular Studios Bits")], [true, true, false]);
+t("…and a day off has none", projectBatches(["2026-09-28"], [], { paused: new Set(), daysOff: new Set(["2026-09-28"]) }).length, 0);
+const next1 = whatNext(wItems, wNow, null)!;
+t("What should I do next: the late one first", [next1.items[0]!.id, next1.ahead], [201, false]);
+const next30 = whatNext(wItems, wNow, 30)!;
+t("…with 30 minutes: the most pressing pieces that fit", [next30.items.map((i) => i.id), next30.minutes <= 30], [[206, 202], true]);
+const next15 = whatNext([toItem(lateVo)!], wNow, 15)!;
+t("…nothing fits: start the most pressing anyway", [next15.items[0]!.id, next15.reason.startsWith("Nothing fits 15 min")], [201, true]);
+const aheadOnly = whatNext([toItem(aheadVo)!, toItem(wLongForm)!], wNow, null)!;
+t("…everything due done: from Do ahead", [aheadOnly.ahead, aheadOnly.items[0]!.id], [true, 203]);
+t("Do ahead puts VOs first — the team waits on them", doAhead(wItems, wNow).map((i) => i.id), [203, 207]);
+t("the VO queue: late first, then by VO time", voQueue(wItems, wNow).map((i) => i.id), [201, 202, 203]);
+t("reading time from the word count, at 150 wpm", [readMinutes(4500), readMinutes(null), fmtMin(40), fmtMin(130), fmtMin(60)], [30, null, "40m", "2h 10m", "1h"]);
+
+const myDay = renderMyDay(shellFix, {
+  now: wNow, today: wToday, required: wItems.filter((i) => i.day! <= wToday), ahead: doAhead(wItems, wNow), done: [],
+  loads, trackedToday: 12, running: { recordId: 202, startedAt: new Date(wNow.getTime() - 60_000), title: "Today VO", est: 40, spentBefore: 24 },
+  focus: next30, budget: 30, asked: true, voLeft: { n: 3, minutes: 95 },
+});
+t("My Day: the load, a timer running, the week by kind, and What next", [myDay.includes('class="timerbar"'), myDay.includes("today's load"), myDay.includes('class="lrow today"'), myDay.includes("2 pieces that fit 30 min"), /class="fchip on"[^>]*>30 min/.test(myDay)], [true, true, true, true, true]);
+t("…each piece shows tracked against its estimate, with start and done", [myDay.includes("25m / 40m"), myDay.includes('action="/timer/start"'), myDay.includes('action="/timer/done"'), myDay.includes('class="wbtn on"')], [true, true, true, true]);
+const voPage = renderVoQueue(shellFix, { now: wNow, queue: voQueue(wItems, wNow), running: null });
+t("VO Queue: count, time left, words and reading time, and recording mode", [voPage.includes("VOs to record"), voPage.includes("7,500"), voPage.includes('href="/vo/record"'), voPage.includes("4,500 words · ~30m read")], [true, true, true, true]);
+const wRec = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [toItem(todayVo)!], running: null, skipped: [], brief: "A brief." });
+t("recording mode: one VO, a clock, Recorded — next, and Skip", [wRec.includes("VO 1 of 3"), wRec.includes('action="/vo/record/done"'), wRec.includes('href="/vo/record?skip=201"'), wRec.includes("Up next")], [true, true, true, true]);
+
+section("Forgotten work");
+const soonNoScript = mk({ id: 210, category: "stories", title: "Airs Soon Unwritten", airDate: "2026-09-30" });
+const soonWithCut = mk({ id: 211, category: "stories", title: "Airs Soon Cut", airDate: "2026-09-30" });
+const voClose = mk({ id: 212, category: "stories", title: "VO Close", airDate: "2026-09-29", voDue: new Date("2026-09-28T03:59:00Z") });
+const oldUnsorted = mk({ id: 213, category: "unknown", title: "What is this", createdAt: new Date("2026-09-23T12:00:00Z") });
+const lateRev = mk({ id: 214, kind: "review", category: "gaming", title: "Late Rev", deadline: new Date("2026-09-26T12:00:00Z") });
+const pausedLate = mk({ id: 215, category: "stories", title: "Paused", voDue: new Date("2026-09-20T03:59:00Z"), pausedAt: new Date() });
+const flags = forgottenWork([lateVo, soonNoScript, soonWithCut, voClose, oldUnsorted, lateRev, pausedLate], wNow, {
+  script: (r) => r.id === 212,
+  revision: (r) => r.id === 211,
+});
+t("flags: overdue VO, overdue revision, not started, VO close to air, unsorted — not what's paused", flags.map((f) => `${f.kind}:${f.record.id}`), ["overdue-vo:201", "not-started:210", "vo-close:212", "unsorted:213", "overdue-revision:214"]);
+const fPage = renderForgotten(shellFix, { gaps: channelGaps("Specular Anime", 4, ["2026-09-24"], wToday), flags });
+t("the Forgotten page: nothing assigned, then each kind with why", [fPage.includes("Nothing assigned"), fPage.includes("Overdue VOs"), fPage.includes("no script, no cut yet"), fPage.includes("Unsorted")], [true, true, true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

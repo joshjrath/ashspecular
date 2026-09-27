@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-27-my-day-vo-queue-focus",
+    title: "My Day, the VO Queue, Focus Mode and a forgotten-work detector",
+    changes: [
+      { text: "My Day: each day's estimated workload by kind of work (VO 40m, Bits/Reading batch 10m, Gaming 45m), with timers to track actual against estimate.", href: "/my-day" },
+      { text: "What should I do next? picks the most pressing piece of your work, or what fits 15 min, 30 min, 1 hr or 2 hrs.", href: "/my-day?next=1#focus" },
+      { text: "Do ahead: once today's is done, the best work to knock out early, with VOs first since the team is waiting on them.", href: "/my-day#ahead" },
+      { text: "VO Queue: every VO in priority order, with word counts, reading time and total time left, plus a recording mode that moves to the next when one's done.", href: "/vo" },
+      { text: "Forgotten: upcoming uploads with nothing assigned, overdue VOs and revisions, and videos airing soon that haven't started.", href: "/forgotten" },
+    ],
+  },
+  {
     id: "2026-09-26-reviewed-unassigned-pills",
     title: "Reviewed revisions kept in History, Unassigned videos, and the Recurring segments fixed",
     changes: [

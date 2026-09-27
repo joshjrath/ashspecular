@@ -47,6 +47,10 @@ import {
   type GapNotice,
   channelAirDays,
   storiesOnBoard,
+  openWork,
+  doneToday,
+  revisionKeys,
+  getRecord as getRecordById,
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
@@ -80,6 +84,11 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
+import { minutesByDay, minutesSpent, runningTimer, startTimer, stopTimer } from "../db/timers.js";
+import {
+  dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, toItem, voQueue, whatNext,
+  type WorkItem,
+} from "./work.js";
 import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
 import { channelMarks, getReview, pastForChannel, revisionHistory, saveReview, scoresFor, setChannelMark, videoKey } from "../db/revisions.js";
 import { commentsFromFrameio, ownNotes, parsePasted } from "../revisions/comments.js";
@@ -101,6 +110,7 @@ import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
+import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, type TimerState } from "./page.js";
 import { DAY_SPAN, RAIL_ITEMS, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
@@ -156,8 +166,41 @@ async function refreshScriptIndex(): Promise<void> {
   });
 }
 
+/**
+ * Ash's work, with the time tracked on each piece: everything open that's
+ * hers, what she cleared today, the timer running, and the forgotten-work
+ * checks. Shared by My Day, the VO Queue, recording mode, Forgotten and the
+ * sidebar's counts.
+ */
+async function loadWork(now = new Date()) {
+  const [open, done, running, revs, paused] = await Promise.all([
+    openWork(),
+    doneToday(),
+    runningTimer(),
+    revisionKeys(),
+    pausedChannels().catch(() => new Map<string, Date>()),
+  ]);
+  const spent = await minutesSpent([...open, ...done].map((r) => r.id));
+  const items = open.map((r) => toItem(r, spent.get(r.id) ?? 0)).filter((i): i is WorkItem => i !== null);
+  const doneItems = done.map((r) => toItem(r, spent.get(r.id) ?? 0)).filter((i): i is WorkItem => i !== null);
+  const norm = (t: string) => t.toLowerCase().replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const forgotten = forgottenWork(open, now, {
+    script: (r) => Boolean(scriptFor({ id: r.id, code: r.code, title: r.title })),
+    revision: (r) => Boolean((r.code && revs.codes.has(r.code.toUpperCase())) || (r.title && revs.titles.has(norm(r.title)))),
+  });
+  let timer: TimerState | null = null;
+  if (running) {
+    const rec = running.recordId ? (open.find((r) => r.id === running.recordId) ?? (await getRecordById(running.recordId))) : null;
+    const item = rec ? toItem(rec, 0) : null;
+    const before = running.recordId ? (spent.get(running.recordId) ?? 0) - (now.getTime() - running.startedAt.getTime()) / 60_000 : 0;
+    timer = { recordId: running.recordId, startedAt: running.startedAt, title: item?.title ?? rec?.title ?? "Work", est: item?.est ?? 0, spentBefore: Math.max(0, before) };
+  }
+  return { open, items, doneItems, timer, forgotten, paused };
+}
+
 async function shell(active: string): Promise<Shell> {
   await refreshScriptIndex().catch((err) => console.error("[scripts] index failed:", err));
+  const work = hasDatabase ? await loadWork().catch(() => null) : null;
   const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps, chPaused] = await Promise.all([
     categoryCounts(),
     listReviews(200),
@@ -184,6 +227,8 @@ async function shell(active: string): Promise<Shell> {
       recurring: batchesOpen,
       calendar: month.length,
       behind,
+      vo: work ? work.items.filter((i) => i.type === "vo").length : undefined,
+      forgotten: work ? work.forgotten.length + gaps.length : undefined,
     },
     lastIntake: at,
     removed,
@@ -1221,6 +1266,92 @@ export async function startWeb(): Promise<void> {
       gapCache = null;
     }
     return reply.redirect(backTo(request.headers.referer, "/"));
+  });
+
+  // ── My Day, timers, the VO Queue, recording mode, forgotten work ──────
+  const safeBack = (b: unknown, fallback: string) => (typeof b === "string" && /^\/[a-z0-9/_?=&#.-]*$/i.test(b) ? b : fallback);
+
+  app.get<{ Querystring: { next?: string; budget?: string } }>("/my-day", async (request, reply) => {
+    const now = new Date();
+    const [s, work, tracked] = await Promise.all([shell("myday"), loadWork(now), minutesByDay(ORG_TZ, dateIn(ORG_TZ, now))]);
+    const today = dateIn(ORG_TZ, now);
+    const days = nextDays(7, now);
+    const offs = new Set(s.daysOff ?? []);
+    const projected = projectBatches(days.slice(1), work.open, { paused: new Set(work.paused.keys()), daysOff: offs });
+    const all = [...work.items, ...projected];
+    const budget = [15, 30, 60, 120].includes(Number(request.query.budget)) ? Number(request.query.budget) : null;
+    const asked = request.query.next !== undefined;
+    const required = work.items.filter((i) => isRequired(i, today)).sort((a, b) => (a.due?.getTime() ?? Infinity) - (b.due?.getTime() ?? Infinity));
+    const vos = work.items.filter((i) => i.type === "vo");
+    return reply.type("text/html").send(
+      renderMyDay(s, {
+        now, today, required, ahead: doAhead(work.items, now, 10), done: work.doneItems,
+        loads: dayLoads(all, days, today), trackedToday: tracked.get(today) ?? 0, running: work.timer,
+        focus: asked ? whatNext(work.items, now, budget) : null, budget, asked,
+        voLeft: { n: vos.length, minutes: vos.reduce((n, i) => n + remaining(i), 0) },
+      }),
+    );
+  });
+
+  app.post<{ Body: { id?: string; back?: string } }>("/timer/start", async (request, reply) => {
+    const id = Number(request.body?.id);
+    if (hasDatabase && id) await startTimer(id);
+    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+  });
+  app.post<{ Body: { back?: string } }>("/timer/stop", async (request, reply) => {
+    if (hasDatabase) await stopTimer();
+    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+  });
+  // Done: the timer stops and the work is cleared.
+  app.post<{ Body: { id?: string; back?: string } }>("/timer/done", async (request, reply) => {
+    const id = Number(request.body?.id);
+    if (hasDatabase && id) {
+      const running = await runningTimer();
+      if (running?.recordId === id) await stopTimer();
+      await setStatus(id, "done");
+    }
+    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+  });
+
+  app.get("/vo", async (_request, reply) => {
+    const now = new Date();
+    const [s, work] = await Promise.all([shell("vo"), loadWork(now)]);
+    return reply.type("text/html").send(renderVoQueue(s, { now, queue: voQueue(work.items, now), running: work.timer }));
+  });
+
+  // Recording mode: the first VO not skipped, timed from the moment it's shown.
+  app.get<{ Querystring: { skip?: string } }>("/vo/record", async (request, reply) => {
+    const now = new Date();
+    const skipped = (request.query.skip ?? "").split(",").map(Number).filter((n) => n > 0);
+    const [s, work] = await Promise.all([shell("vo"), loadWork(now)]);
+    const queue = voQueue(work.items, now);
+    const left = queue.filter((i) => !skipped.includes(i.id!));
+    const current = left[0] ?? null;
+    let running = work.timer;
+    if (current?.id && hasDatabase && running?.recordId !== current.id) {
+      await startTimer(current.id);
+      running = { recordId: current.id, startedAt: new Date(), title: current.title, est: current.est, spentBefore: current.spent };
+    }
+    return reply.type("text/html").send(
+      renderRecording(s, {
+        now, current, position: current ? queue.indexOf(current) + 1 : 0, total: queue.length,
+        next: left.slice(1, 4), running, skipped, brief: current?.record?.brief ?? null,
+      }),
+    );
+  });
+  app.post<{ Body: { id?: string; skip?: string } }>("/vo/record/done", async (request, reply) => {
+    const id = Number(request.body?.id);
+    if (hasDatabase && id) {
+      await stopTimer();
+      await setStatus(id, "done");
+    }
+    const skip = (request.body?.skip ?? "").replace(/[^0-9,]/g, "");
+    return reply.redirect(`/vo/record${skip ? `?skip=${skip}` : ""}`);
+  });
+
+  app.get("/forgotten", async (_request, reply) => {
+    const [s, work] = await Promise.all([shell("forgotten"), loadWork()]);
+    return reply.type("text/html").send(renderForgotten(s, { gaps: s.gaps ?? [], flags: work.forgotten }));
   });
 
   // Pause production on a whole channel, or resume it.
