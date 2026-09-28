@@ -19,6 +19,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-finance",
+    title: "Finance: income, expenses, contractors, and whether each channel pays",
+    changes: [
+      { text: "A new Finance section with its own tabs (Overview, Income, Expenses, Subscriptions, Contractors, Channels, Reports, Settings). Each tab is a view of the same data, so nothing is entered twice.", href: "/finance" },
+      { text: "Monthly entry: every channel's AdSense, and optionally its views, on one screen. Sponsorships and other income count toward the channel but never its RPM.", href: "/finance/income/entry" },
+      { text: "Expenses: category and channel are separate. An expense can go to one channel, be split across several, or be network-wide, with its video, receipt and paid or unpaid status.", href: "/finance/expenses" },
+      { text: "Subscriptions show their true monthly cost and post each bill automatically. Recurring, production and one-off costs are kept apart.", href: "/finance/subscriptions" },
+      { text: "Contractors: each person's pay model (per video, per minute, tiered, retainer, revenue share, prepaid) with its history, and work → earned → paid → outstanding. Advances are cash, not extra cost.", href: "/finance/contractors" },
+      { text: "Channel sustainability: profit, margin, RPM, per-upload figures, your hours from My Day's estimates, and profit per owner hour, over 1, 3, 6 or 12 months. Also break-even views and projection ranges.", href: "/finance/channels" },
+      { text: "Alerts for Persistent Loss, Low Return on Time and more, against thresholds you set, on the main dashboard.", href: "/finance/settings#thresholds" },
+    ],
+  },
+  {
     id: "2026-09-27-time-estimates",
     title: "Time estimates: set how long each kind of work takes you",
     changes: [

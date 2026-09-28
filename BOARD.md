@@ -366,6 +366,96 @@ Discord message.
 
 A row the parser wasn't sure about is flagged **needs a look**.
 
+## Finance — where money comes from, where it goes, and whether each channel pays
+
+**Finance** in the sidebar is its own section with its own tabs: Overview,
+Income, Expenses, Subscriptions, Contractors, Channels, Reports and Settings.
+Every tab is a view of the same tables, so nothing is entered twice.
+
+### How the data is kept (migration 035)
+
+- **Money** is stored as whole cents, in dollars.
+- **Channel is its own dimension**, separate from category. One expense can be
+  *Editing* and *Specular Anime* and *paid to an editor* at once, and it counts
+  toward editing costs, that channel, that person, the company and the month
+  without being duplicated. An expense can belong to one channel, be split
+  across several (evenly or by %), or be **General / network-wide** (no
+  channel).
+- **Cost and cash are separate.** An expense's amount is what the work cost,
+  and its status says whether cash left:
+  - **paid**: cash left.
+  - **unpaid**: owed.
+  - **covered by an advance**: no new cash.
+
+  An **advance** is cash out but not a cost. Its cost is counted as the work
+  it covers is logged, so later work never shows as extra cash leaving.
+- **Income covers a period.** For now you enter months. A week or any other
+  span is the same kind of row with a shorter period, and every report spreads
+  a period across the months it touches, by day. Weekly revenue later needs no
+  new tables.
+- **Revenue stream and channel are separate too.** YouTube AdSense →
+  Specular Studios → $8,000 and Sponsorship → Specular Studios → $1,000 both
+  count as Specular Studios revenue ($9,000). Only streams marked **RPM** in
+  Settings (AdSense by default) are used for RPM. Income can also go to no
+  channel (General).
+- **Pay models live on the person** and keep a history (each starts on a
+  "from" date). Each piece of logged work stores the model it was calculated
+  with, so changing a rate never rewrites past work.
+
+### The tabs
+
+| Tab | What it's for |
+|---|---|
+| Overview | Total revenue, expenses, net profit and margin for a month. Also: alerts, a 12-month chart, the by-channel table, recurring vs production vs one-off costs, revenue by stream, expenses by category, by company, and next month's projection. |
+| Income | A month's income, with an add form. **Monthly entry** puts every channel on one screen: type each one's AdSense (and optionally its views from YouTube Studio) and save. Saving again corrects a month; it never adds it twice. |
+| Expenses | Filter by type, category, channel, person, status or company. Each expense has amount, date, payee, type, category, company, channels, a video from the board, payment method, status, receipt (upload or link) and notes. |
+| Subscriptions | Subscriptions and other recurring costs, each with its monthly equivalent (annual ÷ 12, quarterly ÷ 3), next bill and total monthly running cost. Each bill is posted as an expense on its date automatically. |
+| Contractors | Each person's pay model, what was paid this month, lifetime cash paid, what's outstanding and any advance left. A person's page shows work → earned → paid → outstanding, and lets you log work (calculated from their pay model, with an override), record an advance, pay all outstanding, and change their model. |
+| Channels | Every channel over 1, 3, 6 or 12 months: revenue, expenses, profit, margin, views, AdSense RPM, uploads, revenue / cost / profit per upload, your hours, profit per owner hour, and status. |
+| Reports | P&L by month, profit by channel, revenue by stream, expenses by category and type. CSV exports are available. |
+| Settings | Sustainability thresholds, companies and which channels belong to each, expense categories, revenue streams (and which count toward RPM), and payment methods. |
+
+**Pay models:**
+- Fixed per video.
+- Per minute of finished video.
+- Tiered per minute: `10 = 15` / `rest = 10` means the first 10 minutes at
+  $15/min, then $10/min.
+- Monthly retainer or salary. This can also be set up as a recurring cost.
+- Revenue share: X% of one channel's revenue, or the network's.
+- Prepaid / advance balance.
+- Manual.
+
+Logged work is drawn from an advance while one is left, and anything past it
+is owed.
+
+### Your time, views and sustainability
+
+- **Your hours per channel** come from the work you finished on it that month:
+  the time you tracked, or its estimate from **Settings → Time estimates**. You
+  never log time twice.
+- **Views** are what you enter in the monthly grid. Where you haven't entered
+  them, the board estimates from its own hourly view snapshots, marked
+  "est.". That estimate errs low.
+- **RPM** = AdSense revenue ÷ views × 1,000. Nothing claims per-video revenue;
+  per-upload figures are the channel's month divided.
+- **Status** is judged against your thresholds in Finance Settings:
+  - **Healthy**: comfortably above your thresholds.
+  - **Low Margin**: profitable but below your margin threshold.
+  - **Declining**: revenue or views falling N months in a row.
+  - **Loss-Making**: expenses exceeded revenue this month.
+  - **Persistent Loss**: N losing months in a row.
+  - **Low Return on Time**: profitable, but under your profit per owner hour.
+
+  Statuses are informational only; nothing on the board changes because of
+  them. The ones you tick show on the main dashboard.
+- **Break-even** takes the last 3 months' expenses, subtracts sponsorship and
+  other revenue, and divides what's left by the effective AdSense RPM. The
+  result is the AdSense views needed a month, set against the current pace.
+- **Projections** are ranges. Revenue is the trailing 3-month average ± its
+  month-to-month spread. Costs are the recurring costs running now plus the
+  trailing contractor average, adjusted for a channel's scheduled uploads.
+  Each projection lists what it's based on.
+
 ## Tasks — forward it to #tasks and forget about it
 
 Anything posted or forwarded into a Discord channel called **#tasks** (or the

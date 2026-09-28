@@ -85,6 +85,8 @@ import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
 import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent } from "../db/timers.js";
+import { financeAlerts, registerFinance } from "./finance/routes.js";
+import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { addTask, deleteTask, editTask, getTask, knownPeople, listTasks, openTasks, setTaskStatus, snoozeTask, tasksDoneToday } from "../db/tasks.js";
 import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
@@ -257,6 +259,7 @@ async function shell(active: string): Promise<Shell> {
       vo: work ? work.items.filter((i) => isVo(i.type)).length : undefined,
       forgotten: work ? work.forgotten.length + gaps.length : undefined,
       tasks: work ? work.tasks.length : undefined,
+      financeAlerts: hasDatabase ? (await financeAlerts().catch(() => [])).length || undefined : undefined,
       tasksUrgent: work ? work.tasks.filter((t) => t.priority === "urgent" || (t.due && t.due.getTime() < Date.now())).length : undefined,
     },
     lastIntake: at,
@@ -452,6 +455,9 @@ export async function startWeb(): Promise<void> {
 
   app.get("/healthz", async () => ({ ok: true }));
 
+  // Finance: its own section, its own tabs, the same shell.
+  if (hasDatabase) registerFinance(app, shell);
+
   // The subscribable calendar. Two months back, a year ahead.
   app.get<{ Querystring: Record<string, string | undefined> }>("/calendar.ics", async (request, reply) => {
     if (!hasDatabase || !checkFeedKey(request.query.key)) return reply.code(404).send("Not found");
@@ -479,7 +485,7 @@ export async function startWeb(): Promise<void> {
   app.get("/", async (request, reply) => {
     if (!hasDatabase) return reply.type("text/html").send(renderEmptyState());
 
-    const [s, counters, byDay, grouped, channels, notices, shifted] = await Promise.all([
+    const [s, counters, byDay, grouped, channels, notices, shifted, finAlerts] = await Promise.all([
       shell("dashboard"),
       stats(ORG_TZ),
       dueByDay(ORG_TZ, 14),
@@ -487,6 +493,7 @@ export async function startWeb(): Promise<void> {
       channelCounts(),
       allNotices(),
       listOffShifted(),
+      financeAlerts().catch((err) => (console.error("[finance] alerts failed:", err), [])),
     ]);
 
     // Revisions get their own section; the columns are the work to voice.
@@ -501,6 +508,7 @@ export async function startWeb(): Promise<void> {
           stats: counters, byDay, grouped: columns, channels, notices, seen: noticesSeen(request), revisions, gaps: s.gaps,
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
           order: cookieList("dash_order"),
+          finance: dashboardAlerts(finAlerts),
           hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels" || x === "revisions"),
         }),
       );

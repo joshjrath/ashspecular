@@ -63,6 +63,11 @@ import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } 
 import { renderTasks } from "../src/web/page.js";
 import { taskItem, isRequired } from "../src/web/work.js";
 import { parseTask } from "../src/tasks/parse.js";
+import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
+import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
+import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
+import { parseMultipart } from "../src/web/finance/routes.js";
+import { readSplits } from "../src/web/finance/ui.js";
 import type { Task } from "../src/db/tasks.js";
 import { scriptFor, setScriptIndex } from "../src/web/scriptindex.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
@@ -1023,7 +1028,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 12 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 13 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -1701,6 +1706,85 @@ t("the Settings page: Time estimates with work, each recurring channel, and task
 t("…a changed one shows its value, an unchanged one its default as a placeholder", [/name="e:type:reading"[^>]*value="8"/.test(estPage), /name="e:type:gaming"[^>]*value="" placeholder="45"/.test(estPage)], [true, true]);
 setEstimates(new Map());
 t("…and back to defaults", [channelEstimate("Specular DC"), typeEstimate("vo")], [10, 40]);
+
+section("Finance — money, months, bills");
+t("money reads with sign and compact", [fmtMoney(800000), fmtMoney(610000, { sign: true }), fmtMoney(-162000), fmtMoney(820000, { compact: true }), fmtMoney(2609, { exact: true })], ["$8,000", "+$6,100", "−$1,620", "$8.2K", "$26.09"]);
+t("money is parsed from what's typed", [parseMoney("1,234.50"), parseMoney("$12k"), parseMoney("250"), parseMoney("abc"), parseMoney("")], [123450, 1200000, 25000, null, null]);
+t("a subscription's true monthly cost", [monthlyEquivalent(12000, "annual"), monthlyEquivalent(3000, "quarterly"), monthlyEquivalent(900, "monthly")], [1000, 1000, 900]);
+t("the next bill, month ends kept", [finNextBill("2026-01-31", "monthly"), finNextBill("2026-02-28", "monthly"), finNextBill("2026-01-15", "annual"), finNextBill("2026-09-01", "weekly")], ["2026-02-28", "2026-03-31", "2027-01-15", "2026-09-08"]);
+t("months", [finMonthEnd("2026-02"), finMonthsEnding("2026-02", 3)], ["2026-02-28", ["2025-12", "2026-01", "2026-02"]]);
+
+section("Finance — pay models");
+t("$10 a minute", computePay({ model: "per_minute", params: { rate: 1000 } }, { minutes: 12.5 }), { cents: 12500, explain: "12.5 min × $10/min" });
+const tiers = parseTiers("10 = 15\nrest = 10");
+t("tiers from the form", tiers, [{ upTo: 10, rate: 1500 }, { upTo: null, rate: 1000 }]);
+t("first 10 minutes at $15, every minute after at $10", [computePay({ model: "tiered", params: { tiers } }, { minutes: 14 }).cents, computePay({ model: "tiered", params: { tiers } }, { minutes: 8 }).cents], [19000, 12000]);
+t("fixed per video; revenue share; retainer adds nothing", [computePay({ model: "per_video", params: { rate: 25000 } }, { videos: 2 }).cents, computePay({ model: "revenue_share", params: { pct: 0.1 } }, { revenue: 920000 }).cents, computePay({ model: "retainer", params: { amount: 200000 } }, { videos: 1 }).cents, computePay({ model: "manual", params: {} }, {}).cents], [50000, 92000, 0, null]);
+const payHistory = [{ model: "per_minute" as const, params: { rate: 1000 }, effectiveFrom: "2026-01-01" }, { model: "per_minute" as const, params: { rate: 1200 }, effectiveFrom: "2026-09-15" }];
+t("the model in force on a date — a raise never rewrites earlier work", [modelOn(payHistory, "2026-09-10")!.params.rate, modelOn(payHistory, "2026-09-20")!.params.rate, modelOn(payHistory, "2025-12-31")], [1000, 1200, null]);
+t("described in words", [describePay({ model: "tiered", params: { tiers } }), describePay({ model: "per_minute", params: { rate: 1000 } })], ["first 10 min at $15/min, then $10/min", "$10/min of finished video"]);
+
+section("Finance — profit, cost vs cash, sustainability");
+const fx = (o: Partial<ExpenseFact>): ExpenseFact => ({ month: "2026-09", cashMonth: "2026-09", channel: null, category: "editing", type: "contractor", company: null, person: null, status: "paid", advance: false, cents: 0, ...o });
+const ST = "Specular Studios";
+const finFacts: Facts = {
+  months: ["2026-06", "2026-07", "2026-08", "2026-09"],
+  income: [
+    { month: "2026-09", channel: ST, stream: "adsense", company: null, cents: 800000 },
+    { month: "2026-09", channel: ST, stream: "sponsorship", company: null, cents: 100000 },
+    { month: "2026-09", channel: ST, stream: "other", company: null, cents: 20000 },
+    ...["2026-06", "2026-07", "2026-08", "2026-09"].map((m, i) => ({ month: m, channel: "Specular Anime", stream: "adsense", company: null, cents: 300000 - i * 30000 })),
+  ],
+  expenses: [
+    fx({ channel: ST, category: "editing", cents: 200000 }),
+    fx({ channel: ST, category: "scripts", cents: 60000 }),
+    fx({ channel: ST, category: "thumbnails", cents: 30000 }),
+    fx({ channel: ST, category: "other", cents: 20000, type: "one_off" }),
+    fx({ channel: null, category: "software", cents: 9000, type: "subscription" }),
+    // An advance: cash, not cost. The work it covers: cost, not cash.
+    fx({ person: 7, advance: true, cents: 1000000, month: "2026-08", cashMonth: "2026-08" }),
+    fx({ channel: ST, person: 7, status: "covered", cents: 25000, cashMonth: null }),
+    fx({ channel: ST, person: 7, status: "unpaid", cents: 25000, cashMonth: null }),
+    ...["2026-06", "2026-07", "2026-08", "2026-09"].map((m) => fx({ month: m, cashMonth: m, channel: "Specular Anime", cents: 320000 })),
+  ],
+  channels: [
+    { channel: ST, month: "2026-09", uploads: 8, views: 1_700_000, viewsSource: "entered", ownerMinutes: 600 },
+    { channel: "Specular Anime", month: "2026-09", uploads: 4, views: 400_000, viewsSource: "estimated", ownerMinutes: 300 },
+  ],
+  recurring: [{ id: 1, vendor: "Adobe", monthly: 9000, category: "software", kind: "subscription", person: null, channels: [] }],
+  platformStreams: new Set(["adsense"]),
+  scheduledNext: new Map([[ST, 8]]),
+};
+const stp = finPnl(finFacts, ["2026-09"], { channel: ST });
+t("channel revenue counts every stream: AdSense $8,000 + sponsorship $1,000 + other $200", [stp.revenue, stp.platformRevenue], [920000, 800000]);
+t("channel costs are direct only — covered and unpaid work count, the advance doesn't", stp.expenses, 200000 + 60000 + 30000 + 20000 + 25000 + 25000);
+t("profit and margin", [stp.profit, stp.margin!.toFixed(3)], [920000 - 360000, ((920000 - 360000) / 920000).toFixed(3)]);
+const netp = finPnl(finFacts, ["2026-09"], { all: true });
+t("the network adds general costs; cash out excludes covered and unpaid work", [netp.expenses - stp.expenses - finPnl(finFacts, ["2026-09"], { channel: "Specular Anime" }).expenses, netp.cashOut], [9000, 200000 + 60000 + 30000 + 20000 + 9000 + 320000]);
+t("the advance is cash in the month it was paid, not a cost", [finPnl(finFacts, ["2026-08"], { all: true }).cashOut, finPnl(finFacts, ["2026-08"], { all: true }).expenses], [1000000 + 320000, 320000]);
+t("recurring, production and one-off are kept apart", [netp.byGroup.recurring, netp.byGroup.oneoff], [9000, 20000]);
+const dv = derived(stp);
+t("RPM is AdSense only — a sponsorship never inflates it", [dv.rpm!.toFixed(2), (dv.revenuePerUpload! / 100).toFixed(0), dv.ownerHours, Math.round(dv.profitPerHour!)], [((800000 / 1_700_000) * 1000).toFixed(2), "1150", 10, 56000]);
+const lowTime = sustainability(finFacts, "2026-09", ST, { ...DEFAULT_THRESHOLDS, minProfitPerHour: 60000 });
+t("Low Return on Time: profitable, under your per-hour threshold", lowTime.map((x) => x.id), ["low_time"]);
+t("…Healthy when above every threshold", sustainability(finFacts, "2026-09", ST, DEFAULT_THRESHOLDS).map((x) => x.id), ["healthy"]);
+const anime = sustainability(finFacts, "2026-09", "Specular Anime", DEFAULT_THRESHOLDS).map((x) => x.id);
+t("Persistent Loss after 3 losing months, and Declining revenue", [anime.includes("persistent_loss"), anime.includes("declining"), anime.includes("loss")], [true, true, false]);
+t("the reporting month is the latest with revenue in", reportingMonth(finFacts, "2026-10"), "2026-09");
+const finBe = breakEven({ ...finFacts, channels: finFacts.channels.map((c) => ({ ...c })) }, "2026-09", ST)!;
+t("break-even: sponsorships reduce what AdSense has to cover", [Math.round(finBe.otherRevenue), Math.round(finBe.remaining), finBe.covered], [40000, Math.round(360000 / 3 - 40000), true]);
+const finProj = finProject(finFacts, "2026-09", { channel: ST });
+t("projections are ranges, with what they're based on", [finProj.month, finProj.revenue[0] <= finProj.revenue[1], finProj.basis.some((b) => b.startsWith("Revenue: trailing"))], ["2026-10", true, true]);
+
+section("Finance — forms");
+t("splits: ticked channels, even unless given %", [readSplits({ ch: ["Specular Studios", "Specular Anime"] }), readSplits({ ch: ["Specular Studios", "Specular Anime"], "w:Specular Studios": "60" }), readSplits({}), readSplits({ ch: "Not A Channel" })], [
+  [{ channel: "Specular Studios", weight: 1 }, { channel: "Specular Anime", weight: 1 }],
+  [{ channel: "Specular Studios", weight: 60 }, { channel: "Specular Anime", weight: 40 }],
+  [], [],
+]);
+const mp = Buffer.from('--XB\r\nContent-Disposition: form-data; name="amount"\r\n\r\n250\r\n--XB\r\nContent-Disposition: form-data; name="ch"\r\n\r\nA\r\n--XB\r\nContent-Disposition: form-data; name="ch"\r\n\r\nB\r\n--XB\r\nContent-Disposition: form-data; name="receipt"; filename="r.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1\r\n--XB--\r\n');
+const parsedMp = parseMultipart(mp, "multipart/form-data; boundary=XB");
+t("a receipt upload is read without a dependency", [parsedMp.amount, parsedMp.ch, parsedMp.__files?.[0]?.filename, parsedMp.__files?.[0]?.data.toString()], ["250", ["A", "B"], "r.pdf", "%PDF-1"]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

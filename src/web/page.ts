@@ -62,7 +62,7 @@ const LABELS: Record<string, string> = Object.fromEntries(
 );
 
 /** A channel's own colour, falling back to its category's for an unknown name. */
-function channelColour(name: string | null): string {
+export function channelColour(name: string | null): string {
   const ch = CHANNELS.find((c) => c.name === name);
   return ch ? ch.color : "#8A8A93";
 }
@@ -2096,7 +2096,7 @@ export interface Shell {
   /** Channels with production paused, and the day each was paused (YYYY-MM-DD). */
   pausedChannels?: Record<string, string>;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number; tasks?: number; tasksUrgent?: number };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number; tasks?: number; tasksUrgent?: number; financeAlerts?: number };
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
@@ -2112,7 +2112,7 @@ export interface Shell {
   railHide?: string[];
 }
 
-function layout(title: string, shell: Shell | null, body: string): string {
+export function layout(title: string, shell: Shell | null, body: string): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -2160,6 +2160,7 @@ export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "C
   { key: "recurring", label: "Recurring", group: "Pages" },
   { key: "scripts", label: "Scripts", group: "Pages" },
   { key: "uploads", label: "Uploads", group: "Pages" },
+  { key: "finance", label: "Finance", group: "Pages" },
   { key: "storylab", label: "Story Lab", group: "Pages" },
   ...CATEGORIES.map((c) => ({ key: `cat-${c.id}`, label: c.label, group: "Categories" as const })),
   { key: "search", label: "Search box", group: "Also" },
@@ -2232,6 +2233,13 @@ function sidebar(s: Shell): string {
       ${s.scripts ? item("/scripts", "Scripts", null, "scripts") : ""}
       ${item("/uploads", "Uploads", s.nav.behind ?? null, "uploads")}
       ${item("/story-lab", "Story Lab", null, "storylab")}
+      ${
+        off.has("finance")
+          ? ""
+          : `<a class="${s.active === "finance" ? "on" : ""}" href="/finance">Finance${
+              s.nav.financeAlerts ? `<span class="sideflag" title="${s.nav.financeAlerts} sustainability alert${s.nav.financeAlerts === 1 ? "" : "s"}">${s.nav.financeAlerts}</span>` : ""
+            }</a>`
+      }
     </nav>
     ${cats ? `<h3>Categories</h3>\n    <div class="cats">${cats}</div>` : ""}
     ${off.has("live") ? "" : `<div class="live"><span class="pulse"></span>#intake · ${esc(ago)}</div>`}
@@ -2261,7 +2269,7 @@ function timeAgo(at: Date): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function pageHeader(title: string, extra = ""): string {
+export function pageHeader(title: string, extra = ""): string {
   const now = new Date();
   const day = new Intl.DateTimeFormat("en-US", {
     timeZone: ORG_TZ, weekday: "long", day: "numeric", month: "long",
@@ -3151,6 +3159,8 @@ export function renderDashboard(
     revisions?: StoredRecord[];
     /** Upload slots in the next eight days with nothing assigned. */
     gaps?: UploadGap[];
+    /** Finance's sustainability alerts, already drawn (finance/ui dashboardAlerts). */
+    finance?: string;
   },
 ): string {
   const tiles = [
@@ -3236,6 +3246,7 @@ export function renderDashboard(
     `${pageHeader("Dashboard", `<a class="clear nextbtn" href="/my-day?next=1#focus" title="The most pressing piece of your work, from My Day">What should I do next?</a>${bell(data.notices ?? [], data.seen ?? 0)}`)}
     <div class="stats">${tiles}</div>
     ${gapStrip(data.gaps ?? [])}
+    ${data.finance ?? ""}
     ${daysOffStrip(shell.daysOff ?? [], data.shifted ?? [])}
 
     <div class="split withrev">
