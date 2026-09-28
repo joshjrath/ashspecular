@@ -151,7 +151,7 @@ const base = {
   confidence: 0.94,
 } as unknown as Extraction;
 
-const rec = derive(base, "no links in this one");
+const rec = derive(base, "no links in this one", new Date("2026-09-20T12:00:00Z")); // filed before the VO date, so nothing is already late
 t("code upper-cased", rec.code, "VIDEO-008");
 t("air date normalised", rec.airDate, "2026-10-03");
 t("VO derived from air date", rec.voDue ? dateIn(ORG_TZ, rec.voDue) : null, "2026-09-27");

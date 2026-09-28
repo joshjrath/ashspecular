@@ -783,12 +783,12 @@ export async function openBatchCount(date: string): Promise<number> {
 /** What has been removed, newest first — where Restore lives. */
 /**
  * Everything the calendar feed covers: anything airing or due in the window,
- * cleared work included (it shows with a ✓), removed work never. Recurring
+ * cleared work included (it shows with a ✓), removed work and revisions never. Recurring
  * batches only when asked for — a dozen a day would bury the videos.
  */
 export async function feedRecords(from: string, to: string, batches: boolean): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status <> 'removed' AND paused_at IS NULL ${batches ? "" : "AND batch_no IS NULL"}
+    `${SELECT} WHERE status <> 'removed' AND paused_at IS NULL AND kind <> 'review' ${batches ? "" : "AND batch_no IS NULL"}
        AND (air_date BETWEEN $1 AND $2 OR (${DUE} AT TIME ZONE '${ORG_TZ}')::date BETWEEN $1 AND $2)
      ORDER BY COALESCE(air_date, (${DUE})::date) ASC LIMIT 5000`,
     [from, to],
@@ -939,6 +939,8 @@ export async function calendarRange(
     `SELECT ${day} AS day, ${COLUMNS}
      FROM records
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed' AND paused_at IS NULL
+       -- Revisions live on the Revisions page and the dashboard, not the calendar.
+       AND kind <> 'review'
      -- Recurring batches sort last within a day: a dozen of them would
      -- otherwise bury the one video that is actually airing.
      ORDER BY 1 ASC, (batch_no IS NOT NULL) ASC, category ASC, created_at ASC

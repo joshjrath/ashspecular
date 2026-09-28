@@ -192,7 +192,7 @@ export function derive(extraction: Extraction, raw: string, filedAt: Date = new 
     if (voDue) voSource = "calculated";
   }
 
-  if (voDue && voSource === "calculated" && voDue.getTime() < Date.now()) {
+  if (voDue && voSource === "calculated" && voDue.getTime() < filedAt.getTime()) {
     warnings.push("calculated VO deadline is already in the past");
   }
 

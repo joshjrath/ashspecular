@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-calendar-no-revisions",
+    title: "Revisions are off the calendar",
+    changes: [
+      { text: "The calendar (month, week, 4 days, day) and the Google Calendar feed no longer show revisions. They're on the Revisions page and the dashboard.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-28-finance-voice",
     title: "Finance: log by voice, and pay models across several channels",
     changes: [
