@@ -206,6 +206,9 @@ export interface Expense {
   notes: string;
   splits: Split[];
   attachments: Array<{ id: number; filename: string; size: number }>;
+  /** Fields a voice note guessed at, until checked. */
+  review: string[];
+  voiceId: number | null;
 }
 
 export interface ExpenseFilter {
@@ -255,6 +258,8 @@ function expenseRow(r: Record<string, unknown>): Expense {
     notes: r.notes as string,
     splits: (r.splits as Array<{ channel: string; weight: string | number }>).map((s) => ({ channel: s.channel, weight: Number(s.weight) })),
     attachments: (r.attachments as Expense["attachments"]).map((a) => ({ ...a, id: Number(a.id) })),
+    review: (r.review as string[] | null) ?? [],
+    voiceId: n(r.voice_id),
   };
 }
 
@@ -305,6 +310,9 @@ export interface ExpenseInput {
   receiptUrl: string | null;
   notes: string;
   splits: Split[];
+  /** What a voice note guessed at. Left out, a save clears it — saving by hand is checking it. */
+  review?: string[] | null;
+  voiceId?: number | null;
 }
 
 export async function saveExpense(e: ExpenseInput, id?: number): Promise<number> {
@@ -315,22 +323,23 @@ export async function saveExpense(e: ExpenseInput, id?: number): Promise<number>
       e.amount, e.date, e.payee, e.personId, e.type, e.categoryId, e.companyId, e.methodId, e.recordId, e.recurringId ?? null,
       e.status, e.status === "paid" ? (e.paidOn ?? e.date) : null, e.isAdvance, e.unitsVideos, e.unitsMinutes, e.calculated,
       e.paySnapshot === null || e.paySnapshot === undefined ? null : JSON.stringify(e.paySnapshot), e.receiptUrl, e.notes,
+      e.review?.length ? e.review : null,
     ];
     let expenseId = id;
     if (id) {
       await client.query(
         `UPDATE fin_expenses SET amount_cents = $2, date = $3, payee = $4, person_id = $5, type = $6, category_id = $7, company_id = $8,
            method_id = $9, record_id = $10, recurring_id = $11, status = $12, paid_on = $13, is_advance = $14, units_videos = $15,
-           units_minutes = $16, calculated_cents = $17, pay_snapshot = $18, receipt_url = $19, notes = $20, updated_at = now()
+           units_minutes = $16, calculated_cents = $17, pay_snapshot = $18, receipt_url = $19, notes = $20, review = $21, updated_at = now()
          WHERE id = $1`,
         [id, ...vals],
       );
     } else {
       const { rows } = await client.query(
         `INSERT INTO fin_expenses (amount_cents, date, payee, person_id, type, category_id, company_id, method_id, record_id, recurring_id,
-           status, paid_on, is_advance, units_videos, units_minutes, calculated_cents, pay_snapshot, receipt_url, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
-        vals,
+           status, paid_on, is_advance, units_videos, units_minutes, calculated_cents, pay_snapshot, receipt_url, notes, review, voice_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
+        [...vals, e.voiceId ?? null],
       );
       expenseId = Number(rows[0].id);
     }
@@ -390,6 +399,7 @@ export interface Recurring {
   notes: string;
   splits: Split[];
   lastPosted: string | null;
+  review: string[];
 }
 
 export async function listRecurring(): Promise<Recurring[]> {
@@ -407,6 +417,7 @@ export async function listRecurring(): Promise<Recurring[]> {
     autoPost: r.auto_post, postStatus: r.post_status, active: r.active, notes: r.notes,
     splits: (r.splits as Array<{ channel: string; weight: string }>).map((s) => ({ channel: s.channel, weight: Number(s.weight) })),
     lastPosted: r.last_posted ?? null,
+    review: r.review ?? [],
   }));
 }
 
@@ -425,22 +436,24 @@ export interface RecurringInput {
   active: boolean;
   notes: string;
   splits: Split[];
+  review?: string[] | null;
+  voiceId?: number | null;
 }
 
 export async function saveRecurring(r: RecurringInput, id?: number): Promise<number> {
-  const vals = [r.kind, r.vendor, r.personId, r.amount, r.frequency, r.nextBill, r.categoryId, r.companyId, r.methodId, r.autoPost, r.postStatus, r.active, r.notes];
+  const vals = [r.kind, r.vendor, r.personId, r.amount, r.frequency, r.nextBill, r.categoryId, r.companyId, r.methodId, r.autoPost, r.postStatus, r.active, r.notes, r.review?.length ? r.review : null];
   let rid = id;
   if (id) {
     await pool.query(
       `UPDATE fin_recurring SET kind = $2, vendor = $3, person_id = $4, amount_cents = $5, frequency = $6, next_bill = $7, category_id = $8,
-         company_id = $9, method_id = $10, auto_post = $11, post_status = $12, active = $13, notes = $14, updated_at = now() WHERE id = $1`,
+         company_id = $9, method_id = $10, auto_post = $11, post_status = $12, active = $13, notes = $14, review = $15, updated_at = now() WHERE id = $1`,
       [id, ...vals],
     );
   } else {
     const { rows } = await pool.query(
-      `INSERT INTO fin_recurring (kind, vendor, person_id, amount_cents, frequency, next_bill, category_id, company_id, method_id, auto_post, post_status, active, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-      vals,
+      `INSERT INTO fin_recurring (kind, vendor, person_id, amount_cents, frequency, next_bill, category_id, company_id, method_id, auto_post, post_status, active, notes, review, voice_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      [...vals, r.voiceId ?? null],
     );
     rid = Number(rows[0].id);
   }
@@ -505,6 +518,8 @@ export interface Income {
   channel: string | null;
   companyId: number | null;
   notes: string;
+  review?: string[];
+  voiceId?: number | null;
 }
 
 export async function listIncome(f: { from?: string; to?: string; stream?: string; channel?: string }, limit = 500): Promise<Income[]> {
@@ -524,25 +539,26 @@ export async function listIncome(f: { from?: string; to?: string; stream?: strin
   return rows.map((r) => ({
     id: Number(r.id), amount: Number(r.amount_cents), periodStart: r.ps, periodEnd: r.pe, granularity: r.granularity, receivedOn: r.ro ?? null,
     streamId: r.stream_id, source: r.source, channel: r.channel ?? null, companyId: n(r.company_id), notes: r.notes,
+    review: r.review ?? [], voiceId: n(r.voice_id),
   }));
 }
 
 export type IncomeInput = Omit<Income, "id">;
 
 export async function saveIncome(i: IncomeInput, id?: number): Promise<number> {
-  const vals = [i.amount, i.periodStart, i.periodEnd, i.granularity, i.receivedOn, i.streamId, i.source, i.channel, i.companyId, i.notes];
+  const vals = [i.amount, i.periodStart, i.periodEnd, i.granularity, i.receivedOn, i.streamId, i.source, i.channel, i.companyId, i.notes, i.review?.length ? i.review : null];
   if (id) {
     await pool.query(
       `UPDATE fin_income SET amount_cents = $2, period_start = $3, period_end = $4, granularity = $5, received_on = $6, stream_id = $7,
-         source = $8, channel = $9, company_id = $10, notes = $11, updated_at = now() WHERE id = $1`,
+         source = $8, channel = $9, company_id = $10, notes = $11, review = $12, updated_at = now() WHERE id = $1`,
       [id, ...vals],
     );
     return id;
   }
   const { rows } = await pool.query(
-    `INSERT INTO fin_income (amount_cents, period_start, period_end, granularity, received_on, stream_id, source, channel, company_id, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-    vals,
+    `INSERT INTO fin_income (amount_cents, period_start, period_end, granularity, received_on, stream_id, source, channel, company_id, notes, review, voice_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    [...vals, i.voiceId ?? null],
   );
   return Number(rows[0].id);
 }
@@ -765,4 +781,68 @@ export async function recordsForAttribution(q: string, limit = 40): Promise<Arra
     [q, `%${q}%`, limit],
   );
   return rows.map((r) => ({ id: Number(r.id), label: `${r.t ?? "(untitled)"}${r.code && r.t !== r.code ? ` · ${r.code}` : ""}`, channel: r.channel ?? null }));
+}
+
+// ── voice notes ────────────────────────────────────────────────────────────
+
+/** An entry read from a note, and what became of it. */
+export interface StoredVoiceEntry {
+  entry: import("../finance/voice.js").VoiceEntry;
+  /** Needed before it can be logged; non-empty means it's a draft. */
+  missing: string[];
+  /** Where it was logged, when it was. */
+  logged: { type: "expense" | "income" | "recurring" | "person"; id: number; label: string } | null;
+  /** Checked by hand — "Looks right", or filled in and saved. */
+  checked: boolean;
+}
+
+export interface VoiceNote {
+  id: number;
+  tab: import("../finance/voice.js").VoiceTab;
+  transcript: string;
+  entries: StoredVoiceEntry[];
+  parsedBy: string;
+  createdAt: Date;
+}
+
+const voiceRow = (r: Record<string, unknown>): VoiceNote => ({
+  id: Number(r.id), tab: r.tab as VoiceNote["tab"], transcript: r.transcript as string, entries: r.entries as StoredVoiceEntry[],
+  parsedBy: r.parsed_by as string, createdAt: r.created_at as Date,
+});
+
+export async function addVoiceNote(tab: string, transcript: string, parsedBy: string): Promise<number> {
+  const { rows } = await pool.query("INSERT INTO fin_voice_notes (tab, transcript, parsed_by) VALUES ($1, $2, $3) RETURNING id", [tab, transcript, parsedBy]);
+  return Number(rows[0].id);
+}
+export async function setVoiceEntries(id: number, entries: StoredVoiceEntry[]): Promise<void> {
+  await pool.query("UPDATE fin_voice_notes SET entries = $2 WHERE id = $1", [id, JSON.stringify(entries)]);
+}
+export async function getVoiceNote(id: number): Promise<VoiceNote | null> {
+  const { rows } = await pool.query("SELECT * FROM fin_voice_notes WHERE id = $1", [id]);
+  return rows[0] ? voiceRow(rows[0]) : null;
+}
+/** A tab's recent notes still worth showing: the last two weeks, not dismissed. */
+export async function listVoiceNotes(tab: string, limit = 8): Promise<VoiceNote[]> {
+  const { rows } = await pool.query(
+    "SELECT * FROM fin_voice_notes WHERE tab = $1 AND NOT dismissed AND created_at > now() - interval '14 days' ORDER BY created_at DESC LIMIT $2",
+    [tab, limit],
+  );
+  return rows.map(voiceRow);
+}
+export async function dismissVoiceNote(id: number): Promise<void> {
+  await pool.query("UPDATE fin_voice_notes SET dismissed = true WHERE id = $1", [id]);
+}
+/** "Looks right": the rows it logged stop being marked. */
+export async function clearReview(type: "expense" | "income" | "recurring", id: number): Promise<void> {
+  const table = type === "expense" ? "fin_expenses" : type === "income" ? "fin_income" : "fin_recurring";
+  await pool.query(`UPDATE ${table} SET review = NULL WHERE id = $1`, [id]);
+}
+/** How many rows in each place are still marked to check. */
+export async function reviewCounts(): Promise<{ expense: number; income: number; recurring: number }> {
+  const { rows } = await pool.query(
+    `SELECT (SELECT COUNT(*) FROM fin_expenses WHERE cardinality(review) > 0) AS e,
+            (SELECT COUNT(*) FROM fin_income WHERE cardinality(review) > 0) AS i,
+            (SELECT COUNT(*) FROM fin_recurring WHERE cardinality(review) > 0) AS r`,
+  );
+  return { expense: Number(rows[0].e), income: Number(rows[0].i), recurring: Number(rows[0].r) };
 }

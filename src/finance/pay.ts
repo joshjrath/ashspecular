@@ -35,8 +35,11 @@ export interface PayParams {
   /** retainer, salary: the fixed amount, and how often. */
   amount?: number;
   frequency?: string;
-  /** revenue_share: the share (0.1 = 10%) and of which channel's revenue (null = all). */
+  /** revenue_share: the share (0.1 = 10%). */
   pct?: number;
+  /** The channels they work on: logged work goes to these, and a revenue share is of these combined (none: the network). */
+  channels?: string[];
+  /** Before several channels could be picked: the one channel. Read through payChannels(). */
   channel?: string | null;
 }
 
@@ -78,7 +81,7 @@ export function describePay(m: Pick<PayModel, "model" | "params"> | null): strin
     case "salary":
       return `${fmtMoney(p.amount ?? 0)} ${p.frequency && p.frequency !== "monthly" ? p.frequency : "a month"}`;
     case "revenue_share":
-      return `${num((p.pct ?? 0) * 100)}% of ${p.channel ?? "network"} revenue`;
+      return `${num((p.pct ?? 0) * 100)}% of ${shareOf(payChannels(p))} revenue`;
     case "prepaid":
       return `Prepaid · ${fmtMoney(p.rate ?? 0)} per ${p.per ?? "video"} from the advance`;
     case "manual":
@@ -136,6 +139,17 @@ export function computePay(m: Pick<PayModel, "model" | "params"> | null, units: 
     case "manual":
       return { cents: null, explain: "manual — enter the amount" };
   }
+}
+
+/** A model's channels, whichever way they were saved. */
+export const payChannels = (p: PayParams | undefined): string[] => (p?.channels?.length ? p.channels : p?.channel ? [p.channel] : []);
+
+/** "network", "Specular Anime", "Anime + FNAF", "3 channels". */
+function shareOf(channels: string[]): string {
+  if (!channels.length) return "network";
+  if (channels.length === 1) return channels[0]!;
+  const short = channels.map((c) => c.replace(/^Specular (?=.)/, ""));
+  return channels.length <= 3 ? short.join(" + ") : `${channels.length} channels'`;
 }
 
 /** The model in force on a date: the latest that started on or before it. `models` in any order. */

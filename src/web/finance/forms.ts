@@ -4,18 +4,33 @@
  * analysis pages read.
  */
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
-import type { Expense, Income, Lists, Person, Recurring } from "../../db/finance.js";
+import type { Expense, Income, Lists, Person, Recurring, VoiceNote } from "../../db/finance.js";
 import { EXPENSE_TYPES, EXPENSE_TYPE, FLAGS, type Thresholds } from "../../finance/metrics.js";
 import { FREQUENCIES, FREQUENCY, fmtMoney, monthLabel, usDay } from "../../finance/money.js";
-import { PAY_MODELS, PAY_MODEL, describePay, tiersText, type PayModel } from "../../finance/pay.js";
+import { PAY_MODELS, PAY_MODEL, describePay, payChannels, tiersText, type PayModel } from "../../finance/pay.js";
 import { ORG_TZ, dateIn } from "../../parse/derive.js";
 import { channelColour, esc, type Shell } from "../page.js";
-import { channelSelect, financePage, money, monthSwitch, opt, splitEditor, splitsText, tile } from "./ui.js";
+import { CHIPS_SCRIPT, channelChips, channelSelect, checkMark, fieldName, financePage, voiceBox, money, monthSwitch, opt, splitEditor, splitsText, tile } from "./ui.js";
 
 const dollars = (c: number | null | undefined) => (c === null || c === undefined ? "" : (c / 100).toFixed(2).replace(/\.00$/, ""));
 const statusPill = (e: { status: string; isAdvance?: boolean }) =>
   e.isAdvance ? `<span class="fpill adv">Advance</span>` : `<span class="fpill ${e.status}">${e.status === "covered" ? "Covered by advance" : e.status === "paid" ? "Paid" : "Unpaid"}</span>`;
 const chanLabel = (c: string | null) => (c ? `<span class="fch" style="--ch:${channelColour(c)}"><i></i>${esc(c.replace(/^Specular (?=.)/, ""))}</span>` : `<span class="fgen">General</span>`);
+/** Fields to mark on a form: missing (red, needed) or unsure (amber, check). */
+export interface Flags { missing: string[]; unsure: string[] }
+/** A draft being finished from a voice note: what was said, and which note/entry to mark done. */
+export interface VoicePrefill { transcript: string; ref: string; flags: Flags }
+
+const fl = (f: Flags | undefined, ...fields: string[]) => {
+  if (!f) return "";
+  if (fields.some((x) => f.missing.includes(x))) return ' data-flag="missing" data-flag-text="needed"';
+  return fields.some((x) => f.unsure.includes(x)) ? ' data-flag="unsure" data-flag-text="check"' : "";
+};
+const voiceBanner = (v: VoicePrefill | undefined) =>
+  v ? `<div class="fvbanner"><span>🎙</span><div>From your voice note: <i>“${esc(v.transcript.length > 200 ? `${v.transcript.slice(0, 197)}…` : v.transcript)}”</i><br>${
+    v.flags.missing.length ? `<b>Fill in ${esc(v.flags.missing.map(fieldName).join(", "))}</b>${v.flags.unsure.length ? " and check" : ""}` : "<b>Check</b>"
+  }${v.flags.unsure.length ? ` ${esc(v.flags.unsure.map(fieldName).join(", "))}` : ""} — marked below.</div></div>` : "";
+
 const saved = (msg: string) => (msg ? `<div class="panel" role="status" style="padding:12px 18px;margin-bottom:14px;color:#8FE3B6;font-weight:700">${esc(msg)}</div>` : "");
 
 // ── income ─────────────────────────────────────────────────────────────────
@@ -26,18 +41,20 @@ export interface IncomeData {
   lists: Lists;
   filter: { stream?: string; channel?: string };
   msg: string;
+  voice: VoiceNote[];
+  prefill?: { i: Partial<Income>; voice: VoicePrefill };
 }
 
-function incomeForm(lists: Lists, i: Partial<Income>, month: string, action: string): string {
+function incomeForm(lists: Lists, i: Partial<Income>, month: string, action: string, f?: Flags, voiceRef?: string): string {
   const monthly = !i.granularity || i.granularity === "month";
-  return `<form class="fform" method="post" action="${action}">
-    <label>Amount ($)<input name="amount" inputmode="decimal" required value="${esc(dollars(i.amount))}" placeholder="1,000"></label>
-    <label>Revenue stream<select name="stream">${lists.streams.filter((s) => !s.archived || s.id === i.streamId).map((s) => opt(s.id, s.label, s.id === (i.streamId ?? "adsense"))).join("")}</select></label>
-    <label class="w2">Source <input name="source" value="${esc(i.source ?? "")}" placeholder="Sponsor or platform — e.g. NordVPN"></label>
-    <label>Channel${channelSelect("channel", i.channel === undefined ? null : (i.channel ?? "general"), { general: "General / whole business" })}</label>
+  return `<form class="fform" method="post" action="${action}">${voiceRef ? `<input type="hidden" name="voice" value="${esc(voiceRef)}">` : ""}
+    <label${fl(f, "amount")}>Amount ($)<input name="amount" inputmode="decimal" required value="${esc(dollars(i.amount))}" placeholder="1,000"></label>
+    <label${fl(f, "stream")}>Revenue stream<select name="stream">${lists.streams.filter((s) => !s.archived || s.id === i.streamId).map((s) => opt(s.id, s.label, s.id === (i.streamId ?? "adsense"))).join("")}</select></label>
+    <label class="w2"${fl(f, "payee")}>Source <input name="source" value="${esc(i.source ?? "")}" placeholder="Sponsor or platform — e.g. NordVPN"></label>
+    <label${fl(f, "channels")}>Channel${channelSelect("channel", i.channel === undefined ? null : (i.channel ?? "general"), { general: "General / whole business" })}</label>
     <label>Company<select name="company">${opt("", "Channel's company", !i.companyId)}${lists.companies.filter((c) => !c.archived).map((c) => opt(c.id, c.name, c.id === i.companyId)).join("")}</select></label>
-    <label>Month<input type="month" name="month" value="${esc(monthly && i.periodStart ? i.periodStart.slice(0, 7) : month)}"></label>
-    <label>Received on<input type="date" name="received" value="${esc(i.receivedOn ?? "")}"></label>
+    <label${fl(f, "month")}>Month<input type="month" name="month" value="${esc(monthly && i.periodStart ? i.periodStart.slice(0, 7) : month)}"></label>
+    <label${fl(f, "date")}>Received on<input type="date" name="received" value="${esc(i.receivedOn ?? "")}"></label>
     <details class="w4"${monthly ? "" : " open"}><summary class="linkbtn">A week or other period instead of a month</summary>
       <div class="fform" style="margin-top:10px"><label>From<input type="date" name="from" value="${esc(monthly ? "" : i.periodStart ?? "")}"></label><label>To<input type="date" name="to" value="${esc(monthly ? "" : i.periodEnd ?? "")}"></label>
       <p class="fhint">Set both and they're used instead of the month. Reports spread a period across the months it touches, by day.</p></div></details>
@@ -54,13 +71,13 @@ export function renderIncome(shell: Shell, d: IncomeData): string {
     .map((i) => {
       const s = lists.streams.find((x) => x.id === i.streamId);
       const period = i.granularity === "month" ? monthLabel(i.periodStart.slice(0, 7), "shortYear") : `${usDay(i.periodStart)}–${usDay(i.periodEnd)}`;
-      return `<tr><td class="l">${esc(period)}</td><td class="l"><span class="fch" style="--ch:${s?.colour ?? "#94949E"}"><i></i>${esc(s?.label ?? i.streamId)}</span>${i.source ? ` <small class="fnote">${esc(i.source)}</small>` : ""}</td>
+      return `<tr id="i${i.id}"><td class="l">${esc(period)}</td><td class="l"><span class="fch" style="--ch:${s?.colour ?? "#94949E"}"><i></i>${esc(s?.label ?? i.streamId)}</span>${i.source ? ` <small class="fnote">${esc(i.source)}</small>` : ""}${checkMark(i.review)}</td>
         <td class="l">${chanLabel(i.channel)}</td><td>${money(i.amount)}</td>
-        <td><details class="fedit"><summary class="linkbtn">Edit</summary>${incomeForm(lists, i, d.month, `/finance/income/${i.id}`)}
+        <td><details class="fedit"><summary class="linkbtn">Edit</summary>${incomeForm(lists, i, d.month, `/finance/income/${i.id}`, { missing: [], unsure: i.review ?? [] })}
           <form method="post" action="/finance/income/${i.id}/delete" style="margin-top:8px"><button class="linkbtn danger">Delete</button></form></details></td></tr>`;
     })
     .join("");
-  const body = `${saved(d.msg)}<div class="fheadrow">${monthSwitch(d.month, qs)}
+  const body = `${saved(d.msg)}${voiceBox("income", "/finance/income", d.voice)}<div class="fheadrow">${monthSwitch(d.month, qs)}
       <form class="ffilters" method="get" action="/finance/income" style="margin:0"><input type="hidden" name="m" value="${d.month}">
         <select name="stream" onchange="this.form.submit()">${opt("", "Every stream", !d.filter.stream)}${lists.streams.map((s) => opt(s.id, s.label, s.id === d.filter.stream)).join("")}</select>
         ${channelSelect("channel", d.filter.channel ?? null, { any: "Every channel", general: "General only" }).replace("<select", '<select onchange="this.form.submit()"')}
@@ -73,7 +90,7 @@ export function renderIncome(shell: Shell, d: IncomeData): string {
     <section class="panel"><h2>${esc(monthLabel(d.month))}</h2>${
       rows ? `<div class="fscroll"><table class="ftable"><thead><tr><th class="l">Period</th><th class="l">Stream · source</th><th class="l">Channel</th><th>Amount</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">No income entered for ${esc(monthLabel(d.month))}. <a href="/finance/income/entry?m=${d.month}">Enter the month</a>.</div>`
     }</section>
-    <section class="panel"><h2>Add income <span class="sub">— a sponsorship, affiliate payout, anything. Revenue stream and channel are separate: a sponsorship on a channel is that channel's revenue, but never its RPM.</span></h2>${incomeForm(lists, {}, d.month, "/finance/income")}</section>`;
+    <section class="panel" id="add"><h2>Add income <span class="sub">— a sponsorship, affiliate payout, anything. Revenue stream and channel are separate: a sponsorship on a channel is that channel's revenue, but never its RPM.</span></h2>${voiceBanner(d.prefill?.voice)}${incomeForm(lists, d.prefill?.i ?? {}, d.month, "/finance/income", d.prefill?.voice.flags, d.prefill?.voice.ref)}</section>`;
   return financePage(shell, "income", "Income", body);
 }
 
@@ -142,6 +159,7 @@ export interface ExpensesData {
   lists: Lists;
   filter: Record<string, string>;
   msg: string;
+  voice: VoiceNote[];
 }
 
 export function renderExpenses(shell: Shell, d: ExpensesData): string {
@@ -158,7 +176,7 @@ export function renderExpenses(shell: Shell, d: ExpensesData): string {
       const cat = lists.categories.find((c) => c.id === e.categoryId);
       return `<tr>
         <td class="l">${esc(usDay(e.date))}</td>
-        <td class="l"><a href="/finance/expenses/${e.id}" style="color:var(--ink);font-weight:650">${esc(e.payee || e.personName || "(no payee)")}</a>${e.personName && e.payee && e.payee !== e.personName ? ` <small class="fnote">${esc(e.personName)}</small>` : ""}${e.recordTitle ? `<div class="fnote" style="margin:2px 0 0">▸ ${esc(e.recordTitle)}</div>` : ""}</td>
+        <td class="l"><a href="/finance/expenses/${e.id}" style="color:var(--ink);font-weight:650">${esc(e.payee || e.personName || "(no payee)")}</a>${checkMark(e.review)}${e.personName && e.payee && e.payee !== e.personName ? ` <small class="fnote">${esc(e.personName)}</small>` : ""}${e.recordTitle ? `<div class="fnote" style="margin:2px 0 0">▸ ${esc(e.recordTitle)}</div>` : ""}</td>
         <td class="l">${cat ? `<span class="fch" style="--ch:${cat.colour}"><i></i>${esc(cat.label)}</span>` : ""}</td>
         <td class="l"><small>${esc(EXPENSE_TYPE.get(e.type)?.label ?? e.type)}</small></td>
         <td class="l">${splitsText(e.splits)}</td>
@@ -167,7 +185,7 @@ export function renderExpenses(shell: Shell, d: ExpensesData): string {
         <td><div class="flist-actions">${e.status === "unpaid" ? `<form method="post" action="/finance/expenses/${e.id}/paid"><button class="linkbtn">Mark paid</button></form>` : ""}<a class="linkbtn" href="/finance/expenses/${e.id}">Edit</a></div></td></tr>`;
     })
     .join("");
-  const body = `${saved(d.msg)}<div class="fheadrow">${d.month ? monthSwitch(d.month, qs) : `<a class="linkbtn" href="/finance/expenses">This month</a>`}<span class="sp"></span><a class="clear" href="/finance/expenses/new">+ Add expense</a></div>
+  const body = `${saved(d.msg)}${voiceBox("expense", "/finance/expenses", d.voice)}<div class="fheadrow">${d.month ? monthSwitch(d.month, qs) : `<a class="linkbtn" href="/finance/expenses">This month</a>`}<span class="sp"></span><a class="clear" href="/finance/expenses/new">+ Add expense</a></div>
     <form class="ffilters" method="get" action="/finance/expenses">${d.month ? `<input type="hidden" name="m" value="${d.month}">` : ""}
       ${sel("type", "Every type", EXPENSE_TYPES.map((t) => [t.id, t.label]))}
       ${sel("category", "Every category", lists.categories.map((c) => [c.id, c.label]))}
@@ -193,33 +211,37 @@ export interface ExpenseFormData {
   records: Array<{ id: number; label: string; channel: string | null }>;
   models: Map<number, string>;
   msg: string;
+  voice?: VoicePrefill;
 }
 
 export function renderExpenseForm(shell: Shell, d: ExpenseFormData): string {
   const { e, lists } = d;
+  const f: Flags | undefined = d.voice?.flags ?? (e.review?.length ? { missing: [], unsure: e.review } : undefined);
   const today = dateIn(ORG_TZ);
   const recordVal = e.recordId ? `#${e.recordId} · ${e.recordTitle ?? ""}` : "";
   const personOpts = lists.people.map((p) => `<option value="${p.id}"${p.id === e.personId ? " selected" : ""} data-model="${esc(d.models.get(p.id) ?? "")}">${esc(p.name)}${p.role ? ` — ${esc(p.role)}` : ""}</option>`).join("");
   const body = `${saved(d.msg)}<form class="panel" method="post" action="${e.id ? `/finance/expenses/${e.id}` : "/finance/expenses"}" enctype="multipart/form-data">
-    <h2>${e.id ? "Edit expense" : "New expense"}</h2>
+    <h2>${e.id ? "Edit expense" : "New expense"}</h2>${voiceBanner(d.voice)}${
+      !d.voice && e.review?.length ? `<div class="fvbanner"><span>🎙</span><div>Logged from a voice note — <b>check ${esc(e.review.map(fieldName).join(", "))}</b>, marked below. Saving clears the mark.</div></div>` : ""
+    }${d.voice ? `<input type="hidden" name="voice" value="${esc(d.voice.ref)}">` : ""}
     <div class="fform">
-      <label>Amount ($)<input name="amount" inputmode="decimal" value="${esc(dollars(e.amount))}" placeholder="${e.id ? "" : "blank = work it out"}"></label>
-      <label>Date<input type="date" name="date" required value="${esc(e.date ?? today)}"></label>
-      <label class="w2">Payee / vendor<input name="payee" value="${esc(e.payee ?? "")}" placeholder="Who was paid"></label>
-      <label>Type<select name="type">${EXPENSE_TYPES.map((t) => opt(t.id, t.label, t.id === (e.type ?? "one_off"))).join("")}</select></label>
-      <label>Category<select name="category">${opt("", "—", !e.categoryId)}${lists.categories.filter((c) => !c.archived || c.id === e.categoryId).map((c) => opt(c.id, c.label, c.id === e.categoryId)).join("")}</select></label>
+      <label${fl(f, "amount")}>Amount ($)<input name="amount" inputmode="decimal" value="${esc(dollars(e.amount))}" placeholder="${e.id ? "" : "blank = work it out"}"></label>
+      <label${fl(f, "date")}>Date<input type="date" name="date" required value="${esc(e.date ?? today)}"></label>
+      <label class="w2"${fl(f, "payee")}>Payee / vendor<input name="payee" value="${esc(e.payee ?? "")}" placeholder="Who was paid"></label>
+      <label${fl(f, "expense_type")}>Type<select name="type">${EXPENSE_TYPES.map((t) => opt(t.id, t.label, t.id === (e.type ?? "one_off"))).join("")}</select></label>
+      <label${fl(f, "category")}>Category<select name="category">${opt("", "—", !e.categoryId)}${lists.categories.filter((c) => !c.archived || c.id === e.categoryId).map((c) => opt(c.id, c.label, c.id === e.categoryId)).join("")}</select></label>
       <label>Company<select name="company">${opt("", "Channel's company", !e.companyId)}${lists.companies.filter((c) => !c.archived).map((c) => opt(c.id, c.name, c.id === e.companyId)).join("")}</select></label>
-      <label>Payment method<select name="method">${opt("", "—", !e.methodId)}${lists.methods.filter((m) => !m.archived).map((m) => opt(m.id, m.label, m.id === e.methodId)).join("")}</select></label>
-      <label>Contractor / person<select name="person" data-person>${opt("", "—", !e.personId)}${personOpts}</select></label>
+      <label${fl(f, "method")}>Payment method<select name="method">${opt("", "—", !e.methodId)}${lists.methods.filter((m) => !m.archived).map((m) => opt(m.id, m.label, m.id === e.methodId)).join("")}</select></label>
+      <label${fl(f, "person")}>Contractor / person<select name="person" data-person>${opt("", "—", !e.personId)}${personOpts}</select></label>
       <label>Finished videos<input name="videos" inputmode="decimal" value="${e.unitsVideos ?? ""}" placeholder="for per-video pay"></label>
       <label>Finished minutes<input name="minutes" inputmode="decimal" value="${e.unitsMinutes ?? ""}" placeholder="for per-minute pay"></label>
-      <label>Status<select name="status">${opt("paid", "Paid", (e.status ?? "paid") === "paid")}${opt("unpaid", "Unpaid", e.status === "unpaid")}${opt("covered", "Covered by an advance", e.status === "covered")}</select></label>
+      <label${fl(f, "status")}>Status<select name="status">${opt("paid", "Paid", (e.status ?? "paid") === "paid")}${opt("unpaid", "Unpaid", e.status === "unpaid")}${opt("covered", "Covered by an advance", e.status === "covered")}</select></label>
       <p class="fhint" data-model-hint>${e.paySnapshot ? `Worked out with: ${esc(describePay(e.paySnapshot))}${e.calculated !== null && e.calculated !== undefined ? ` → ${esc(fmtMoney(e.calculated))}${e.paySnapshot.explain ? ` (${esc(e.paySnapshot.explain)})` : ""}` : ""}. ` : ""}Pick a person and leave Amount blank to work it out from their pay model; type an amount to override it.</p>
       <label>Paid on<input type="date" name="paid_on" value="${esc(e.paidOn ?? "")}"></label>
       <label class="chk" style="align-self:center"><input type="checkbox" name="advance" value="1"${e.isAdvance ? " checked" : ""}> This is an advance (prepaid)</label>
       <label class="w2">Video / project<input name="record" list="records" value="${esc(recordVal)}" placeholder="Search a video on the board…"></label>
       <datalist id="records">${d.records.map((r) => `<option value="${esc(`#${r.id} · ${r.label}`)}">${esc(r.channel ?? "")}</option>`).join("")}</datalist>
-      <label class="w4">Channels<span style="font-weight:500">${splitEditor(e.splits ?? [])}</span></label>
+      <label class="w4"${fl(f, "channels")}>Channels<span style="font-weight:500">${splitEditor(e.splits ?? [])}</span></label>
       <label class="w2">Receipt / invoice<input type="file" name="receipt" accept="image/*,application/pdf"></label>
       <label class="w2">…or its link<input name="receipt_url" type="url" value="${esc(e.receiptUrl ?? "")}" placeholder="https://"></label>
       ${e.attachments?.length ? `<div class="w4 fnote">Attached: ${e.attachments.map((a) => `<a href="/finance/attachments/${a.id}" target="_blank">${esc(a.filename)}</a> <button class="linkbtn danger" formaction="/finance/attachments/${a.id}/delete" formenctype="application/x-www-form-urlencoded" formnovalidate>remove</button>`).join(" · ")}</div>` : ""}
@@ -250,23 +272,25 @@ export interface SubscriptionsData {
   lists: Lists;
   msg: string;
   editing: number | null;
+  voice: VoiceNote[];
+  prefill?: { r: Partial<Recurring>; voice: VoicePrefill };
 }
 
-function recurringForm(lists: Lists, r: Partial<Recurring>, action: string): string {
-  return `<form class="fform" method="post" action="${action}">
-    <label class="w2">Service / vendor<input name="vendor" required value="${esc(r.vendor ?? "")}" placeholder="Adobe, Epidemic Sound, office rent…"></label>
-    <label>Cost ($)<input name="amount" inputmode="decimal" required value="${esc(dollars(r.amount))}"></label>
-    <label>Billed<select name="frequency">${FREQUENCIES.map((f) => opt(f.id, f.label, f.id === (r.frequency ?? "monthly"))).join("")}</select></label>
-    <label>Next bill<input type="date" name="next_bill" value="${esc(r.nextBill ?? "")}"></label>
+function recurringForm(lists: Lists, r: Partial<Recurring>, action: string, f?: Flags, voiceRef?: string): string {
+  return `<form class="fform" method="post" action="${action}">${voiceRef ? `<input type="hidden" name="voice" value="${esc(voiceRef)}">` : ""}
+    <label class="w2"${fl(f, "payee", "service")}>Service / vendor<input name="vendor" required value="${esc(r.vendor ?? "")}" placeholder="Adobe, Epidemic Sound, office rent…"></label>
+    <label${fl(f, "amount")}>Cost ($)<input name="amount" inputmode="decimal" required value="${esc(dollars(r.amount))}"></label>
+    <label${fl(f, "frequency")}>Billed<select name="frequency">${FREQUENCIES.map((f) => opt(f.id, f.label, f.id === (r.frequency ?? "monthly"))).join("")}</select></label>
+    <label${fl(f, "next_bill")}>Next bill<input type="date" name="next_bill" value="${esc(r.nextBill ?? "")}"></label>
     <label>Kind<select name="kind">${opt("subscription", "Subscription", (r.kind ?? "subscription") === "subscription")}${opt("recurring", "Other recurring cost", r.kind === "recurring")}</select></label>
-    <label>Category<select name="category">${opt("", "—", !r.categoryId)}${lists.categories.filter((c) => !c.archived).map((c) => opt(c.id, c.label, c.id === r.categoryId)).join("")}</select></label>
+    <label${fl(f, "category")}>Category<select name="category">${opt("", "—", !r.categoryId)}${lists.categories.filter((c) => !c.archived).map((c) => opt(c.id, c.label, c.id === r.categoryId)).join("")}</select></label>
     <label>Company<select name="company">${opt("", "—", !r.companyId)}${lists.companies.filter((c) => !c.archived).map((c) => opt(c.id, c.name, c.id === r.companyId)).join("")}</select></label>
     <label>Payment method<select name="method">${opt("", "—", !r.methodId)}${lists.methods.filter((m) => !m.archived).map((m) => opt(m.id, m.label, m.id === r.methodId)).join("")}</select></label>
     <label>Person (retainer, salary)<select name="person">${opt("", "—", !r.personId)}${lists.people.map((p) => opt(p.id, p.name, p.id === r.personId)).join("")}</select></label>
     <label class="chk"><input type="checkbox" name="auto" value="1"${r.autoPost === false ? "" : " checked"}> Post each bill automatically</label>
     <label>Posted as<select name="post_status">${opt("paid", "Paid (charged automatically)", (r.postStatus ?? "paid") === "paid")}${opt("unpaid", "Unpaid (I pay it by hand)", r.postStatus === "unpaid")}</select></label>
     <label class="chk"><input type="checkbox" name="active" value="1"${r.active === false ? "" : " checked"}> Active</label>
-    <label class="w4">Channels<span style="font-weight:500">${splitEditor(r.splits ?? [])}</span></label>
+    <label class="w4"${fl(f, "channels")}>Channels<span style="font-weight:500">${splitEditor(r.splits ?? [])}</span></label>
     <label class="w4">Notes<input name="notes" value="${esc(r.notes ?? "")}"></label>
     <div class="fbtns"><button class="clear">${r.id ? "Save" : "Add"}</button></div>
   </form>`;
@@ -283,7 +307,7 @@ export function renderSubscriptions(shell: Shell, d: SubscriptionsData): string 
         ${list
           .map((r) => {
             const cat = d.lists.categories.find((c) => c.id === r.categoryId);
-            return `<tr id="r${r.id}"${r.active ? "" : ' style="opacity:.55"'}><td class="l"><b>${esc(r.vendor)}</b>${r.personName ? ` <small class="fnote">${esc(r.personName)}</small>` : ""}${r.active ? "" : ' <span class="fpill">Paused</span>'}</td>
+            return `<tr id="r${r.id}"${r.active ? "" : ' style="opacity:.55"'}><td class="l"><b>${esc(r.vendor)}</b>${checkMark(r.review)}${r.personName ? ` <small class="fnote">${esc(r.personName)}</small>` : ""}${r.active ? "" : ' <span class="fpill">Paused</span>'}</td>
               <td class="l">${cat ? `<span class="fch" style="--ch:${cat.colour}"><i></i>${esc(cat.label)}</span>` : ""}</td><td class="l">${splitsText(r.splits)}</td>
               <td>${money(r.amount)}</td><td class="l"><small>${esc(FREQUENCY.get(r.frequency)?.label ?? r.frequency)}</small></td><td>${money(r.monthly)}</td>
               <td class="l">${r.nextBill ? esc(usDay(r.nextBill)) : "—"}${r.autoPost ? "" : ' <small class="fnote">by hand</small>'}</td>
@@ -295,7 +319,7 @@ export function renderSubscriptions(shell: Shell, d: SubscriptionsData): string 
       : `<div class="empty">${esc(empty)}</div>`;
   const editing = d.editing ? d.list.find((r) => r.id === d.editing) : null;
   const paused = d.list.filter((r) => !r.active);
-  const body = `${saved(d.msg)}
+  const body = `${saved(d.msg)}${voiceBox("subscription", "/finance/subscriptions", d.voice)}
     <div class="ftiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">
       ${tile(money(sum(active)), "Recurring a month", "true monthly cost: annual ÷ 12, quarterly ÷ 3…", "hero")}
       ${tile(money(sum(subs)), "Subscriptions", `${subs.length} running`)}
@@ -305,7 +329,8 @@ export function renderSubscriptions(shell: Shell, d: SubscriptionsData): string 
     <section class="panel"><h2>Other recurring costs <span class="sub">— rent, retainers, salaries: anything fixed that isn't a subscription</span></h2>${table(other, "None yet.")}</section>
     ${paused.length ? `<section class="panel"><h2>Paused</h2>${table(paused, "")}</section>` : ""}
     <section class="panel" id="edit"><h2>${editing ? `Edit ${esc(editing.vendor)}` : "Add a subscription or recurring cost"} <span class="sub">— each bill is posted as an expense on its date, so the months it was charged count it; this page shows what it costs a month</span></h2>
-      ${recurringForm(d.lists, editing ?? {}, editing ? `/finance/subscriptions/${editing.id}` : "/finance/subscriptions")}
+      ${editing ? "" : voiceBanner(d.prefill?.voice)}
+      ${recurringForm(d.lists, editing ?? d.prefill?.r ?? {}, editing ? `/finance/subscriptions/${editing.id}` : "/finance/subscriptions", editing ? { missing: [], unsure: editing.review } : d.prefill?.voice.flags, editing ? undefined : d.prefill?.voice.ref)}
       ${editing ? `<form method="post" action="/finance/subscriptions/${editing.id}/delete" style="margin-top:10px"><button class="linkbtn danger" onclick="return confirm('Delete it? Bills already posted stay as expenses.')">Delete</button></form>` : ""}
     </section>`;
   return financePage(shell, "subscriptions", "Subscriptions", body);
@@ -313,7 +338,7 @@ export function renderSubscriptions(shell: Shell, d: SubscriptionsData): string 
 
 // ── contractors ────────────────────────────────────────────────────────────
 
-export function renderContractors(shell: Shell, d: { people: Person[]; msg: string }): string {
+export function renderContractors(shell: Shell, d: { people: Person[]; msg: string; voice: VoiceNote[] }): string {
   const rows = d.people
     .map(
       (p) => `<tr${p.active ? "" : ' style="opacity:.55"'}><td class="l"><a href="/finance/contractors/${p.id}" style="color:var(--ink);font-weight:700">${esc(p.name)}</a>${p.role ? ` <small class="fnote">${esc(p.role)}</small>` : ""}</td>
@@ -323,7 +348,7 @@ export function renderContractors(shell: Shell, d: { people: Person[]; msg: stri
     )
     .join("");
   const owed = d.people.reduce((a, p) => a + p.outstanding, 0);
-  const body = `${saved(d.msg)}
+  const body = `${saved(d.msg)}${voiceBox("contractor", "/finance/contractors", d.voice)}
     <div class="ftiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">
       ${tile(money(d.people.reduce((a, p) => a + p.cashThisMonth, 0)), "Paid this month", "cash")}
       ${tile(money(owed), "Outstanding", "work done, not paid yet", owed ? "hero" : "")}
@@ -334,7 +359,7 @@ export function renderContractors(shell: Shell, d: { people: Person[]; msg: stri
         ? `<div class="fscroll"><table class="ftable"><thead><tr><th class="l">Name</th><th class="l">Pay model</th><th>Paid this month</th><th>Lifetime cash</th><th>Outstanding</th><th>Advance left</th><th class="l">Last work</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty">No one yet. Add your editors, writers and voice actors below with how each is paid.</div>`
     }</section>
-    <section class="panel"><h2>Add a person</h2><form class="fform" method="post" action="/finance/contractors">
+    <section class="panel" id="add"><h2>Add a person</h2><form class="fform" method="post" action="/finance/contractors">
       <label class="w2">Name<input name="name" required></label><label class="w2">Role<input name="role" placeholder="Editor, scriptwriter, thumbnail artist…"></label>
       <div class="fbtns"><button class="clear">Add</button><span class="fnote" style="margin:0">Then set how they're paid on their page.</span></div></form></section>`;
   return financePage(shell, "contractors", "Contractors", body);
@@ -347,6 +372,7 @@ export interface PersonData {
   records: Array<{ id: number; label: string; channel: string | null }>;
   msg: string;
   today: string;
+  voice: VoiceNote[];
 }
 
 function modelForm(p: Person): string {
@@ -370,11 +396,12 @@ function modelForm(p: Person): string {
     <label data-for="retainer salary">Paid<select name="frequency">${FREQUENCIES.map((f) => opt(f.id, f.label, f.id === (v("frequency") || "monthly"))).join("")}</select></label>
     <label class="chk" data-for="retainer salary"><input type="checkbox" name="recurring" value="1" checked> Also set it up as a recurring cost</label>
     <label data-for="revenue_share">Share (%)<input name="pct" inputmode="decimal" value="${esc(v("pct"))}"></label>
-    <label data-for="revenue_share">Of<select name="share_channel">${opt("", "Network revenue", !v("channel"))}${CHANNELS.map((c) => opt(c.name, c.name, c.name === v("channel"))).join("")}</select></label>
+    <label class="w4">Channels they work on <span data-for="revenue_share" style="font-weight:500">— the share is of these channels' revenue combined; none is the whole network</span>${channelChips("channels", payChannels(cur?.params), { none: "No channel set — the whole network" })}</label>
     <label class="w4">Note<input name="note" placeholder="Why it changed — optional"></label>
-    <p class="fhint">Work already logged keeps the rate it was worked out with. Tiers: "10 = 15" is the first 10 minutes at $15/min; "rest = 10" every minute after at $10.</p>
+    <p class="fhint">Logged work goes to their channels unless you pick others. Work already logged keeps the rate it was worked out with. Tiers: "10 = 15" is the first 10 minutes at $15/min; "rest = 10" every minute after at $10.</p>
     <div class="fbtns"><button class="clear">Save pay model</button></div>
   </form>
+  ${CHIPS_SCRIPT}
   <script>
   (function () {
     var f = document.querySelector("[data-modelform]"); if (!f) return;
@@ -416,7 +443,7 @@ export function renderPerson(shell: Shell, d: PersonData): string {
   </section>`;
   const logForm = `<form class="fform" method="post" action="/finance/contractors/${p.id}/work">
     <label>Date<input type="date" name="date" required value="${d.today}"></label>
-    <label>Channel${channelSelect("channel", null, { general: "General" })}</label>
+    <label>Channels${channelChips("ch", payChannels(cur?.params), { none: "General" })}</label>
     <label class="w2">Video<input name="record" list="precords" placeholder="Search a video on the board…"></label>
     <datalist id="precords">${d.records.map((r) => `<option value="${esc(`#${r.id} · ${r.label}`)}">${esc(r.channel ?? "")}</option>`).join("")}</datalist>
     <label>Videos<input name="videos" inputmode="decimal" value="1"></label>
@@ -448,7 +475,7 @@ export function renderPerson(shell: Shell, d: PersonData): string {
           <td><form method="post" action="/finance/contractors/${p.id}/model/${m.id}/delete"><button class="linkbtn danger">Remove</button></form></td></tr>`)
         .join("")}</tbody></table>`
     : `<div class="empty">No pay model yet.</div>`;
-  const body = `${saved(d.msg)}${tiles}${pipe}
+  const body = `${saved(d.msg)}${tiles}${voiceBox("contractor", `/finance/contractors/${p.id}`, d.voice.filter((n) => n.entries.some((x) => x.entry.person?.toLowerCase() === p.name.toLowerCase())))}${pipe}
     <section class="panel"><h2>Log work</h2>${logForm}</section>
     <div class="fgrid2"><section class="panel"><h2>Pay model <span class="sub">— lives here, not on each expense</span></h2>${modelForm(p)}</section>
       <section class="panel"><h2>Pay history <span class="sub">— a new model never rewrites old work</span></h2>${models}<h2 style="margin-top:18px">Advance</h2>${advForm}</section></div>

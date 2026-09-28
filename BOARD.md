@@ -428,6 +428,47 @@ Every tab is a view of the same tables, so nothing is entered twice.
 Logged work is drawn from an advance while one is left, and anything past it
 is owed.
 
+### Voice notes — say it, and it's logged
+
+Income, Expenses, Subscriptions and Contractors each have a **voice box** at
+the top. Tap the mic and say what happened, then tap it again. The browser
+transcribes it (Chrome, Edge and Safari; elsewhere, use your keyboard's
+dictation), and it's logged when you stop. You can type into the box too.
+
+- "Paid Divas 250 for the Anime edit on the Chase card yesterday. Bought a new
+  mic for 180." becomes two expenses: Divas, $250, Anime, the Chase card,
+  yesterday; and $180, Equipment.
+- "NordVPN paid 1,000 for the Studios sponsorship in September" becomes
+  Sponsorship income on Specular Studios for September.
+- "Canva is 15 a month, for the thumbnails" becomes a subscription.
+- "Divas did two Anime edits, 12 and 14 minutes" logs work from her pay model
+  (26 min × her rate).
+- "Gave Vyasa a 5k advance", "Paid Divas everything I owe" and "Divas is 12 a
+  minute now" record an advance, a payment and a pay change.
+
+**How it's read.** With `ANTHROPIC_API_KEY` set, Claude reads the note using
+your channels, people, categories and streams, and says which fields it had to
+guess. Without a key, fixed rules read it: they handle the common phrasings,
+and more gets marked to check. Nothing is invented; anything not said is left
+empty.
+
+**The marks.**
+- 🟢 **Logged**: nothing to check.
+- 🟠 **Logged, check …**: it guessed at something, such as a category or
+  channel. The row shows *● check …* in its list, and the fields are outlined
+  on its form. **Looks right ✓** clears the mark, and so does saving the form.
+- 🔴 **Needs …**: something required is missing, such as the amount, or a
+  person the board doesn't know yet. It's kept as a draft. **Fill in** opens
+  the form filled from the note with the missing fields outlined, and **Add …
+  & log** adds the new person and logs it.
+
+Notes stay under the box for two weeks; × hides one (what it logged stays).
+
+**Pay models and channels.** A person's pay model has a set of **channels
+they work on**. Work logged for them goes to those channels unless you pick
+others, and a revenue share is a share of those channels' combined revenue
+(none means the whole network).
+
 ### Your time, views and sustainability
 
 - **Your hours per channel** come from the work you finished on it that month:

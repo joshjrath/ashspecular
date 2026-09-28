@@ -8,17 +8,19 @@ import {
   addAttachment, addCategory, addCompany, addMethod, addPayModel, addStream, deleteAttachment, deleteExpense, deleteIncome, deletePayModel,
   deleteRecurring, getAttachment, getExpense, getThresholds, listExpenses, listIncome, listPeople, listRecurring, loadFacts, loadLists, markPaid,
   monthGrid, postDueBills, postNextBill, recordsForAttribution, renameItem, saveExpense, saveIncome, saveMonthGrid, savePerson, saveRecurring,
-  saveThresholds, setArchived, setChannelCompany, setStreamPlatform, type Expense, type ExpenseInput, type Lists,
+  saveThresholds, setArchived, clearReview, dismissVoiceNote, getVoiceNote, listVoiceNotes, setVoiceEntries, type StoredVoiceEntry, setChannelCompany, setStreamPlatform, type Expense, type ExpenseInput, type Lists,
 } from "../../db/finance.js";
 import { pool } from "../../db/pool.js";
 import { DEFAULT_THRESHOLDS, EXPENSE_TYPE, FLAG, pnl, reportingMonth, type ExpenseType, type FlagId, type Thresholds } from "../../finance/metrics.js";
-import { FREQUENCY, addMonths, isMonth, monthEnd, monthStart, monthsEnding, parseMoney } from "../../finance/money.js";
-import { PAY_MODEL, computePay, describePay, modelOn, parseTiers, type PayModelId, type PayParams } from "../../finance/pay.js";
+import { FREQUENCY, addMonths, fmtMoney, isMonth, monthEnd, monthStart, monthsEnding, parseMoney } from "../../finance/money.js";
+import { PAY_MODEL, computePay, describePay, modelOn, parseTiers, payChannels, type PayModelId, type PayParams } from "../../finance/pay.js";
 import { ORG_TZ, dateIn } from "../../parse/derive.js";
 import type { Shell } from "../page.js";
 import { renderExpenseForm, renderExpenses, renderFinanceSettings, renderContractors, renderIncome, renderIncomeEntry, renderPerson, renderSubscriptions } from "./forms.js";
 import { channelAlerts, renderFinanceChannel, renderFinanceChannels, renderFinanceOverview, renderFinanceReports, reportsCsv } from "./pages.js";
 import { readSplits } from "./ui.js";
+import { logWork, retryEntry, takeVoiceNote } from "./voice.js";
+import { VOICE_TABS, type VoiceEntry, type VoiceTab } from "../../finance/voice.js";
 
 type Body = Record<string, string | string[] | undefined> & { __files?: UploadedFile[] };
 interface UploadedFile { field: string; filename: string; mime: string; data: Buffer }
@@ -27,6 +29,8 @@ const str = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : typeof v ==
 const idOf = (v: unknown) => { const n = Number(str(v)); return Number.isInteger(n) && n > 0 ? n : null; };
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 const num = (v: unknown) => { const s = str(v).replace(/,/g, ""); if (!s) return null; const n = Number(s); return Number.isFinite(n) ? n : null; };
+/** Ticked channels from a multi-select, catalog names only. */
+const channelsOf = (v: unknown) => [...new Set((Array.isArray(v) ? v : v ? [v] : []).map(String).filter((c) => CHANNELS.some((ch) => ch.name === c)))];
 const channelOf = (v: unknown) => { const s = str(v); return CHANNELS.some((c) => c.name === s) ? s : null; };
 /** "#123 · Title" from the video picker → 123. */
 const recordOf = (v: unknown) => { const m = /^#(\d+)/.exec(str(v)); return m ? Number(m[1]) : null; };
@@ -65,6 +69,30 @@ export function parseMultipart(buf: Buffer, contentType: string): Body {
     pos = next;
   }
   return out;
+}
+
+const cents = (d: number | null) => (d === null ? null : Math.round(d * 100));
+
+/** A draft being finished: "noteId:index" from the Fill in link, with what to mark. */
+async function draftFrom(ref: unknown): Promise<{ e: VoiceEntry; prefill: { transcript: string; ref: string; flags: { missing: string[]; unsure: string[] } } } | null> {
+  const m = /^(\d+):(\d+)$/.exec(str(ref));
+  if (!m) return null;
+  const note = await getVoiceNote(Number(m[1]));
+  const item = note?.entries[Number(m[2])];
+  if (!note || !item || item.logged) return null;
+  const missing = item.missing.map((x) => (x === "service" ? "payee" : x));
+  return { e: item.entry, prefill: { transcript: note.transcript, ref: `${m[1]}:${m[2]}`, flags: { missing, unsure: item.entry.unsure } } };
+}
+
+/** A draft's form was saved: the note shows it logged and checked. */
+async function finishDraft(ref: unknown, logged: NonNullable<StoredVoiceEntry["logged"]>): Promise<void> {
+  const m = /^(\d+):(\d+)$/.exec(str(ref));
+  if (!m) return;
+  const note = await getVoiceNote(Number(m[1]));
+  const item = note?.entries[Number(m[2])];
+  if (!note || !item) return;
+  note.entries[Number(m[2])] = { ...item, missing: [], logged, checked: true };
+  await setVoiceEntries(note.id, note.entries);
 }
 
 /** Sustainability alerts for the sidebar and the dashboard, kept five minutes. */
@@ -174,8 +202,19 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const q = request.query;
     const month = isMonth(q.m) ? q.m : await monthFor("");
     const channel = q.channel === "general" ? "general" : channelOf(q.channel) ?? undefined;
-    const [s, lists, list] = await Promise.all([fshell(), loadLists(), listIncome({ from: monthStart(month), to: monthEnd(month), stream: q.stream || undefined, channel })]);
-    return html(reply, renderIncome(s, { month, list, lists, filter: { stream: q.stream || undefined, channel }, msg: q.msg ?? "" }));
+    const [s, lists, list, voice, draft] = await Promise.all([
+      fshell(), loadLists(), listIncome({ from: monthStart(month), to: monthEnd(month), stream: q.stream || undefined, channel }), listVoiceNotes("income"), draftFrom(q.voice),
+    ]);
+    const prefill = draft
+      ? {
+          i: {
+            amount: cents(draft.e.amount) ?? undefined, streamId: draft.e.stream ?? undefined, source: draft.e.payee ?? "", channel: draft.e.channels[0] ?? null,
+            periodStart: draft.e.month ? monthStart(draft.e.month) : undefined, receivedOn: draft.e.date, notes: draft.e.notes ?? "",
+          },
+          voice: draft.prefill,
+        }
+      : undefined;
+    return html(reply, renderIncome(s, { month, list, lists, filter: { stream: q.stream || undefined, channel }, msg: q.msg ?? "", voice, prefill }));
   });
 
   const incomeFrom = (b: Body, lists: Lists) => {
@@ -204,7 +243,8 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.post<{ Body: Body }>("/finance/income", async (request, reply) => {
     const i = incomeFrom(request.body ?? {}, await loadLists());
     if (!i) return back(reply, "/finance/income", "Enter an amount.");
-    await saveIncome(i);
+    const newId = await saveIncome(i);
+    await finishDraft(request.body?.voice, { type: "income", id: newId, label: `${fmtMoney(i.amount)} income` });
     return back(reply, `/finance/income?m=${i.periodStart.slice(0, 7)}`, "Income added.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/income/:id", async (request, reply) => {
@@ -252,15 +292,16 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const month = all ? null : isMonth(q.m) ? q.m : thisMonth();
     const filter: Record<string, string> = {};
     for (const k of ["type", "category", "channel", "person", "status", "company", "q"]) if (q[k]) filter[k] = q[k]!;
-    const [s, lists, list] = await Promise.all([
+    const [s, lists, voice, list] = await Promise.all([
       fshell(),
       loadLists(),
+      listVoiceNotes("expense"),
       listExpenses({
         from: month ? monthStart(month) : undefined, to: month ? monthEnd(month) : undefined, type: filter.type, category: filter.category, channel: filter.channel,
         person: idOf(filter.person) ?? undefined, status: filter.status, company: idOf(filter.company) ?? undefined, q: filter.q,
       }),
     ]);
-    return html(reply, renderExpenses(s, { month, list, lists, filter, msg: q.msg ?? "" }));
+    return html(reply, renderExpenses(s, { month, list, lists, filter, msg: q.msg ?? "", voice }));
   });
 
   const modelsByPerson = async () => {
@@ -270,6 +311,20 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.get<{ Querystring: Record<string, string> }>("/finance/expenses/new", async (request, reply) => {
     const [s, lists, records, { models }] = await Promise.all([fshell(), loadLists(), recordsForAttribution(""), modelsByPerson()]);
     const person = idOf(request.query.person);
+    const draft = await draftFrom(request.query.voice);
+    if (draft) {
+      const e = draft.e;
+      const who = e.person ? lists.people.find((p) => p.name.toLowerCase() === e.person!.toLowerCase()) : undefined;
+      return html(reply, renderExpenseForm(s, {
+        e: {
+          amount: cents(e.amount) ?? undefined, date: e.date ?? undefined, payee: e.payee ?? who?.name ?? "", personId: who?.id ?? null,
+          type: e.expense_type ?? (who ? "contractor" : "one_off"), categoryId: e.category, status: e.status ?? "paid", unitsVideos: e.videos, unitsMinutes: e.minutes,
+          notes: e.notes ?? "", splits: e.channels.map((c) => ({ channel: c, weight: 1 })),
+          methodId: e.method ? lists.methods.find((m) => m.label.toLowerCase().includes(e.method!.toLowerCase()))?.id ?? null : null,
+        },
+        lists, records, models, msg: request.query.msg ?? "", voice: draft.prefill,
+      }));
+    }
     return html(reply, renderExpenseForm(s, { e: { personId: person, type: person ? "contractor" : "one_off" }, lists, records, models, msg: request.query.msg ?? "" }));
   });
   app.get<{ Params: { id: string }; Querystring: Record<string, string> }>("/finance/expenses/:id", async (request, reply) => {
@@ -320,9 +375,10 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.post<{ Body: Body }>("/finance/expenses", async (request, reply) => {
     const b = request.body ?? {};
     const e = await expenseFrom(b, await loadLists());
-    if (typeof e === "string") return back(reply, "/finance/expenses/new", e);
+    if (typeof e === "string") return back(reply, `/finance/expenses/new${str(b.voice) ? `?voice=${encodeURIComponent(str(b.voice))}` : ""}`, e);
     const id = await saveExpense(e);
     await attach(id, b);
+    await finishDraft(b.voice, { type: "expense", id, label: `${fmtMoney(e.amount)} · ${e.payee || "expense"}` });
     return back(reply, `/finance/expenses?m=${e.date.slice(0, 7)}`, "Expense added.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/expenses/:id", async (request, reply) => {
@@ -368,8 +424,17 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   // ── subscriptions ────────────────────────────────────────────────────
   app.get<{ Querystring: Record<string, string> }>("/finance/subscriptions", async (request, reply) => {
     await catchUp();
-    const [s, list, lists] = await Promise.all([fshell(), listRecurring(), loadLists()]);
-    return html(reply, renderSubscriptions(s, { list, lists, msg: request.query.msg ?? "", editing: idOf(request.query.edit) }));
+    const [s, list, lists, voice, draft] = await Promise.all([fshell(), listRecurring(), loadLists(), listVoiceNotes("subscription"), draftFrom(request.query.voice)]);
+    const prefill = draft
+      ? {
+          r: {
+            vendor: draft.e.payee ?? "", amount: cents(draft.e.amount) ?? undefined, frequency: draft.e.frequency ?? "monthly", nextBill: draft.e.next_bill,
+            categoryId: draft.e.category, splits: draft.e.channels.map((c) => ({ channel: c, weight: 1 })), notes: draft.e.notes ?? "",
+          },
+          voice: draft.prefill,
+        }
+      : undefined;
+    return html(reply, renderSubscriptions(s, { list, lists, msg: request.query.msg ?? "", editing: idOf(request.query.edit), voice, prefill }));
   });
   const recurringFrom = (b: Body) => {
     const amount = parseMoney(str(b.amount));
@@ -387,7 +452,8 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.post<{ Body: Body }>("/finance/subscriptions", async (request, reply) => {
     const r = recurringFrom(request.body ?? {});
     if (!r) return back(reply, "/finance/subscriptions", "Enter a name and a cost.");
-    await saveRecurring(r);
+    const rid = await saveRecurring(r);
+    await finishDraft(request.body?.voice, { type: "recurring", id: rid, label: `${r.vendor} · ${fmtMoney(r.amount)}` });
     await catchUp();
     return back(reply, "/finance/subscriptions", `${r.vendor} added.`);
   });
@@ -417,8 +483,8 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   // ── contractors ──────────────────────────────────────────────────────
   app.get<{ Querystring: Record<string, string> }>("/finance/contractors", async (request, reply) => {
     await catchUp();
-    const [s, people] = await Promise.all([fshell(), listPeople(today())]);
-    return html(reply, renderContractors(s, { people, msg: request.query.msg ?? "" }));
+    const [s, people, voice] = await Promise.all([fshell(), listPeople(today()), listVoiceNotes("contractor")]);
+    return html(reply, renderContractors(s, { people, msg: request.query.msg ?? "", voice }));
   });
   app.post<{ Body: Body }>("/finance/contractors", async (request, reply) => {
     const name = str(request.body?.name).slice(0, 80);
@@ -430,8 +496,8 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const id = idOf(request.params.id);
     const person = (await listPeople(today())).find((p) => p.id === id);
     if (!person) return reply.redirect("/finance/contractors");
-    const [s, work, lists, records] = await Promise.all([fshell(), listExpenses({ person: person.id }, 200), loadLists(), recordsForAttribution("")]);
-    return html(reply, renderPerson(s, { person, work, lists, records, msg: request.query.msg ?? "", today: today() }));
+    const [s, work, lists, records, voice] = await Promise.all([fshell(), listExpenses({ person: person.id }, 200), loadLists(), recordsForAttribution(""), listVoiceNotes("contractor", 20)]);
+    return html(reply, renderPerson(s, { person, work, lists, records, msg: request.query.msg ?? "", today: today(), voice }));
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/profile", async (request, reply) => {
     const id = idOf(request.params.id);
@@ -450,7 +516,8 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     if (model === "prepaid") params.per = str(b.per) === "minute" ? "minute" : "video";
     if (model === "tiered") { params.base = cents("base"); params.tiers = parseTiers(str(b.tiers)); }
     if (model === "retainer" || model === "salary") { params.amount = cents("amount") ?? 0; params.frequency = FREQUENCY.has(str(b.frequency)) ? str(b.frequency) : "monthly"; }
-    if (model === "revenue_share") { params.pct = (num(b.pct) ?? 0) / 100; params.channel = channelOf(b.share_channel); }
+    if (model === "revenue_share") params.pct = (num(b.pct) ?? 0) / 100;
+    params.channels = channelsOf(b.channels);
     const from = isDate(str(b.from)) ? str(b.from) : today();
     await addPayModel(id, model, params, from, str(b.note).slice(0, 200));
     // A retainer or salary is money on a schedule: set it up as a recurring cost too.
@@ -476,34 +543,11 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const b = request.body ?? {};
     const person = (await listPeople(today())).find((p) => p.id === id);
     if (!person) return reply.redirect("/finance/contractors");
-    const date = isDate(str(b.date)) ? str(b.date) : today();
-    const model = modelOn(person.models, date);
-    const videos = num(b.videos), minutes = num(b.minutes);
-    const earned = computePay(model, { videos, minutes });
-    const override = parseMoney(str(b.amount));
-    const amount = override ?? earned.cents;
-    if (amount === null) return back(reply, `/finance/contractors/${id}`, `Enter an amount — ${earned.explain}.`);
-    const channel = channelOf(b.channel);
-    const lists = await loadLists();
-    const base: ExpenseInput = {
-      amount, date, payee: person.name, personId: person.id, type: "contractor", categoryId: str(b.category) || null,
-      companyId: channel ? lists.channelCompany.get(channel) ?? null : null, methodId: null, recordId: recordOf(b.record),
-      status: "unpaid", paidOn: null, isAdvance: false, unitsVideos: videos, unitsMinutes: minutes, calculated: earned.cents,
-      paySnapshot: model ? { model: model.model, params: model.params, effectiveFrom: model.effectiveFrom, explain: earned.explain } : null,
-      receiptUrl: null, notes: str(b.notes).slice(0, 500), splits: channel ? [{ channel, weight: 1 }] : [],
-    };
-    if (model?.model === "retainer" || model?.model === "salary") {
-      // Covered by the fixed pay: logged as work, no extra cost.
-      await saveExpense({ ...base, status: "paid", paidOn: date });
-    } else if (person.advanceBalance > 0 && amount > 0) {
-      // Drawn from the advance first — no new cash — and anything past it owed.
-      const covered = Math.min(amount, person.advanceBalance);
-      await saveExpense({ ...base, amount: covered, status: "covered" });
-      if (amount > covered) await saveExpense({ ...base, amount: amount - covered, calculated: null, notes: `${base.notes ? `${base.notes} · ` : ""}past the advance` });
-    } else {
-      await saveExpense(base);
-    }
-    return back(reply, `/finance/contractors/${id}`, `Logged: ${earned.explain}${override !== null && override !== earned.cents ? " (overridden)" : ""}.`);
+    const r = await logWork(person, {
+      date: isDate(str(b.date)) ? str(b.date) : today(), channels: channelsOf(b.ch), videos: num(b.videos), minutes: num(b.minutes),
+      amount: parseMoney(str(b.amount)), categoryId: str(b.category) || null, notes: str(b.notes), recordId: recordOf(b.record),
+    }, await loadLists());
+    return back(reply, `/finance/contractors/${id}`, r.ok ? `Logged: ${r.explain}.` : `Enter an amount — ${r.why}.`);
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/share", async (request, reply) => {
     const id = idOf(request.params.id);
@@ -513,13 +557,16 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     if (!person || model?.model !== "revenue_share") return reply.redirect(`/finance/contractors/${id}`);
     const month = date.slice(0, 7);
     const facts = await loadFacts([month], ORG_TZ);
-    const revenue = pnl(facts, [month], model.params.channel ? { channel: model.params.channel } : { all: true }).revenue;
+    const shareChannels = payChannels(model.params);
+    const revenue = shareChannels.length
+      ? shareChannels.reduce((a, c) => a + pnl(facts, [month], { channel: c }).revenue, 0)
+      : pnl(facts, [month], { all: true }).revenue;
     const earned = computePay(model, { revenue });
     await saveExpense({
       amount: earned.cents ?? 0, date: monthEnd(month), payee: person.name, personId: person.id, type: "contractor", categoryId: null, companyId: null, methodId: null,
       recordId: null, status: "unpaid", paidOn: null, isAdvance: false, unitsVideos: null, unitsMinutes: null, calculated: earned.cents,
       paySnapshot: { model: model.model, params: model.params, effectiveFrom: model.effectiveFrom, explain: earned.explain }, receiptUrl: null,
-      notes: `Revenue share for ${month}`, splits: model.params.channel ? [{ channel: model.params.channel, weight: 1 }] : [],
+      notes: `Revenue share for ${month}`, splits: shareChannels.map((c) => ({ channel: c, weight: 1 })),
     });
     return back(reply, `/finance/contractors/${id}`, `Share worked out: ${earned.explain}.`);
   });
@@ -543,6 +590,45 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const owed = await listExpenses({ person: id, status: "unpaid" }, 2000);
     await markPaid(owed.map((e) => e.id), isDate(str(request.body?.on)) ? str(request.body?.on) : today());
     return back(reply, `/finance/contractors/${id}`, "Paid.");
+  });
+
+  // ── voice notes ──────────────────────────────────────────────────────
+  const voiceBack = (b: Body, fallback: string) => {
+    const v = str(b.back);
+    return /^\/finance[a-z0-9/_?=&#.-]*$/i.test(v) ? v : fallback;
+  };
+  app.post<{ Body: Body }>("/finance/voice", async (request, reply) => {
+    const b = request.body ?? {};
+    const tab = (VOICE_TABS as string[]).includes(str(b.tab)) ? (str(b.tab) as VoiceTab) : "expense";
+    const text = str(b.text);
+    const to = voiceBack(b, "/finance");
+    if (!text) return reply.redirect(to);
+    const { summary } = await takeVoiceNote(tab, text);
+    return back(reply, to, summary);
+  });
+  // "Looks right": the row it logged stops being marked.
+  app.post<{ Params: { id: string; i: string }; Body: Body }>("/finance/voice/:id/:i/ok", async (request, reply) => {
+    const note = await getVoiceNote(Number(request.params.id));
+    const item = note?.entries[Number(request.params.i)];
+    if (note && item?.logged) {
+      if (item.logged.type !== "person") await clearReview(item.logged.type, item.logged.id);
+      item.checked = true;
+      await setVoiceEntries(note.id, note.entries);
+    }
+    return reply.redirect(voiceBack(request.body ?? {}, "/finance"));
+  });
+  // A contractor the board didn't know yet: add them, then log what was said.
+  app.post<{ Params: { id: string; i: string }; Body: Body }>("/finance/voice/:id/:i/person", async (request, reply) => {
+    const note = await getVoiceNote(Number(request.params.id));
+    const item = note?.entries[Number(request.params.i)];
+    const to = voiceBack(request.body ?? {}, "/finance/contractors");
+    if (!note || !item?.entry.person) return reply.redirect(to);
+    await savePerson({ name: item.entry.person.slice(0, 80), role: "", notes: "Added from a voice note", active: true });
+    return back(reply, to, await retryEntry(note.id, Number(request.params.i)));
+  });
+  app.post<{ Params: { id: string }; Body: Body }>("/finance/voice/:id/dismiss", async (request, reply) => {
+    await dismissVoiceNote(Number(request.params.id));
+    return reply.redirect(voiceBack(request.body ?? {}, "/finance"));
   });
 
   // ── settings ─────────────────────────────────────────────────────────

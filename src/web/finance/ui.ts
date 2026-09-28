@@ -175,6 +175,115 @@ const TIP_SCRIPT = `<div class="ftip" id="ftip" hidden></div><script>
 })();
 </script>`;
 
+// ── voice notes ────────────────────────────────────────────────────────────
+
+/** How a field reads to a person: "next_bill" → "next bill". */
+export const fieldName = (f: string) => ({ next_bill: "next bill", expense_type: "type", pay_model: "pay model", payee: "who / vendor" } as Record<string, string>)[f] ?? f.replace(/_/g, " ");
+
+/** A row that came from a voice note and guessed at something: an amber mark saying what to check. */
+export function checkMark(review: string[] | undefined): string {
+  if (!review?.length) return "";
+  return ` <span class="fcheck" title="From a voice note — check ${esc(review.map(fieldName).join(", "))}">● check ${esc(review.map(fieldName).slice(0, 2).join(", "))}${review.length > 2 ? "…" : ""}</span>`;
+}
+
+const MIC_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg>`;
+
+const VOICE_HINT: Record<string, string> = {
+  expense: "“Paid Divas 250 for the Anime edit on the Chase card” · “Bought a mic for 180 yesterday”",
+  income: "“September AdSense was 8 thousand on Studios” · “NordVPN paid 1,000 for the Studios sponsorship”",
+  subscription: "“Adobe is 90 a month, next bill October 3rd” · “Epidemic Sound, 299 a year, for music”",
+  contractor: "“Divas did two Anime edits, 12 and 14 minutes” · “Gave Vyasa a 5k advance” · “Divas is 12 a minute now”",
+};
+
+/**
+ * A tab's voice box: say it (the browser transcribes), or type it, and it's
+ * logged. Below, recent notes and what came of each entry — logged, logged
+ * but guessing at something (amber), or missing something it needs (red).
+ */
+export function voiceBox(tab: string, back: string, notes: import("../../db/finance.js").VoiceNote[]): string {
+  const items = notes
+    .map((n) => {
+      const rows = n.entries
+        .map((x, i) => {
+          const state = x.logged ? (x.entry.unsure.length && !x.checked ? "unsure" : "ok") : "missing";
+          const act = (path: string, label: string, cls = "linkbtn") => `<form method="post" action="/finance/voice/${n.id}/${i}/${path}"><input type="hidden" name="back" value="${esc(back)}"><button class="${cls}">${esc(label)}</button></form>`;
+          const unknownPerson = x.missing.includes("person") && x.entry.person;
+          const fill = x.logged ? "" : fillHref(n.tab, n.id, i, x.entry.person);
+          return `<div class="fvent ${state}">
+            <span class="fvdot" aria-hidden="true"></span>
+            <div class="fvtxt"><b>${esc(x.logged?.label ?? x.entry.summary)}</b>
+              ${state === "unsure" ? `<small>Check: ${esc(x.entry.unsure.map(fieldName).join(", "))}</small>` : ""}
+              ${state === "missing" ? `<small>Needs: ${esc(x.missing.map(fieldName).join(", "))}${unknownPerson ? ` — “${esc(x.entry.person!)}” isn't on the board yet` : ""}</small>` : ""}
+              ${state === "ok" ? `<small>${x.checked ? "Checked" : "Logged"}</small>` : ""}
+            </div>
+            <div class="fvacts">${x.logged && x.logged.type !== "person" ? `<a class="linkbtn" href="${esc(loggedHref(x.logged))}">Open</a>` : ""}
+              ${state === "unsure" ? act("ok", "Looks right ✓") : ""}
+              ${unknownPerson ? act("person", `Add ${x.entry.person} & log`, "linkbtn strong") : ""}
+              ${fill ? `<a class="linkbtn strong" href="${esc(fill)}">Fill in</a>` : ""}</div>
+          </div>`;
+        })
+        .join("");
+      return `<div class="fvnote"><div class="fvq"><span>“${esc(n.transcript.length > 180 ? `${n.transcript.slice(0, 177)}…` : n.transcript)}”</span>
+          <form method="post" action="/finance/voice/${n.id}/dismiss"><input type="hidden" name="back" value="${esc(back)}"><button class="linkbtn" title="Hide this note (what it logged stays)" aria-label="Hide note">×</button></form></div>
+        ${rows || `<div class="fvent missing"><span class="fvdot"></span><div class="fvtxt"><b>Nothing to log was found in that.</b></div></div>`}</div>`;
+    })
+    .join("");
+  return `<section class="panel fvoice" data-voice>
+    <form method="post" action="/finance/voice" data-voice-form>
+      <input type="hidden" name="tab" value="${esc(tab)}"><input type="hidden" name="back" value="${esc(back)}">
+      <div class="fvrow">
+        <button type="button" class="fmic" data-mic aria-label="Record a voice note" title="Record — tap again to stop and log">${MIC_ICON}</button>
+        <textarea name="text" rows="2" required maxlength="4000" placeholder="Say or type it — ${esc(VOICE_HINT[tab] ?? "")}" aria-label="Voice note"></textarea>
+        <button class="clear" data-voice-send>Log it</button>
+      </div>
+      <p class="fvstatus" data-vstatus aria-live="polite"></p>
+    </form>
+    ${items ? `<div class="fvnotes">${items}</div>` : ""}
+  </section>
+  <script>
+  (function () {
+    var box = document.querySelector("[data-voice]"); if (!box) return;
+    var form = box.querySelector("[data-voice-form]"), ta = form.querySelector("textarea"), mic = form.querySelector("[data-mic]"), status = form.querySelector("[data-vstatus]");
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { mic.hidden = true; status.textContent = "Tip: tap the microphone on your keyboard to dictate."; return; }
+    var rec = null, base = "", stopped = false;
+    function stop() { stopped = true; if (rec) rec.stop(); }
+    mic.addEventListener("click", function () {
+      if (rec) { stop(); return; }
+      rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+      base = ta.value ? ta.value.trim() + " " : ""; stopped = false;
+      rec.onresult = function (e) {
+        var done = "", live = "";
+        for (var i = 0; i < e.results.length; i++) { if (e.results[i].isFinal) done += e.results[i][0].transcript; else live += e.results[i][0].transcript; }
+        ta.value = (base + done).trim(); status.textContent = live ? "… " + live : "Listening — tap the mic again when you're done.";
+      };
+      rec.onerror = function (e) { status.textContent = e.error === "not-allowed" ? "Microphone blocked — allow it for this site, or type instead." : "Couldn't hear that (" + e.error + ")."; };
+      rec.onend = function () {
+        rec = null; box.classList.remove("rec");
+        if (ta.value.trim()) { status.textContent = "Logging…"; form.submit(); }
+        else if (!stopped) status.textContent = "Didn't catch anything — try again.";
+      };
+      rec.start(); box.classList.add("rec"); status.textContent = "Listening — tap the mic again when you're done.";
+    });
+    form.addEventListener("submit", function () { status.textContent = "Logging…"; });
+  })();
+  </script>`;
+}
+
+/** Where a logged entry lives. */
+export function loggedHref(l: { type: string; id: number }): string {
+  return l.type === "expense" ? `/finance/expenses/${l.id}` : l.type === "income" ? `/finance/income#i${l.id}` : l.type === "recurring" ? `/finance/subscriptions?edit=${l.id}#edit` : `/finance/contractors/${l.id}`;
+}
+
+/** Where a draft is finished: its tab's form, filled in from the note. */
+function fillHref(tab: string, id: number, i: number, person: string | null): string {
+  const v = `voice=${id}:${i}`;
+  if (tab === "expense") return `/finance/expenses/new?${v}`;
+  if (tab === "income") return `/finance/income?${v}#add`;
+  if (tab === "subscription") return `/finance/subscriptions?${v}#edit`;
+  return person ? "/finance/contractors" : "/finance/contractors#add";
+}
+
 // ── form pieces ────────────────────────────────────────────────────────────
 
 export const opt = (value: string | number, label: string, selected: boolean) =>
@@ -188,6 +297,38 @@ export function channelSelect(name: string, selected: string | null, opts: { gen
   }).join("");
   return `<select name="${esc(name)}">${opts.any !== undefined ? opt("", opts.any, !selected) : ""}${opts.general !== undefined ? opt("general", opts.general, selected === "general" || (opts.any === undefined && !selected)) : ""}${groups}</select>`;
 }
+
+/**
+ * Several channels at once, compactly: a summary line that opens to every
+ * channel as a pill, grouped by category. Ticked ones submit as `name`.
+ */
+export function channelChips(name: string, selected: string[], opts: { none?: string } = {}): string {
+  const on = new Set(selected);
+  const label = (list: string[]) => (list.length ? list.map((c) => c.replace(/^Specular (?=.)/, "")).join(", ") : opts.none ?? "None");
+  const groups = CATEGORIES.map((c) => {
+    const list = CHANNELS.filter((ch) => ch.category === c.id);
+    return list.length
+      ? `<div class="fchipgrp"><span>${esc(c.label)}</span>${list
+          .map((ch) => `<label class="fchip2" style="--ch:${ch.color}"><input type="checkbox" name="${esc(name)}" value="${esc(ch.name)}"${on.has(ch.name) ? " checked" : ""}><i></i>${esc(ch.name.replace(/^Specular (?=.)/, ""))}</label>`)
+          .join("")}</div>`
+      : "";
+  }).join("");
+  return `<details class="fchips" data-chips data-none="${esc(opts.none ?? "None")}"><summary><span data-chips-label>${esc(label(selected))}</span> <b>▾</b></summary><div class="fchipbox">${groups}</div></details>`;
+}
+
+/** Keeps every channelChips summary in step with what's ticked. Include once per page. */
+export const CHIPS_SCRIPT = `<script>
+(function () {
+  document.querySelectorAll("[data-chips]").forEach(function (d) {
+    var out = d.querySelector("[data-chips-label]");
+    d.addEventListener("change", function () {
+      var names = [];
+      d.querySelectorAll("input:checked").forEach(function (i) { names.push(i.value.replace(/^Specular (?=.)/, "")); });
+      out.textContent = names.length ? names.join(", ") : d.getAttribute("data-none");
+    });
+  });
+})();
+</script>`;
 
 /**
  * Which channels an expense belongs to. None ticked is General /
@@ -370,6 +511,63 @@ const FIN_CSS = ALERT_CSS + `
 .fsplit > i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
 .fsplit span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fsplit input[type=number] { width: 62px; padding: 5px 7px !important; text-align: right; background: var(--card) !important; }
+.fchips { position: relative; width: 100%; align-self: stretch; }
+.fchips > summary { box-sizing: border-box; width: 100%; }
+.fchips > summary { list-style: none; cursor: pointer; padding: 9px 11px; border-radius: 10px; background: var(--sunk); font-size: 13px; color: var(--ink); font-weight: 600;
+  display: flex; justify-content: space-between; gap: 8px; }
+.fchips > summary::-webkit-details-marker { display: none; }
+.fchips > summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fchips > summary b { color: var(--ink3); }
+.fchips[open] > summary { border: 1px solid var(--salmon); padding: 8px 10px; }
+.fchipbox { margin-top: 6px; padding: 10px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 8px; }
+.fchipgrp { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.fchipgrp > span { width: 100%; font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink3); }
+.fchip2 { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px !important; padding: 5px 10px; border-radius: 999px; background: var(--card);
+  font-size: 12px !important; font-weight: 600 !important; color: var(--ink2) !important; cursor: pointer; }
+.fchip2 input { position: absolute; opacity: 0; width: 0; height: 0; }
+.fchip2 i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); box-shadow: 0 0 0 1px var(--ring); }
+.fchip2:has(input:checked) { background: color-mix(in srgb, var(--ch) 28%, var(--card)); color: var(--ink) !important; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ch) 70%, #fff); }
+.fchip2:has(input:focus-visible) { outline: 2px solid var(--salmon); }
+.fvoice { padding: 16px 18px; }
+.fvrow { display: flex; gap: 10px; align-items: center; }
+.fvrow textarea { flex: 1; min-width: 0; resize: vertical; padding: 11px 14px; border-radius: 14px; border: 1px solid transparent; background: var(--sunk); color: var(--ink);
+  font: inherit; font-size: 14px; line-height: 1.4; }
+.fvrow textarea:focus { outline: 0; border-color: var(--salmon); }
+.fmic { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--salmon); color: #1A0F0C; cursor: pointer; display: grid; place-items: center; }
+.fmic svg { width: 22px; height: 22px; }
+.fvoice.rec .fmic { background: var(--late); color: #fff; animation: fvpulse 1.2s ease-in-out infinite; }
+@keyframes fvpulse { 50% { box-shadow: 0 0 0 8px rgba(242,104,94,.25); } }
+@media (prefers-reduced-motion: reduce) { .fvoice.rec .fmic { animation: none; } }
+.fvstatus { margin: 8px 0 0 58px; font-size: 12.5px; color: var(--ink3); min-height: 1em; }
+.fvstatus:empty { display: none; }
+.fvnotes { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.fvnote { border-radius: 14px; background: var(--sunk); padding: 10px 12px; }
+.fvq { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--ink3); font-style: italic; }
+.fvq span { flex: 1; }
+.fvq form { margin: 0; } .fvq .linkbtn { font-size: 16px; line-height: 1; font-style: normal; }
+.fvent { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 0 2px; }
+.fvdot { width: 10px; height: 10px; border-radius: 50%; }
+.fvent.ok .fvdot { background: var(--ok); }
+.fvent.unsure .fvdot { background: var(--warn); box-shadow: 0 0 0 3px rgba(238,154,85,.2); }
+.fvent.missing .fvdot { background: var(--late); box-shadow: 0 0 0 3px rgba(242,104,94,.2); }
+.fvtxt { min-width: 0; font-size: 13px; }
+.fvtxt b { font-weight: 650; color: var(--ink); }
+.fvtxt small { display: block; font-size: 12px; margin-top: 1px; color: var(--ink3); }
+.fvent.unsure small { color: #F5B98A; } .fvent.missing small { color: #FF9C94; }
+.fvacts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.fvacts form { margin: 0; }
+.linkbtn.strong { color: var(--salmon); }
+.fcheck { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap;
+  background: rgba(238,154,85,.16); color: #F5B98A; font-style: normal; vertical-align: 1px; }
+.fform label[data-flag] { position: relative; }
+.fform label[data-flag] > input, .fform label[data-flag] > select, .fform label[data-flag] > textarea, .fform label[data-flag] .fchips > summary, .fform label[data-flag] .fsplitgrid { box-shadow: 0 0 0 1.5px var(--fl); }
+.fform label[data-flag="unsure"] { --fl: var(--warn); }
+.fform label[data-flag="missing"] { --fl: var(--late); }
+.fform label[data-flag]::after { content: attr(data-flag-text); position: absolute; top: 0; right: 0; font-size: 10.5px; font-weight: 800; color: var(--fl); }
+.fvbanner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; margin-bottom: 14px; background: rgba(238,154,85,.1);
+  box-shadow: inset 3px 0 0 var(--warn); font-size: 13px; color: var(--ink2); }
+.fvbanner b { color: var(--ink); }
+@media (max-width: 760px) { .fvrow { flex-wrap: wrap; } .fvrow textarea { flex-basis: calc(100% - 58px); } .fvrow .clear { margin-left: 58px; } .fvstatus { margin-left: 0; } .fvent { grid-template-columns: 10px minmax(0, 1fr); } .fvacts { grid-column: 2; justify-content: flex-start; } }
 .fsplitsum { color: var(--ink2); font-weight: 700; }
 .fkv { display: grid; gap: 4px; margin: 0; }
 .fkv div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #26262C; font-size: 13.5px; }

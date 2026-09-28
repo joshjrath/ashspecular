@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-finance-voice",
+    title: "Finance: log by voice, and pay models across several channels",
+    changes: [
+      { text: "Income, Expenses, Subscriptions and Contractors each have a voice box. Say what happened (\"Paid Divas 250 for the Anime edit\") and it's logged.", href: "/finance/expenses" },
+      { text: "Anything it guessed shows amber, with \"check …\" on the row. Anything missing (like an amount, or a new person) is kept as a red draft with Fill in.", href: "/finance/expenses" },
+      { text: "Pay models can cover several channels. Logged work goes to them, and a revenue share is of their combined revenue.", href: "/finance/contractors" },
+    ],
+  },
+  {
     id: "2026-09-28-finance",
     title: "Finance: income, expenses, contractors, and whether each channel pays",
     changes: [

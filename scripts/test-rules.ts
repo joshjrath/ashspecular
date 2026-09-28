@@ -67,7 +67,9 @@ import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, month
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
 import { parseMultipart } from "../src/web/finance/routes.js";
-import { readSplits } from "../src/web/finance/ui.js";
+import { readSplits, voiceBox, checkMark, channelChips } from "../src/web/finance/ui.js";
+import { readByRules, missingFor, amountsIn, channelsIn } from "../src/finance/voice.js";
+import { payChannels } from "../src/finance/pay.js";
 import type { Task } from "../src/db/tasks.js";
 import { scriptFor, setScriptIndex } from "../src/web/scriptindex.js";
 import { frameioIsRevision, isAssignmentPost } from "../src/parse/classify.js";
@@ -1785,6 +1787,37 @@ t("splits: ticked channels, even unless given %", [readSplits({ ch: ["Specular S
 const mp = Buffer.from('--XB\r\nContent-Disposition: form-data; name="amount"\r\n\r\n250\r\n--XB\r\nContent-Disposition: form-data; name="ch"\r\n\r\nA\r\n--XB\r\nContent-Disposition: form-data; name="ch"\r\n\r\nB\r\n--XB\r\nContent-Disposition: form-data; name="receipt"; filename="r.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1\r\n--XB--\r\n');
 const parsedMp = parseMultipart(mp, "multipart/form-data; boundary=XB");
 t("a receipt upload is read without a dependency", [parsedMp.amount, parsedMp.ch, parsedMp.__files?.[0]?.filename, parsedMp.__files?.[0]?.data.toString()], ["250", ["A", "B"], "r.pdf", "%PDF-1"]);
+
+section("Finance — voice notes and several channels");
+const vctx = (tab: "expense" | "income" | "subscription" | "contractor") => ({
+  tab, now: new Date("2026-09-28T16:00:00Z"), people: ["Divas", "Vyasa"], methods: ["Chase business card"],
+  categories: ["editing", "scripts", "voiceover", "thumbnails", "music", "software", "equipment"].map((id) => ({ id, label: id })),
+  streams: ["adsense", "sponsorship", "affiliate", "other"].map((id) => ({ id, label: id })),
+});
+t("amounts as said", [amountsIn("paid $1,250"), amountsIn("2.5k for the deal"), amountsIn("paid Divas 250"), amountsIn("the 3rd video at 2:30"), amountsIn("on September 12 it was 90")], [[1250], [2500], [250], [], [90]]);
+t("channels as said — longest names first", channelsIn("FNAF bits and the anime channel, DC"), ["Specular FNAF Bits", "Specular Anime", "Specular DC"]);
+const vx = readByRules("Paid Divas 250 for the Anime edit on the Chase card yesterday. Bought a new mic for 180 dollars", vctx("expense"));
+t("one note, two expenses — who, amount, channel, card, yesterday", [vx.length, vx[0]!.amount, vx[0]!.person, vx[0]!.channels, vx[0]!.method, vx[0]!.date, vx[1]!.amount, vx[1]!.category], [2, 250, "Divas", ["Specular Anime"], "Chase business card", "2026-09-27", 180, "equipment"]);
+t("guessed fields are marked to check", vx[0]!.unsure.sort(), ["category", "channels"]);
+const vw = readByRules("Divas did two Anime edits, 12 and 14 minutes", vctx("contractor"));
+t("contractor work: 2 videos, 26 minutes, on Anime", [vw[0]!.kind, vw[0]!.videos, vw[0]!.minutes, vw[0]!.channels], ["work", 2, 26, ["Specular Anime"]]);
+t("an advance to someone new, a rate change", [readByRules("Gave Rohan a 2k advance", vctx("contractor"))[0]!.kind, readByRules("Gave Rohan a 2k advance", vctx("contractor"))[0]!.person, readByRules("Divas is 12 a minute now", vctx("contractor"))[0]!.pay_model, readByRules("Divas is 12 a minute now", vctx("contractor"))[0]!.rate], ["advance", "Rohan", "per_minute", 12]);
+const vi = readByRules("NordVPN paid 1,000 for the Studios sponsorship in September", vctx("income"));
+t("income: sponsorship stream, month, channel", [vi[0]!.stream, vi[0]!.month, vi[0]!.channels, vi[0]!.amount], ["sponsorship", "2026-09", ["Specular Studios"], 1000]);
+t("what a draft still needs", [missingFor(readByRules("the thumbnail guy for the FNAF video", vctx("expense"))[0]!, false), missingFor(readByRules("Gave Rohan a 2k advance", vctx("contractor"))[0]!, false), missingFor(vw[0]!, true)], [["amount"], ["person"], []]);
+t("pay models keep several channels; the old single one still reads", [payChannels({ channels: ["Specular Anime", "Specular FNAF"] }), payChannels({ channel: "Specular DC" }), payChannels({})], [["Specular Anime", "Specular FNAF"], ["Specular DC"], []]);
+t("revenue share of several channels, in words", describePay({ model: "revenue_share", params: { pct: 0.1, channels: ["Specular Anime", "Specular FNAF"] } }), "10% of Anime + FNAF revenue");
+const vbox = voiceBox("expense", "/finance/expenses", [{
+  id: 9, tab: "expense", transcript: "paid Divas 250", parsedBy: "rules", createdAt: new Date(),
+  entries: [
+    { entry: { ...vx[0]! }, missing: [], logged: { type: "expense", id: 4, label: "$250 · Divas" }, checked: false },
+    { entry: { ...vx[1]!, unsure: [] }, missing: ["amount"], logged: null, checked: false },
+  ],
+}]);
+t("the voice box: mic, logged-but-check (amber), needs (red) with Fill in", [vbox.includes('data-mic'), vbox.includes('class="fvent unsure"'), vbox.includes("Check: category, channels"), vbox.includes('class="fvent missing"'), vbox.includes("/finance/expenses/new?voice=9:1"), vbox.includes("/finance/voice/9/0/ok")], [true, true, true, true, true, true]);
+t("…its scripts compile", [...vbox.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
+t("a row that guessed is marked, one that didn't isn't", [checkMark(["category", "next_bill"]).includes("check category, next bill"), checkMark([])], [true, ""]);
+t("channel pills: several ticked", [(channelChips("channels", ["Specular Anime", "Specular FNAF"]).match(/checked/g) ?? []).length, channelChips("channels", ["Specular Anime", "Specular FNAF"]).includes(">Anime, FNAF<")], [2, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
