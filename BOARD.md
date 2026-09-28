@@ -87,9 +87,13 @@ every minute and pops a system notification for anything new.
 
 **Nothing assigned.** Every channel with a posting target (each Stories
 channel, one every four days; each Gaming channel, its own usual gap) is
-expected to post again that many days after its last video, uploaded or
-scheduled. A channel already behind is expected
-today. When an expected day is within the next **8 days** (the VO's six-day
+expected to post again that many days after its **last video lined up**:
+the furthest one scheduled, or, with nothing ahead, the most recent uploaded
+or due. Gaps are only counted past the end of what's lined up. An empty day
+between two scheduled videos, like after a video was pushed back, is never
+flagged, and neither is one caused by a late video. A channel with nothing
+ahead that's already past its next due date is expected today. When an
+expected day is within the next **8 days** (the VO's six-day
 buffer plus two to assign it) and no video is on it, you'll see it in four
 places:
 

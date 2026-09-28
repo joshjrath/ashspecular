@@ -1,15 +1,15 @@
 /**
- * Upload slots with no video: a channel with a posting target (a Stories
- * channel, every four days) is expected to post again a set number of days
- * after its last video — uploaded or scheduled. When one of those expected
- * days is within the next eight and nothing is on it, it's a gap to fill:
- * eight days is the VO's six-day buffer plus two to get it assigned.
+ * "Nothing assigned": a channel with a posting target (a Stories channel,
+ * every four days) that has nothing lined up. It's counted from the
+ * channel's LAST video — the furthest one scheduled, or, with nothing ahead,
+ * the most recent uploaded or due — so a video that was pushed back, or one
+ * running late, never makes an empty day in between look unassigned. Only the
+ * days past the end of what's lined up, within the next eight, are gaps
+ * (eight days is the VO's six-day buffer plus two to get one assigned).
  *
- * The chain runs from the last video on or before today. A video within the
- * next N days moves the chain to it (posting early resets the clock); an
- * expected day with nothing on or before it is a gap, and the chain carries on
- * from that day as if it were filled, so one missing video isn't counted
- * again for every day after it. A channel already behind is expected today.
+ * With nothing ahead and the channel already past when its next was due,
+ * the next is expected today. A channel quiet for a month with nothing ahead
+ * is resting, not behind.
  */
 import { addDays, daysBetween } from "./cadence.js";
 
@@ -31,30 +31,20 @@ export interface UploadGap {
  */
 export function channelGaps(channel: string, every: number, days: string[], today: string, horizon = GAP_HORIZON_DAYS): UploadGap[] {
   const known = [...new Set(days)].sort();
+  if (!known.length || every <= 0) return [];
   const end = addDays(today, horizon);
-  let anchor = [...known].reverse().find((d) => d <= today);
-  // A channel with nothing in the last month and nothing ahead is resting, not behind.
-  if (!anchor && !known.some((d) => d > today)) return [];
-  if (!anchor) anchor = known.find((d) => d > today)!;
-  if (daysBetween(anchor, today) > 30 && !known.some((d) => d > today)) return [];
+  // The end of what's lined up: the furthest video, scheduled or not.
+  const last = known[known.length - 1]!;
+  const ahead = last >= today;
+  // Nothing ahead and nothing for a month: resting, not behind.
+  if (!ahead && daysBetween(last, today) > 30) return [];
+  let expected = addDays(last, every);
+  // Nothing ahead and already past when the next was due: it's due today.
+  if (expected < today) expected = today;
   const gaps: UploadGap[] = [];
-  let guard = 0;
-  while (guard++ < 200) {
-    const next = known.find((d) => d > anchor!);
-    const expected = addDays(anchor, every);
-    if (next && next <= expected) {
-      anchor = next;
-      continue;
-    }
-    if (expected > end) break;
-    if (expected < today) {
-      // Already behind (the Uploads page's pace says so): the next one is due today.
-      anchor = addDays(today, -every) > anchor ? addDays(today, -every) : expected;
-      continue;
-    }
-    const after = [...known].reverse().find((d) => d < expected) ?? anchor;
-    gaps.push({ channel, date: expected, inDays: daysBetween(today, expected), after });
-    anchor = expected;
+  for (let guard = 0; expected <= end && guard < 100; guard++) {
+    gaps.push({ channel, date: expected, inDays: daysBetween(today, expected), after: last });
+    expected = addDays(expected, every);
   }
   return gaps;
 }

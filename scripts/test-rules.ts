@@ -1288,6 +1288,9 @@ const gd = (list: ReturnType<typeof channelGaps>) => list.map((g) => [g.date, g.
 t("every four days from the last video: the empty days in the next eight", gd(channelGaps("A", 4, ["2026-09-24"], "2026-09-26")), [["2026-09-28", 2], ["2026-10-02", 6]]);
 t("a video scheduled on (or before) the day fills it", gd(channelGaps("B", 4, ["2026-09-24", "2026-09-28", "2026-10-02"], "2026-09-26")), []);
 t("posting early moves the next one earlier", gd(channelGaps("B", 4, ["2026-09-24", "2026-09-27"], "2026-09-26")), [["2026-10-01", 5]]);
+t("a video pushed later leaves no gap before it — only after the last one lined up", gd(channelGaps("E", 4, ["2026-09-24", "2026-10-01"], "2026-09-26")), []);
+t("…and past the last scheduled video, the empty days are gaps", gd(channelGaps("E", 4, ["2026-09-24", "2026-09-29"], "2026-09-26")), [["2026-10-03", 7]]);
+t("a late video (due before today) still counts as the channel's last", gd(channelGaps("F", 4, ["2026-09-25"], "2026-09-26")), [["2026-09-29", 3], ["2026-10-03", 7]]);
 t("a channel already behind is expected today", gd(channelGaps("C", 4, ["2026-09-16"], "2026-09-26"))[0], ["2026-09-26", 0]);
 t("a channel quiet for over a month with nothing ahead is resting", channelGaps("D", 4, ["2026-08-01"], "2026-09-26"), []);
 t("…each gap says the last video before it", channelGaps("A", 4, ["2026-09-24"], "2026-09-26")[1]!.after, "2026-09-24");

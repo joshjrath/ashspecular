@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-nothing-assigned-fix",
+    title: "Nothing assigned only counts past a channel's last scheduled video",
+    changes: [
+      { text: "Nothing assigned now starts after the last video a channel has lined up. An empty day between scheduled videos (say, after one was pushed back) or behind a late video is no longer flagged.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-28-calendar-no-revisions",
     title: "Revisions are off the calendar",
     changes: [
