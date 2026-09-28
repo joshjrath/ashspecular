@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-specular-compilations",
+    title: "Specular compilations in Story Lab: the daily Movie and the Sleep every 4 days",
+    changes: [
+      { text: "Story Lab picks the next Specular Movie (4–5 videos, 60–90+ minutes, one umbrella title) and the next Specular Sleep (about 4 hours on one character or franchise). Picks come from the whole long-form catalog, and no compilation shares more than 2 videos with an earlier one.", href: "/story-lab#specular" },
+      { text: "↻ Reroll for a different combination. ✓ Use puts it on the next open Specular or Specular Sleep day on the calendar.", href: "/story-lab#specular" },
+      { text: "For a Movie, Claude reads the four scripts, checks the title fits, picks the order, and writes the intro and transitions in the scripts' voice. A Sleep gets its editor notes.", href: "/story-lab#specular" },
+      { text: "History, permanent exclusions (the Springtrap video is already on it), hand-set runtimes, and every video's Movie and Sleep uses.", href: "/story-lab/specular" },
+    ],
+  },
+  {
     id: "2026-09-28-tasks-notes-repeat-calendar",
     title: "Task notes and repeating tasks; Calendar opens how you left it",
     changes: [

@@ -945,6 +945,79 @@ run `python3 scripts/build-story-corpus.py "<folder>"`, then commit
 `src/web/stories/corpus.json`. New heroes and worlds go in
 `src/web/stories/lore.ts`.
 
+### Specular compilations — the daily Movie and the Sleep every 4 days
+
+The **Specular compilations** panel in Story Lab picks the next compilation for
+each of the two compilation channels:
+
+- **🎬 Movie** (Specular, every day): 4 videos under one umbrella title, or 5
+  when four run short. It aims for 60–90+ minutes. Titles take the sources'
+  own words, for example "What If Spider-Man Had Mahoraga, Six Eyes, & …?
+  (Full Movie)", "What If Gojo, Sukuna, Batman, & Deadpool Joined The
+  Avengers? (Full Movie)", "Could … Survive The Hunger Games?" or "What If
+  Infinity War Went Completely Differently?". Every source has to share the
+  title's shape: the same hero with different powers, different heroes in the
+  same world, the same survival test, and so on.
+- **🌙 Sleep** (Specular Sleep, every 4 days from the last one): about 4
+  hours, and slightly over is fine. It is built around one character or
+  franchise, with as many videos as it takes: "4 Hours of Custom Spider-Man
+  Lore To Fall Asleep To".
+
+**How it picks.** It searches every long-form Stories video ever posted, not
+just the newest. It scores:
+
+- how coherent the concept is;
+- how the sources did on views;
+- freshness (one or two recent uploads as anchors, never forced);
+- how close the runtime is to the target;
+- how often the sources were used before;
+- whether the same concept ran recently.
+
+Videos can be reused. But no compilation shares more than two videos with any
+earlier one of its kind, including the ones already posted on Specular and
+Specular Sleep. Those are read back from their titles. Movie use never limits
+Sleep use. The same story uploaded twice counts as one source.
+
+**↻ Reroll** shows the next-best combination. The rerolled one stays away for
+three weeks.
+
+**✓ Use** puts it on the calendar in the next open slot:
+
+- **A Movie** goes on the next day with no Movie (skipping days off). It takes
+  over that day's Specular card and title.
+- **A Sleep** goes 4 days after the last one, as its own Specular Sleep card.
+
+Use then opens the compilation's page, which has:
+
+- **The output block**, ready to copy: `DATE | MOVIE ### | TITLE`, the
+  numbered videos with runtimes, and the total source runtime.
+- **For a Movie, the editor package.** Claude reads all four scripts, checks the
+  title fits every one (if it doesn't, it says which and offers an accurate
+  title, one click to use), picks the play order, and writes one short intro
+  and a transition into each story after the first. Each transition ties how
+  the last story actually ends to the next premise, in the scripts' own plain
+  voice. It's written from the scripts, never from titles. A source with no
+  script is listed with a link to attach one. It needs `ANTHROPIC_API_KEY` on
+  the server. **↻ Write it again** gives a fresh take.
+- **For a Sleep, the editor notes.** Keep stories back to back, remove outros and
+  end screens, normalize audio, one uninterrupted listen. There's no intro and
+  no transitions.
+- **Rename, and Discard** (which frees the slot on the calendar again). For a
+  posted one read back from its title, you can fix its sources.
+
+**History, exclusions & runtimes** (linked from the panel) has:
+
+- Every Movie and Sleep, planned and posted.
+- **Permanent exclusions**, never selected for either kind. "What If Michael
+  Afton Became Springtrap?" (demonetized) is on it from the start.
+- **Set a runtime** by hand.
+- The whole catalog: runtime, views, and Movie and Sleep uses for each video.
+
+Runtimes come from YouTube when `YOUTUBE_API_KEY` is set. Otherwise they come
+from the script's length at reading pace, or from a runtime typed in by hand.
+A video with none of those counts as the catalog's typical length and is
+marked *est.*
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their

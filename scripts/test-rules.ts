@@ -68,6 +68,9 @@ import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, month
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
 import { parseMultipart } from "../src/web/finance/routes.js";
+import { moviePicks, sleepPicks, shapeOf, oneEach, nextMovieSlot, nextSleepSlot, maxOverlap, type Source as CompSource } from "../src/compilations/engine.js";
+import { tidyPackage } from "../src/compilations/package.js";
+import { clock, outputBlock, packageBlock, parseRuntime, videoIdOf } from "../src/web/specular.js";
 import { readSplits, voiceBox, checkMark, channelChips } from "../src/web/finance/ui.js";
 import { readByRules, missingFor, amountsIn, channelsIn } from "../src/finance/voice.js";
 import { payChannels } from "../src/finance/pay.js";
@@ -1833,6 +1836,34 @@ t("the voice box: mic, logged-but-check (amber), needs (red) with Fill in", [vbo
 t("…its scripts compile", [...vbox.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }), true);
 t("a row that guessed is marked, one that didn't isn't", [checkMark(["category", "next_bill"]).includes("check category, next bill"), checkMark([])], [true, ""]);
 t("channel pills: several ticked", [(channelChips("channels", ["Specular Anime", "Specular FNAF"]).match(/checked/g) ?? []).length, channelChips("channels", ["Specular Anime", "Specular FNAF"]).includes(">Anime, FNAF<")], [2, true]);
+
+// ── Specular compilations ──
+const cs = (id: string, title: string, published: string, runtime: number | null = 20 * 60, views = 100000): CompSource => ({ id, title, channel: "Specular Survives", published, runtime, runtimeFrom: runtime ? "youtube" : null, views, movieUses: 0, sleepUses: 0 });
+t("title shapes: who, what happens, to what", [shapeOf("What If Spider-Man Had Six Eyes?"), shapeOf("Could Goku Survive The Hunger Games?")?.shape, shapeOf("Every Gojo Villain, Ranked")], [{ shape: "power", subject: "Spider-Man", verb: "had", object: "Six Eyes" }, "survive", null]);
+const avCat = ["Gojo", "Sukuna", "Batman", "Deadpool", "Naruto", "Goku"].map((h, i) => cs(`av${i}`, `What If ${h} Joined The Avengers?`, `2026-0${i + 1}-10`, 20 * 60, 100000 * (i + 1)));
+const mvPicks = moviePicks(avCat, [], { today: "2026-09-28" });
+t("a Movie: four sources under one umbrella title, 60-90+ minutes", [mvPicks[0]!.sources.length, /^What If .+, .+, .+, & .+ Joined The Avengers\? \(Full Movie\)$/.test(mvPicks[0]!.title), mvPicks[0]!.runtime], [4, true, 80 * 60]);
+const mvPast = [{ kind: "movie" as const, concept: "x", date: "2026-09-01", sources: ["av5", "av4", "av3"] }];
+const mvPicks2 = moviePicks(avCat, mvPast, { today: "2026-09-28" });
+t("never more than two sources shared with an earlier Movie", [mvPicks2.length > 0, mvPicks2.every((p) => maxOverlap(p.sources.map((x) => x.id), mvPast, "movie") <= 2)], [true, true]);
+t("a rerolled combination doesn't come back", moviePicks(avCat, [], { today: "2026-09-28", skipped: new Set([mvPicks[0]!.combo]) }).some((p) => p.combo === mvPicks[0]!.combo), false);
+t("Sleep uses don't limit Movies", moviePicks(avCat, [{ kind: "sleep", concept: "y", date: "2026-09-20", sources: ["av0", "av1", "av2", "av3", "av4", "av5"] }], { today: "2026-09-28" }).length, mvPicks.length);
+const spCat = ["Joined The Avengers", "Was In Naruto", "Had Six Eyes", "Was In Jujutsu Kaisen", "Had The Omnitrix", "Was In One Piece", "Had Mahoraga", "Was In Invincible", "Was In The Boys", "Had The Sharingan", "Was In Demon Slayer", "Was In Dragon Ball", "Was In My Hero Academia", "Was In Pokemon"]
+  .map((x, i) => cs(`sp${i}`, `What If Spider-Man ${x}?`, `2026-0${(i % 9) + 1}-02`, 22 * 60));
+const slPick = sleepPicks(spCat, [], { today: "2026-09-28" }).find((p) => p.concept === "sleep:hero:spiderman");
+t("a Sleep: one character, about four hours (slightly over is fine)", [slPick?.title, slPick!.runtime >= 4 * 3600 && slPick!.runtime < 4.5 * 3600], ["4 Hours of Custom Spider-Man Lore To Fall Asleep To", true]);
+t("the same story uploaded twice is one source, keeping the most-viewed copy", oneEach([cs("a", "What If Gojo Joined The Avengers?", "2026-01-01", null, 5), cs("b", "What if Gojo joined the Avengers", "2026-02-01", 600, 9)]).map((x) => [x.id, x.runtime]), [["b", 600]]);
+t("slots: next free day for a Movie (skipping days off), every 4 days for a Sleep", [nextMovieSlot("2026-09-28", new Set(["2026-09-28", "2026-09-29"]), new Set(["2026-09-30"])), nextSleepSlot("2026-09-28", "2026-09-26", new Set()), nextSleepSlot("2026-09-28", "2026-09-20", new Set()), nextSleepSlot("2026-09-28", "2026-09-26", new Set(["2026-09-30"]))], ["2026-10-01", "2026-09-30", "2026-09-28", "2026-10-04"]);
+t("runtimes typed in: 24:10, 24, 1:02:03", [parseRuntime("24:10"), parseRuntime("24"), parseRuntime("1:02:03"), parseRuntime("abc"), clock(4800), clock(610)], [1450, 1440, 3723, null, "1:20:00", "10:10"]);
+t("video ids from links", [videoIdOf("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=3"), videoIdOf("https://youtu.be/dQw4w9WgXcQ"), videoIdOf("dQw4w9WgXcQ"), videoIdOf("nope")], ["dQw4w9WgXcQ", "dQw4w9WgXcQ", "dQw4w9WgXcQ", null]);
+const pkg = tidyPackage({ title_fits: true, title_note: "ok", better_title: "x", order: ["b", "zz", "a"], intro: " Hi. ", transitions: [{ into: "a", text: "Then A." }] }, ["a", "b", "c"]);
+t("the package keeps to its sources: every one once, a transition into each after the first", [pkg.order, pkg.transitions, pkg.intro, pkg.betterTitle], [["b", "a", "c"], ["Then A.", ""], "Hi.", null]);
+const comp = { id: 1, kind: "movie" as const, number: 7, title: "What If X? (Full Movie)", concept: "", slotDate: "2026-09-29", status: "planned" as const, recordId: null, uploadVideoId: null, inferred: false,
+  sources: [{ id: "a", title: "A", channel: "Specular Survives", runtime: 1200, runtimeFrom: "youtube", published: "2026-01-01" }, { id: "b", title: "B", channel: "Specular Survives", runtime: null, runtimeFrom: null, published: "2026-01-02" }],
+  playOrder: ["b", "a"], intro: "Intro.", transitions: ["Into A."], packageNote: null, packagedAt: null };
+t("the output block: DATE | MOVIE ### | TITLE, the list in play order, the total", outputBlock(comp, 600).split("\n"), ["9/29/2026 | MOVIE 007 | What If X? (Full Movie)", "", "1. B — ~10:00 (est.)", "2. A — 20:00", "", "Total Source Runtime: 30:00 (some estimated)"]);
+t("the editor package reads as a script", packageBlock(comp), "INTRO\nIntro.\n\n[ 1. B ]\n\nTRANSITION 1\nInto A.\n\n[ 2. A ]");
+t("a Sleep's package is the editor notes", packageBlock({ ...comp, kind: "sleep" }).startsWith("Editor Notes:\nKeep stories back to back"), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

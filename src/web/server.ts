@@ -86,6 +86,7 @@ import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScri
 import { readDoc } from "./gdoc.js";
 import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent } from "../db/timers.js";
 import { financeAlerts, registerFinance } from "./finance/routes.js";
+import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { REPEAT, type Repeat } from "../tasks/repeat.js";
@@ -1154,6 +1155,7 @@ export async function startWeb(): Promise<void> {
     for (const t of [...scripts.map((x) => x.title), ...stories.map((u) => u.title)]) for (const p of keyOfTitle(t).pairs) done.add(p);
     const leadIds = new Set([...scripts.map((x) => x.heroes[0]?.id), ...ideas.map((i) => i.idea.hero?.id)].filter(Boolean) as string[]);
     return renderStoryLab(s, {
+      specular: hasDatabase ? await specularState().then(specularPanel).catch((err) => (console.error("[specular] panel failed:", err), "")) : "",
       scripts: scripts.length,
       words: scripts.reduce((n, x) => n + x.words, 0),
       matched: results.length,
@@ -1196,6 +1198,8 @@ export async function startWeb(): Promise<void> {
   app.get<{ Querystring: LabQuery }>("/story-lab", async (request, reply) =>
     reply.type("text/html").send(await storyLab(request.query)),
   );
+  // Specular compilations: the next Movie and Sleep, their pages, the catalog.
+  if (hasDatabase) registerSpecular(app, shell, () => storyLab({}));
   // 🎲 Add what was rolled, or take an addition out again.
   app.post<{ Body: { kind?: string; id?: string } }>("/story-lab/add", async (request, reply) => {
     const kind = request.body?.kind as DiceKind;

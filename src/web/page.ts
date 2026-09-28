@@ -1686,6 +1686,61 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .wnwhen { color: var(--ink3); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .wnx { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 16px; padding: 0 4px; }
 .wnx:hover { color: var(--late); }
+.spgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px; }
+.spcard { background: var(--sunk); border-radius: 14px; border-top: 3px solid var(--ch); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; transition: opacity .15s; }
+.spcard.busy { opacity: .45; pointer-events: none; }
+.spcard > header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.spkind { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
+.spslot { font-size: 12px; color: var(--ink3); margin-left: auto; }
+.sptitle { display: flex; gap: 12px; align-items: flex-start; }
+.sptitle h3 { margin: 0; flex: 1; font-family: var(--display); font-size: 16.5px; line-height: 1.3; letter-spacing: -0.01em; }
+.splist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.splist li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.splist li:last-child { border-bottom: 0; }
+.spn { color: var(--ink3); font-weight: 700; font-variant-numeric: tabular-nums; }
+.splist .spt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.spch { font-size: 11px; font-weight: 700; color: var(--ch); white-space: nowrap; }
+.sprt { font-variant-numeric: tabular-nums; color: var(--ink2); white-space: nowrap; text-align: right; }
+.sprt em, .sptable em { font-style: normal; font-size: 10.5px; color: var(--ink3); font-weight: 700; }
+.sptotal { margin: 0; font-size: 12.5px; color: var(--ink2); } .sptotal b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.spwhy { margin: 0; font-size: 12px; color: var(--ink3); line-height: 1.45; }
+.wnbtn.go { background: #1E3A2C; color: #8FE3B6; } .wnbtn.go:hover { background: #25503A; color: #BFF3D6; }
+.wnbtn.warn { background: #3A1E1D; color: #FFC2BC; }
+.sphint { margin: -4px 0 12px; padding: 0; }
+.spnext { margin-top: 16px; }
+.spnext h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin: 0 0 6px; }
+.spnext ul, .sphist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.spnext a, .sphist a { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; font-size: 13px; min-width: 0; }
+.spnext a:hover, .sphist a:hover { background: var(--sunk); }
+.spnext .spt, .sphist .spt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.spd { color: var(--ink3); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 72px; }
+.spk { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.spk.movie { background: rgba(229,83,75,.16); color: #FFB0A8; } .spk.sleep { background: rgba(120,140,255,.16); color: #BCC6FF; }
+.spok { font-size: 11.5px; font-weight: 700; color: #8FE3B6; white-space: nowrap; }
+.spwait { font-size: 11.5px; font-weight: 700; color: var(--ink3); white-space: nowrap; }
+.spwait.big { font-size: 14px; color: var(--ink2); }
+h2 .spok, h2 .spwait { font-family: var(--ui); margin-left: 8px; vertical-align: middle; }
+.spcopy { position: relative; margin: 0 0 14px; }
+.spcopy pre { margin: 0; background: var(--sunk); border-radius: 12px; padding: 14px 16px; padding-right: 76px; font: 13px/1.55 var(--ui); color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.spcopy .wnbtn { position: absolute; top: 10px; right: 10px; }
+.spfit { border-radius: 10px; padding: 9px 12px; font-size: 13px; margin: 0 0 12px; }
+.spfit p { margin: 0 0 6px; } .spfit p:last-child { margin: 0; }
+.spfit.ok { background: rgba(60,203,132,.12); color: #BFF3D6; } .spfit.bad { background: #3A2A14; color: #FFD29A; }
+.spform { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 0; }
+.spform.col { flex-direction: column; align-items: stretch; } .spform.col label { font-size: 12px; color: var(--ink3); font-weight: 700; }
+.spform input[type=text], .spform textarea { flex: 1 1 200px; min-width: 0; background: var(--sunk); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 11px; font: 13.5px var(--ui); }
+.spedit { margin-top: 12px; } .spedit summary { cursor: pointer; font-size: 12.5px; color: var(--ink3); font-weight: 700; }
+.spmiss { margin: 6px 0; padding-left: 20px; font-size: 13px; color: var(--ink2); }
+.spex { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.spex li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; } .spex li span { color: var(--ink3); font-size: 12px; }
+.spex form { margin-left: auto; }
+.spcat summary { list-style: none; cursor: pointer; } .spcat summary::-webkit-details-marker { display: none; }
+.sptable { overflow-x: auto; margin-top: 10px; }
+.sptable table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sptable th { text-align: left; color: var(--ink3); font-size: 11px; font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.sptable td { padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sptable td.t { white-space: normal; min-width: 240px; font-weight: 600; }
+@media (max-width: 600px) { .splist li { grid-template-columns: 16px minmax(0, 1fr) auto; } .splist .spch { display: none; } .spd { min-width: 0; } }
 @media (max-width: 760px) { .wnbucket { margin-left: 0; flex-basis: 100%; } }
 .isg { background: var(--sunk); border-radius: 12px; }
 .isg summary { list-style: none; cursor: pointer; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; }
@@ -2552,6 +2607,8 @@ function bell(notices: Notice[], seen: number): string {
 
 /** Where the date is already the column — a calendar cell, a day card. */
 function titleOnDay(r: StoredRecord): string {
+  // A batch given its own title (a Specular Movie from Story Lab) shows it.
+  if (r.batchNo && r.channel && r.title && r.title !== r.channel) return r.title;
   return r.batchNo && r.channel ? r.channel : displayTitle(r);
 }
 
@@ -2562,6 +2619,7 @@ function titleOnDay(r: StoredRecord): string {
  */
 export function displayTitle(r: StoredRecord): string {
   // A recurring batch is its channel and its day, and nothing else.
+  if (r.batchNo && r.channel && r.title && r.title !== r.channel) return r.title;
   if (r.batchNo && r.channel) return r.airDate ? `${r.channel} · ${usDate(r.airDate)}` : r.channel;
   if (r.title) return r.title;
   const firstLine = r.raw.split("\n").map((l) => l.trim()).find(Boolean);
@@ -6159,6 +6217,8 @@ export function renderRecurring(
 // ── Story Lab ─────────────────────────────────────────────────────────────
 
 export interface StoryLabData {
+  /** The Specular compilations panel, rendered (web/specular.ts). */
+  specular?: string;
   scripts: number;
   words: number;
   matched: number;
@@ -6580,6 +6640,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
           ? `<div class="panel" id="blueprint"><p class="hint">That combination needs a ${d.picked.format === "power" ? "power" : d.picked.format === "hunt" || d.picked.format === "versus" ? "target" : "world"} too.</p></div>`
           : ""
     }
+    ${d.specular ?? ""}
     ${
       d.writeNext
         ? writeNextPanel(d.writeNext, d.shapes ?? [], d.publicCount ?? 0)

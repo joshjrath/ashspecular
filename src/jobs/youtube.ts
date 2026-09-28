@@ -318,6 +318,35 @@ async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
   }
 }
 
+/** "PT1H2M30S" → 3750 seconds. */
+export function isoDuration(iso: string): number | null {
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso);
+  if (!m) return null;
+  return Number(m[1] ?? 0) * 86400 + Number(m[2] ?? 0) * 3600 + Number(m[3] ?? 0) * 60 + Number(m[4] ?? 0);
+}
+
+/**
+ * With a key, how long each long-form upload runs — what the compilations are
+ * built from. Fifty at a time, a few hundred a run, until every one has it.
+ */
+async function fillDurations(key: string, fetcher: Fetcher): Promise<void> {
+  const { rows } = await pool.query<{ video_id: string }>(
+    "SELECT video_id FROM uploads WHERE (duration_s IS NULL OR duration_source <> 'youtube') AND COALESCE(duration_source, '') <> 'manual' AND url NOT LIKE '%/shorts/%' ORDER BY published_at DESC LIMIT 1000",
+  );
+  for (let i = 0; i < rows.length; i += 50) {
+    const ids = rows.slice(i, i + 50).map((r) => r.video_id);
+    const u = new URL("https://www.googleapis.com/youtube/v3/videos");
+    u.search = new URLSearchParams({ part: "contentDetails", id: ids.join(","), key }).toString();
+    const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return;
+    const data = (await res.json()) as { items?: Array<{ id: string; contentDetails?: { duration?: string } }> };
+    for (const item of data.items ?? []) {
+      const secs = item.contentDetails?.duration ? isoDuration(item.contentDetails.duration) : null;
+      if (secs) await pool.query("UPDATE uploads SET duration_s = $2, duration_source = 'youtube' WHERE video_id = $1", [item.id, secs]);
+    }
+  }
+}
+
 export interface Snapshot {
   at: Date;
   views: number;
@@ -394,5 +423,6 @@ export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels:
     }
   }
   if (key) await refreshViews(key, fetcher).catch(() => {});
+  if (key) await fillDurations(key, fetcher).catch(() => {});
   return { channels: rows.length, added, errors };
 }
