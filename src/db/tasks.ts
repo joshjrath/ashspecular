@@ -1,5 +1,7 @@
 import { pool } from "./pool.js";
 import type { Priority, TaskCategory } from "../tasks/parse.js";
+import { nextOccurrence, type Repeat } from "../tasks/repeat.js";
+import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
 
 export interface Task {
   id: number;
@@ -17,6 +19,10 @@ export interface Task {
   author: string | null;
   createdAt: Date;
   doneAt: Date | null;
+  /** Your own notes, apart from the message it came from. */
+  notes: string;
+  /** How often it comes back; null for a one-off. */
+  repeat: Repeat | null;
 }
 
 function row(r: Record<string, unknown>): Task {
@@ -36,6 +42,8 @@ function row(r: Record<string, unknown>): Task {
     author: (r.author as string | null) ?? null,
     createdAt: r.created_at as Date,
     doneAt: (r.done_at as Date | null) ?? null,
+    notes: (r.notes as string | null) ?? "",
+    repeat: (r.repeat as Repeat | null) ?? null,
   };
 }
 
@@ -97,27 +105,53 @@ export interface NewTask {
   captureUrl: string | null;
   sourceMessageId: string | null;
   author: string | null;
+  notes?: string;
+  repeat?: Repeat | null;
 }
 
 export async function addTask(t: NewTask): Promise<number> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO tasks (title, body, category, priority, person, due, source_url, capture_url, source_message_id, author)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO tasks (title, body, category, priority, person, due, source_url, capture_url, source_message_id, author, notes, repeat)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (source_message_id) DO UPDATE SET updated_at = now()
      RETURNING id`,
-    [t.title, t.body, t.category, t.priority, t.person, t.due, t.sourceUrl, t.captureUrl, t.sourceMessageId, t.author],
+    [t.title, t.body, t.category, t.priority, t.person, t.due, t.sourceUrl, t.captureUrl, t.sourceMessageId, t.author, t.notes ?? "", t.repeat ?? null],
   );
   return Number(rows[0]!.id);
 }
 
 export async function editTask(
   id: number,
-  f: { title: string; category: TaskCategory; priority: Priority; person: string | null; due: Date | null; estMin: number | null },
+  f: { title: string; category: TaskCategory; priority: Priority; person: string | null; due: Date | null; estMin: number | null; notes: string; repeat: Repeat | null },
 ): Promise<void> {
   await pool.query(
-    `UPDATE tasks SET title = $2, category = $3, priority = $4, person = $5, due = $6, est_min = $7, updated_at = now() WHERE id = $1`,
-    [id, f.title, f.category, f.priority, f.person, f.due, f.estMin],
+    `UPDATE tasks SET title = $2, category = $3, priority = $4, person = $5, due = $6, est_min = $7, notes = $8, repeat = $9, updated_at = now() WHERE id = $1`,
+    [id, f.title, f.category, f.priority, f.person, f.due, f.estMin, f.notes, f.repeat],
   );
+}
+
+/**
+ * A repeating task is done: open its next occurrence — same everything, due
+ * on the next day it falls, at the same time of day. Returns the new id.
+ */
+export async function repeatTask(id: number, now = new Date()): Promise<number | null> {
+  const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
+  const t = rows[0] ? row(rows[0]) : null;
+  if (!t?.repeat) return null;
+  const today = dateIn(ORG_TZ, now);
+  const from = t.due ? dateIn(ORG_TZ, t.due) : today;
+  const time = t.due
+    ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due)
+    : DEADLINE_TIME;
+  const due = instantIn(nextOccurrence(from, t.repeat, today), time, ORG_TZ);
+  const { rows: out } = await pool.query<{ id: string }>(
+    `INSERT INTO tasks (title, body, category, priority, person, due, est_min, author, notes, repeat)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    [t.title, t.body, t.category, t.priority, t.person, due, t.estMin, t.author, t.notes, t.repeat],
+  );
+  // The finished one stays in Done, but only the new one repeats.
+  await pool.query("UPDATE tasks SET repeat = NULL WHERE id = $1", [id]);
+  return Number(out[0]!.id);
 }
 
 export async function setTaskStatus(id: number, done: boolean): Promise<void> {

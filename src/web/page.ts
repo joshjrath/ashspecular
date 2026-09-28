@@ -37,6 +37,7 @@ import {
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
 import { PRIORITIES, PRIORITY, TASK_CATEGORIES, TASK_CATEGORY } from "../tasks/parse.js";
+import { REPEAT, REPEATS } from "../tasks/repeat.js";
 import type { Task } from "../db/tasks.js";
 import type { RevisionReview } from "../db/revisions.js";
 import { severityOf, themeLabel } from "../revisions/score.js";
@@ -504,6 +505,9 @@ button.clear.secondary:hover, a.clear.secondary:hover { background: var(--line);
 .offbtn.on button { opacity: 1; background: rgba(42,169,216,.2); color: #9FDDF4; padding: 0 9px 0 7px; }
 .cal .cell.today .offbtn button { color: #3A2A28; }
 .cal .cell.today .offbtn.on button { background: rgba(0,0,0,.12); color: #101012; }
+/* Today's cell already carries a TODAY tag: its day off shows as the moon alone. */
+.cal .cell.today .offbtn.on button { padding: 0 6px; }
+.cal .cell.today .offbtn.on button span { display: none; }
 @media (hover: none) { .offbtn button { opacity: .6; } }
 .daycol.off { background: repeating-linear-gradient(135deg, rgba(42,169,216,.1) 0 9px, transparent 9px 18px), var(--card); }
 .daycol.today .offbtn button { color: #3A2A28; }
@@ -2033,10 +2037,30 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .lset { margin-left: auto; font-weight: 700; color: var(--ink2); } .lset:hover { color: var(--ink); text-decoration: underline; }
 @media (max-width: 1100px) { .estgrid { grid-template-columns: minmax(0, 1fr); } }
 /* ── Tasks ── */
-.tadd { display: flex; gap: 8px; margin: 0 0 6px; }
+.tadd { margin: 0 0 6px; }
+.taddrow { display: flex; gap: 8px; align-items: center; }
+.taddbox { flex: 1; min-width: 0; position: relative; display: block; }
+.taddplus { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--salmon); color: #1A0F0C; font-weight: 800; font-size: 16px; line-height: 1; pointer-events: none; }
+.taddbox input { width: 100%; padding-left: 46px !important; }
+.taddmore { margin-top: 8px; }
+.taddmore > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink3); width: fit-content; }
+.taddmore > summary:hover { color: var(--ink2); }
+.taddopts { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 8px; margin-top: 8px; }
+.taddopts textarea, .taddopts select { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent; background: var(--sunk); color: var(--ink);
+  font: inherit; font-size: 13.5px; color-scheme: dark; resize: vertical; }
+.taddopts textarea:focus, .taddopts select:focus { outline: 0; border-color: var(--salmon); }
+.tnote { margin-top: 4px; font-size: 12.5px; color: var(--ink2); line-height: 1.4; padding-left: 10px; box-shadow: inset 2px 0 0 var(--line); }
+.trep { color: #B4BCFF !important; font-weight: 700; }
+.trecur { margin-top: 18px; }
+.trecur .tghead .tpri { background: rgba(125,138,245,.18); color: #B4BCFF; }
+.trecur .tghead .sub { font-weight: 500; letter-spacing: 0; color: var(--ink3); text-transform: none; }
+.tedit label.full { grid-column: 1 / -1; }
+.tedit textarea { width: 100%; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent; background: var(--card); color: var(--ink); font: inherit; font-size: 13.5px; resize: vertical; }
+.tedit textarea:focus { outline: 0; border-color: var(--salmon); }
 .tadd input, .tedit input, .tedit select { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
   background: var(--raised); color: var(--ink); font: inherit; font-size: 13.5px; color-scheme: dark; }
-.tadd input { flex: 1; padding: 11px 14px; border-radius: 12px; background: var(--sunk); font-size: 14px; }
+.tadd input { flex: 1; padding: 12px 14px; border-radius: 12px; background: var(--sunk); font-size: 14.5px; }
 .tadd input:focus, .tedit input:focus, .tedit select:focus { outline: 0; border-color: var(--salmon); }
 .tedit input, .tedit select { width: 100%; background: var(--card); }
 .taddhint { font-size: 12px; color: var(--ink3); margin: 0 0 16px; }
@@ -2084,6 +2108,8 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .task .tmain { flex-basis: 100%; }
   .tacts { margin-left: auto; }
   .tedit form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .taddopts { grid-template-columns: minmax(0, 1fr); }
+  .taddrow .clear { padding-left: 14px; padding-right: 14px; }
   .tedit label.wide, .tedit label.half { grid-column: 1 / -1; }
 }
 `;
@@ -4285,7 +4311,7 @@ export function renderCalendar(
     </div>
     <div class="cal">${heads}${cells}</div>
     ${
-      entries.length
+      entries.some((e) => e.day.startsWith(ym))
         ? ""
         : `<div class="empty" style="margin-top:16px">Nothing ${
             mode === "posting" ? "airing" : "due"
@@ -7337,7 +7363,9 @@ function taskRow(t: Task, now: Date, running: string | null): string {
     `<span>~${esc(fmtMin(est))}</span>`,
     t.snoozedUntil && t.snoozedUntil.getTime() > now.getTime() ? `<span>back ${esc(taskWhen(t.snoozedUntil))}</span>` : "",
     t.status === "done" && t.doneAt ? `<span>done ${esc(taskWhen(t.doneAt))}</span>` : "",
+    t.repeat ? `<span class="trep">↻ ${esc(REPEAT.get(t.repeat)?.label ?? t.repeat)}</span>` : "",
   ].filter(Boolean).join("");
+  const firstNote = t.notes.split("\n").find((l) => l.trim())?.trim() ?? "";
 
   const acts =
     t.status === "done"
@@ -7361,6 +7389,7 @@ function taskRow(t: Task, now: Date, running: string | null): string {
       <div class="tmain">
         <div class="ttitle">${esc(t.title)} <span class="tcat">· ${c.emoji} ${esc(c.label)}</span></div>
         <div class="tmeta">${meta}</div>
+        ${firstNote ? `<div class="tnote" title="${esc(t.notes)}">${esc(firstNote.length > 140 ? `${firstNote.slice(0, 137)}…` : firstNote)}${t.notes.trim().includes("\n") ? " …" : ""}</div>` : ""}
       </div>
       <div class="tacts">${acts}
         <details class="tmenu"><summary class="wbtn" title="Edit">✎</summary><div class="tpop tedit-pop"></div></details>
@@ -7375,6 +7404,8 @@ function taskRow(t: Task, now: Date, running: string | null): string {
         <label>Priority<select name="priority">${PRIORITIES.map((x) => `<option value="${x.id}"${x.id === t.priority ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>
         <label class="half">Due date<input name="due_date" type="date" value="${esc(localDay)}"></label>
         <label>Time<input name="due_time" type="time" value="${esc(localTime)}"></label>
+        <label class="half">Repeats<select name="repeat"><option value="">Doesn't repeat</option>${REPEATS.map((r) => `<option value="${r.id}"${r.id === t.repeat ? " selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label>
+        <label class="full">Notes<textarea name="notes" rows="3" maxlength="4000" placeholder="Anything to remember about it">${esc(t.notes)}</textarea></label>
         ${t.body && t.body.trim() !== t.title ? `<pre class="tbody">${esc(t.body)}</pre>` : ""}
         <div class="tbtns"><button class="clear">Save</button>
           <button class="clear secondary" formaction="/tasks/${t.id}/delete" formnovalidate>Delete</button></div>
@@ -7390,27 +7421,45 @@ function taskRow(t: Task, now: Date, running: string | null): string {
  */
 export function renderTasks(shell: Shell, d: TasksData): string {
   const running = d.running?.taskId ? `t${d.running.taskId}` : null;
+  // Repeating tasks have their own section; the priority groups are one-offs.
+  const oneOff = d.todo.filter((t) => !t.repeat);
+  const recurring = [...d.todo, ...d.snoozed].filter((t) => t.repeat).sort((a, b) => (a.due?.getTime() ?? Infinity) - (b.due?.getTime() ?? Infinity));
   const groups = PRIORITIES.map((p) => {
-    const list = d.todo.filter((t) => t.priority === p.id);
+    const list = oneOff.filter((t) => t.priority === p.id);
     if (!list.length) return "";
     return `<section class="tgroup"><div class="tghead" style="--pc:${p.colour}"><span class="tpri">${p.dot} ${esc(p.label)}</span><span class="n">${list.length}</span></div>
       <div class="tlist">${list.map((t) => taskRow(t, d.now, running)).join("")}</div></section>`;
   }).join("");
-  const minutes = d.todo.reduce((n, t) => n + (t.estMin ?? taskCategoryEstimate(t.category)), 0);
-  const body = `${pageHeader(`To do · ${d.todo.length}`, `<a class="clear secondary" href="/my-day">My Day</a>`)}
+  const minutes = d.todo.filter((t) => !t.repeat).reduce((n, t) => n + (t.estMin ?? taskCategoryEstimate(t.category)), 0);
+  const body = `${pageHeader(`To do · ${oneOff.length}`, `<a class="clear secondary" href="/my-day">My Day</a>`)}
     ${timerBar(d.running, "/tasks")}
     <section class="panel">
       <form class="tadd" method="post" action="/tasks">
-        <input name="text" placeholder="Add a task — e.g. Pay Divas by Friday, urgent" aria-label="New task" autocomplete="off" required maxlength="500">
-        <button class="clear">Add</button>
+        <div class="taddrow">
+          <label class="taddbox"><span class="taddplus" aria-hidden="true">+</span>
+            <input name="text" placeholder="New task — try “Pay Divas by Friday”" aria-label="New task" autocomplete="off" required maxlength="500"></label>
+          <button class="clear">Add task</button>
+        </div>
+        <details class="taddmore"><summary>Notes &amp; repeat</summary>
+          <div class="taddopts">
+            <textarea name="notes" rows="2" maxlength="4000" placeholder="Notes (optional)" aria-label="Notes"></textarea>
+            <select name="repeat" aria-label="Repeats"><option value="">Doesn't repeat</option>${REPEATS.map((r) => `<option value="${r.id}">${esc(r.label)}</option>`).join("")}</select>
+          </div>
+        </details>
       </form>
-      <p class="taddhint">Or forward anything into <b>#tasks</b> in Discord. Category, priority, person and due date are read from it — change any of them with ✎. ${
-        d.todo.length ? `About <b>${esc(fmtMin(minutes))}</b> of tasks open.` : ""
+      <p class="taddhint">Due dates, priority, people and repeats (“every Monday”) are picked up as you type. You can also forward anything to <b>#tasks</b> in Discord.${
+        oneOff.length ? ` About <b>${esc(fmtMin(minutes))}</b> open.` : ""
       }</p>
-      ${groups || `<div class="empty">Nothing to do. Forward something into #tasks and it lands here.</div>`}
+      ${groups || `<div class="empty">You're all caught up.</div>`}
       ${
-        d.snoozed.length
-          ? `<details class="tfold"><summary>Snoozed · ${d.snoozed.length}</summary><div class="tlist">${d.snoozed.map((t) => taskRow(t, d.now, running)).join("")}</div></details>`
+        recurring.length
+          ? `<section class="tgroup trecur"><div class="tghead"><span class="tpri">↻ RECURRING</span><span class="n">${recurring.length}</span><span class="sub">— done opens the next one</span></div>
+             <div class="tlist">${recurring.map((t) => taskRow(t, d.now, running)).join("")}</div></section>`
+          : ""
+      }
+      ${
+        d.snoozed.some((t) => !t.repeat)
+          ? `<details class="tfold"><summary>Snoozed · ${d.snoozed.filter((t) => !t.repeat).length}</summary><div class="tlist">${d.snoozed.filter((t) => !t.repeat).map((t) => taskRow(t, d.now, running)).join("")}</div></details>`
           : ""
       }
       ${

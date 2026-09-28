@@ -523,7 +523,25 @@ Every field can be changed with ✎. Each task has **Complete** (✓), **Snooze*
 (1 hour, 3 hours, tomorrow 9 AM, next week), **Open Discord** (↗, which goes
 to the original message for a forward) and a timer (▶). Snoozed and Done
 tasks are folded at the bottom, and a done task can be reopened. You can also
-add a task from the box at the top, and it's read the same way.
+add a task from the **New task** box at the top, and it's read the same way.
+**Notes & repeat** under the box adds notes and a repeat as you add it.
+
+- **Notes.** Your own notes on a task, kept apart from the message it came
+  from. The first line shows under the task, and all of them can be edited
+  with ✎.
+- **Repeating tasks** (every day, every weekday, every week, every 2 weeks,
+  every month) have their own **Recurring** section. When you finish one,
+  the next is opened, due on the next day it falls at the same time.
+  Finishing one late opens the next upcoming one, never a backlog. Saying it
+  in the task works too: "Renew Adobe every month", "Check comments daily",
+  "Send Vyasa the script every Monday".
+- **Capitals.** Names in a new task get their capitals: people the board
+  knows, channels, days and months, and services like Adobe, PayPal and
+  Discord. "pay divas for the anime edit" becomes "Pay Divas for the Anime
+  edit". Anything after @ is left alone.
+
+These are to-dos. The daily Bits, Reading and long-form uploads are on
+**Recurring** in the sidebar and on My Day.
 
 On **My Day**, tasks are work like everything else. Each one's estimate comes
 from its category: Payment 2 min, Response 5, General 5, Team 10, Channel 10,

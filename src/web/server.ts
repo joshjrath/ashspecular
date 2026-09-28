@@ -88,7 +88,8 @@ import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, s
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
-import { addTask, deleteTask, editTask, getTask, knownPeople, listTasks, openTasks, setTaskStatus, snoozeTask, tasksDoneToday } from "../db/tasks.js";
+import { REPEAT, type Repeat } from "../tasks/repeat.js";
+import { addTask, deleteTask, repeatTask, editTask, getTask, knownPeople, listTasks, openTasks, setTaskStatus, snoozeTask, tasksDoneToday } from "../db/tasks.js";
 import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
 import {
   dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, isVo, setEstimates, voQueue, whatNext, WORK_TYPES,
@@ -116,7 +117,7 @@ import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
 import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
 import { renderForgotten, renderMyDay, renderRecording, renderTasks, renderVoQueue, type TimerState } from "./page.js";
-import { DAY_SPAN, RAIL_ITEMS, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, RAIL_ITEMS, calendarGrid, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
   monthOf,
   renderCalendar,
@@ -560,9 +561,28 @@ export async function startWeb(): Promise<void> {
     async (request, reply) => calendar(request.params.ym, request.query.mode, request, reply),
   );
 
-  app.get<{ Querystring: { mode?: string } }>("/calendar", async (request, reply) =>
-    calendar(undefined, request.query.mode, request, reply),
-  );
+  // The sidebar's Calendar: opens the way it was last left — Day, 4 days,
+  // Week or Month, deadlines or posting.
+  app.get<{ Querystring: { mode?: string } }>("/calendar", async (request, reply) => {
+    const [view, savedMode] = (request.cookies.cal_view ?? "").split(".");
+    const mode = request.query.mode ?? (savedMode === "deadlines" ? "deadlines" : undefined);
+    const q = mode ? `?mode=${mode}` : "";
+    if (view === "day") return reply.redirect(`/day/${dateIn(ORG_TZ)}${q}`);
+    if (view === "4day") return reply.redirect(`/4day/${dateIn(ORG_TZ)}${q}`);
+    if (view === "week") return reply.redirect(`/week/${dateIn(ORG_TZ)}${q}`);
+    return calendar(undefined, mode, request, reply);
+  });
+
+  /**
+   * Remember which calendar view is open, so the sidebar's Calendar reopens it.
+   * Only when it was reached from the calendar itself — a day opened from the
+   * dashboard or My Day doesn't change how the calendar opens.
+   */
+  function rememberView(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply, view: "month" | "week" | "4day" | "day", mode: string) {
+    const from = (() => { try { return new URL(String(request.headers.referer ?? "")).pathname; } catch { return ""; } })();
+    if (!/^\/(calendar|week|4day|day)(\/|$)/.test(from)) return;
+    reply.setCookie("cal_view", `${view}.${mode}`, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365, httpOnly: true });
+  }
 
   /**
    * Which categories the calendar hides. An explicit ?hide= wins and is
@@ -641,7 +661,10 @@ export async function startWeb(): Promise<void> {
     const hide = hiddenCategories(request, reply);
     const chide = hiddenChannels(request, reply);
     const st = hiddenStatuses(request);
-    const [s, entries] = await Promise.all([shell("calendar"), monthEntries(ym, mode)]);
+    // The whole grid: the days of the weeks either side that show in it get their cards too.
+    const grid = calendarGrid(ym);
+    const [s, entries] = await Promise.all([shell("calendar"), calendarRange(grid[0]!, grid[grid.length - 1]!, mode, ORG_TZ)]);
+    rememberView(request, reply, "month", mode);
     const shown = entries.filter(
       (e) => !hide.includes(e.record.category) && !st.includes(e.record.status as "done" | "open") && channelShown(e.record, chide),
     );
@@ -663,6 +686,7 @@ export async function startWeb(): Promise<void> {
       const chide = hiddenChannels(request, reply);
       const st = hiddenStatuses(request);
       const days = await dayBuckets(shiftDate(date, -DAY_SPAN), shiftDate(date, DAY_SPAN), mode, hide, st, chide);
+      rememberView(request, reply, "day", mode);
       return reply.type("text/html").send(renderDay(s, date, mode, days, hide, st, chide));
     },
   );
@@ -683,6 +707,7 @@ export async function startWeb(): Promise<void> {
       const chide = hiddenChannels(request, reply);
       const st = hiddenStatuses(request);
       const days = await dayBuckets(start, shiftDate(start, 6), mode, hide, st, chide);
+      rememberView(request, reply, "week", mode);
       return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st, chide));
     },
   );
@@ -702,6 +727,7 @@ export async function startWeb(): Promise<void> {
       const chide = hiddenChannels(request, reply);
       const st = hiddenStatuses(request);
       const days = await dayBuckets(start, shiftDate(start, 3), mode, hide, st, chide);
+      rememberView(request, reply, "4day", mode);
       return reply.type("text/html").send(renderWeek(s, start, mode, days, hide, st, chide, 4));
     },
   );
@@ -1343,8 +1369,9 @@ export async function startWeb(): Promise<void> {
   app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/done", async (request, reply) => {
     const id = Number(request.body?.id);
     if (hasDatabase && id && request.body?.kind === "task") {
-      // Clearing a task stops its timer too.
+      // Clearing a task stops its timer too; a repeating one opens its next.
       await setTaskStatus(id, true);
+      await repeatTask(id);
     } else if (hasDatabase && id) {
       const running = await runningTimer();
       if (running?.recordId === id) await stopTimer();
@@ -1404,6 +1431,8 @@ export async function startWeb(): Promise<void> {
       person: (b.person ?? "").trim().slice(0, 60) || null,
       due,
       estMin: Number.isFinite(est) && est > 0 ? Math.min(600, Math.round(est)) : null,
+      notes: (b.notes ?? "").trim().slice(0, 4000),
+      repeat: (REPEAT.has(b.repeat ?? "") ? b.repeat : null) as Repeat | null,
     };
   };
   const taskBack = (b: unknown) => safeBack(b, "/tasks");
@@ -1414,11 +1443,13 @@ export async function startWeb(): Promise<void> {
     return reply.type("text/html").send(renderTasks(s, { now, ...lists, running: work.timer }));
   });
   // Quick add: one line, read the same way as a message in #tasks.
-  app.post<{ Body: { text?: string } }>("/tasks", async (request, reply) => {
+  app.post<{ Body: { text?: string; notes?: string; repeat?: string } }>("/tasks", async (request, reply) => {
     const text = (request.body?.text ?? "").trim();
     if (hasDatabase && text) {
       const t = parseTask({ comment: text, people: await knownPeople().catch(() => []) });
-      await addTask({ ...t, sourceUrl: null, captureUrl: null, sourceMessageId: null, author: "board" });
+      // A repeat picked in the form wins over one read from the words.
+      const picked = REPEAT.has(request.body?.repeat ?? "") ? (request.body!.repeat as Repeat) : null;
+      await addTask({ ...t, repeat: picked ?? t.repeat, notes: (request.body?.notes ?? "").trim().slice(0, 4000), sourceUrl: null, captureUrl: null, sourceMessageId: null, author: "board" });
     }
     return reply.redirect("/tasks");
   });
@@ -1429,6 +1460,8 @@ export async function startWeb(): Promise<void> {
     switch (request.params.action) {
       case "done":
         await setTaskStatus(id, true);
+        // A repeating task opens its next occurrence.
+        await repeatTask(id);
         break;
       case "reopen":
         await setTaskStatus(id, false);

@@ -12,6 +12,55 @@
  * Everything it finds can be changed on the site.
  */
 import { parseWhen } from "../parse/when.js";
+import { CHANNELS } from "../catalog.js";
+import type { Repeat } from "./repeat.js";
+
+/** How often, when a task says so: "every Friday", "monthly", "each weekday". */
+const REPEAT_WORDS: Array<[Repeat, RegExp]> = [
+  ["weekdays", /\b(?:every|each) weekday\b|\bweekdays\b/i],
+  ["biweekly", /\b(?:every|each) (?:other|2|two) weeks?\b|\bbi-?weekly\b|\bfortnightly\b/i],
+  ["daily", /\b(?:every|each) (?:day|morning|night|evening)\b|\bdaily\b/i],
+  ["weekly", /\b(?:every|each) (?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\bweekly\b/i],
+  ["monthly", /\b(?:every|each) month\b|\bmonthly\b/i],
+];
+const REPEAT_TRAIL = /[\s,;:–—-]*\b(?:(?:every|each) (?:other |2 |two )?(?:day|morning|night|evening|weekday|week|weeks|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|bi-?weekly|fortnightly|weekdays)\b/gi;
+
+/**
+ * Names in a title get their capitals: people the board knows, channels,
+ * days and months, and the services a studio talks about. "pay divas for the
+ * anime edit on friday" → "Pay Divas for the Anime edit on Friday".
+ */
+// Only names that can't be ordinary words: "chase up the invoice" stays a verb.
+const BRANDS = [
+  "YouTube", "Discord", "Frame.io", "Google", "Gmail", "Adobe", "Premiere", "Photoshop", "After Effects", "Canva", "Notion", "PayPal",
+  "Venmo", "Cash App", "Zelle", "Amex", "Patreon", "TikTok", "Instagram", "Twitch", "Reddit", "Epidemic Sound", "Artlist",
+  "Fiverr", "Upwork", "Amazon", "Spotify", "AdSense", "ChatGPT", "Dropbox", "Trello", "LLC", "IRS", "NordVPN",
+];
+const CALENDAR_WORDS = "Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February April June July August September October November December".split(" ");
+/**
+ * A channel's short name is only capitalised when it isn't an everyday word
+ * — "send you the file" mustn't become "send YOU the file", nor "the law"
+ * "the Law". Its full name ("Specular Law") always is.
+ */
+const COMMON_SHORT = new Set("you law force action balls torch sleep verse horror comics battles survives documentaries animation studios manga movies reading bits nove".split(" "));
+export function properCase(text: string, people: string[] = []): string {
+  const names = [
+    ...people.filter((p) => p.length > 1),
+    ...BRANDS,
+    ...CALENDAR_WORDS,
+    ...CHANNELS.map((c) => c.name),
+    ...CHANNELS.filter((c) => !c.exactOnly)
+      .map((c) => c.name.replace(/^Specular /, ""))
+      .filter((n) => n.length >= 2 && !COMMON_SHORT.has(n.toLowerCase())),
+  ].sort((a, b) => b.length - a.length);
+  let out = text;
+  for (const n of names) {
+    const re = new RegExp(`(^|[^\\w@])(${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?=[^\\w]|$)`, "gi");
+    out = out.replace(re, (_m, pre: string) => `${pre}${n}`);
+  }
+  // "i" on its own is "I"; anything after @ is a handle, left alone.
+  return out.replace(/(^|\s)i(?=\s|'|$)/g, "$1I");
+}
 
 export const TASK_CATEGORIES = [
   { id: "payment", label: "Payment", emoji: "💰", colour: "#3CCB84", est: 2 },
@@ -43,6 +92,8 @@ export interface ParsedTask {
   due: string | null;
   /** Everything that came in, for context. */
   body: string;
+  /** "every week", "monthly"… — how often it comes back, when said. */
+  repeat: Repeat | null;
 }
 
 /** Words that give a category away. A leading verb counts triple: "Respond to the sponsor thread" is a Response. */
@@ -112,7 +163,10 @@ export function parseTask(input: { comment?: string; forwarded?: string; mention
     before = title;
     title = title.replace(TRAILING, "").trim() || before;
   }
+  const repeat = REPEAT_WORDS.find(([, re]) => re.test(text))?.[0] ?? null;
+  if (repeat) title = title.replace(REPEAT_TRAIL, "").replace(/\s{2,}/g, " ").trim() || title;
   if (title.length > 110) title = `${title.slice(0, 107).replace(/\s+\S*$/, "")}…`;
+  title = properCase(title, input.people ?? []);
   title = title.charAt(0).toUpperCase() + title.slice(1);
 
   // Category: the leading verb weighs most, then every word that points somewhere.
@@ -146,5 +200,5 @@ export function parseTask(input: { comment?: string; forwarded?: string; mention
     if (name) person = name;
   }
 
-  return { title, category: best.id, priority, person, due, body };
+  return { title, category: best.id, priority, person, due, body, repeat };
 }

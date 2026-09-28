@@ -62,7 +62,8 @@ import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelE
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
 import { taskItem, isRequired } from "../src/web/work.js";
-import { parseTask } from "../src/tasks/parse.js";
+import { parseTask, properCase } from "../src/tasks/parse.js";
+import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
@@ -1689,7 +1690,7 @@ t("a known person is recognised", parseTask({ comment: "sort the invoice for div
 
 const mkTask = (o: Partial<Task>): Task => ({
   id: 1, title: "T", body: "", category: "general", priority: "normal", person: null, due: null, estMin: null, status: "open",
-  snoozedUntil: null, sourceUrl: null, captureUrl: null, author: null, createdAt: tkNow, doneAt: null, ...o,
+  snoozedUntil: null, sourceUrl: null, captureUrl: null, author: null, createdAt: tkNow, doneAt: null, notes: "", repeat: null, ...o,
 });
 const payTask = mkTask({ id: 1, title: "Pay Divas", category: "payment", priority: "urgent", person: "Divas", sourceUrl: "https://discord.com/channels/1/2/3" });
 const replyTask = mkTask({ id: 2, title: "Respond to Seb", category: "response", priority: "high" });
@@ -1711,6 +1712,17 @@ t("the Settings page: Time estimates with work, each recurring channel, and task
 t("…a changed one shows its value, an unchanged one its default as a placeholder", [/name="e:type:reading"[^>]*value="8"/.test(estPage), /name="e:type:gaming"[^>]*value="" placeholder="45"/.test(estPage)], [true, true]);
 setEstimates(new Map());
 t("…and back to defaults", [channelEstimate("Specular DC"), typeEstimate("vo")], [10, 40]);
+
+section("Tasks — notes, repeats, capitals");
+t("repeats: the next falls after today, counted from when it was due", [nextOccurrence("2026-09-28", "daily", "2026-09-28"), nextOccurrence("2026-09-20", "daily", "2026-09-28"), nextOccurrence("2026-09-25", "weekdays", "2026-09-25"), nextOccurrence("2026-01-31", "monthly", "2026-01-31"), nextOccurrence("2026-09-28", "biweekly", "2026-09-28")], ["2026-09-29", "2026-09-29", "2026-09-28", "2026-02-28", "2026-10-12"]);
+t("repeats read from the words, and left out of the title", [tk("renew adobe every month").repeat, tk("renew adobe every month").title, tk("send Vyasa the script every monday").repeat, tk("check comments daily").repeat, tk("Pay Divas").repeat], ["monthly", "Renew Adobe", "weekly", "daily", null]);
+t("proper nouns get their capitals", [properCase("pay divas for the anime edit on friday", ["Divas"]), properCase("i need to call adobe about the llc card"), properCase("ask @kay about the discord server")], ["pay Divas for the Anime edit on Friday", "I need to call Adobe about the LLC card", "ask @kay about the Discord server"]);
+t("…but everyday words stay as they are", [properCase("send you the file and chase up the law firm"), properCase("post to specular law and the fnaf bits channel")], ["send you the file and chase up the law firm", "post to Specular Law and the FNAF Bits channel"]);
+t("…in a task's title from the start", parseTask({ comment: "ask vyasa about the fnaf bits thumbnail", people: ["Vyasa"], now: tkNow }).title, "Ask Vyasa about the FNAF Bits thumbnail");
+const repTask = mkTask({ id: 21, title: "Renew Adobe", repeat: "monthly", notes: "Card ends in 4411\nCheck the price" });
+const repPage = renderTasks(shellFix, { now: tkNow, todo: [mkTask({ id: 20, title: "One-off" }), repTask], snoozed: [], done: [], running: null });
+t("recurring tasks have their own section; the count is one-offs", [repPage.includes("↻ RECURRING"), repPage.includes("To do · 1"), repPage.includes("Every month")], [true, true, true]);
+t("notes show under the task and are editable", [repPage.includes('class="tnote"'), repPage.includes("Card ends in 4411"), repPage.includes('name="notes"'), repPage.includes('name="repeat"')], [true, true, true, true]);
 
 section("Finance — money, months, bills");
 t("money reads with sign and compact", [fmtMoney(800000), fmtMoney(610000, { sign: true }), fmtMoney(-162000), fmtMoney(820000, { compact: true }), fmtMoney(2609, { exact: true })], ["$8,000", "+$6,100", "−$1,620", "$8.2K", "$26.09"]);

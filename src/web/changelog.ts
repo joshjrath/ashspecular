@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-tasks-notes-repeat-calendar",
+    title: "Task notes and repeating tasks; Calendar opens how you left it",
+    changes: [
+      { text: "Tasks can have notes, shown under the task and editable with ✎.", href: "/tasks" },
+      { text: "Repeating tasks (every day, weekday, week, 2 weeks or month) have their own Recurring section. Finishing one opens the next. Saying \"every Monday\" or \"monthly\" sets it.", href: "/tasks" },
+      { text: "Names in new tasks get their capitals: people, channels, days, months and the services you use (\"pay divas for the anime edit\" → \"Pay Divas for the Anime edit\").", href: "/tasks" },
+      { text: "Month view now shows the cards on the days from the months either side.", href: "/calendar" },
+      { text: "Calendar in the sidebar reopens the view you last used: Day, 4 days, Week or Month.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-28-nothing-assigned-fix",
     title: "Nothing assigned only counts past a channel's last scheduled video",
     changes: [
