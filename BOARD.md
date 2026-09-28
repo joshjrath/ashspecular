@@ -301,9 +301,16 @@ above it.
 Every record's page also has an **air date box** — for a phone, where dragging
 is awkward, or for a date weeks out.
 
-**Days off.** A day off is a day no work can be done, so anything due on it is
-due at the same time on the last working day before it (two days off in a row
-go back two days). Mark one with the moon on any day of the calendar — it
+**Days off.** A day off is a day no work can be done, so the work due on it is
+**spread over the working days from tomorrow up to it**, not piled onto the
+day before. Each of those days takes an even share (a day off in 5 days with
+4 VOs on it puts one VO on each of the 4 days before it). Any pieces left
+over go to the days with the least work already on them. The most pressing
+pieces (VOs first, then revisions, then the rest, earliest air date first)
+take the earliest days. Each keeps its time of day. When the day off is
+tomorrow, or there's nowhere to spread to, its work falls on the last working
+day before it (two days off in a row go back two days), as does anything
+filed after the day was marked. Mark one with the moon on any day of the calendar — it
 shows when you point at the day, and on the day and week views — or with the
 date box in the **Days off** strip under the dashboard's tiles. The day turns
 striped, and every deadline on it shows where it now falls, with a *Day off
@@ -593,9 +600,21 @@ can be changed.)
   fits, it gives the top one anyway so you can start it. When everything due
   is done, it picks from Do ahead. **Start on it** starts the timer. The
   dashboard's header has the same button.
+- **Show switches** along the top: VO, Revision, Task, Batch, Long-form and
+  Gaming. Switch one off and that kind of work leaves the whole page: the
+  tiles, Today, the week's load, What next and Do ahead. The choice is kept
+  in this browser.
 - **Today:** everything late or due today. Each piece shows tracked time
   against its estimate on a bar, with ▶ to time it and ✓ to clear it.
   Today's Bits/Reading batches fold into one line you can open.
+  **⤢ Explode batches** (on that line, or next to the switches) shows every
+  upload in every batch as its own row, "Specular DC · 3 of 5", each with its
+  share of the batch's time. ✓ on one counts that upload done, and the batch
+  clears when the last one is ticked. **⤡ Group batches** folds them back.
+- **Logging without time:** in **Done today**, **No time** on a piece that
+  someone else did clears whatever was tracked on it. It then shows as
+  *logged · no time* and doesn't count toward your tracked or estimated time.
+  Timing it again makes it yours.
 - **The week ahead:** each of the next seven days' estimated load as a bar,
   split by kind of work. It includes the batches every recurring channel will
   open that day but hasn't yet. Paused channels and days off open none.

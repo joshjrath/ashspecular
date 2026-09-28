@@ -42,6 +42,8 @@ import {
   listDaysOff,
   setDayOff,
   listOffShifted,
+  dueOnDay,
+  saveDayOffMoves,
   type MoveSnapshot,
   type Notice,
   type GapNotice,
@@ -84,7 +86,7 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
-import { minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent } from "../db/timers.js";
+import { clearTime, forgetUntracked, minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent, untrackedKeys } from "../db/timers.js";
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { dashboardAlerts } from "./finance/ui.js";
@@ -94,6 +96,7 @@ import { addTask, deleteTask, repeatTask, editTask, getTask, knownPeople, listTa
 import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
 import {
   dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, isVo, setEstimates, voQueue, whatNext, WORK_TYPES,
+  MYDAY_GROUPS, explodeBatch, shownTypes, spreadDayOff, itemKey, type WorkItem as MyWorkItem,
   type WorkItem,
 } from "./work.js";
 import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
@@ -196,9 +199,10 @@ async function loadWork(now = new Date()) {
     openTasks().catch(() => []),
     tasksDoneToday(ORG_TZ).catch(() => []),
   ]);
-  const [spent, taskSpent] = await Promise.all([
+  const [spent, taskSpent, untracked] = await Promise.all([
     minutesSpent([...open, ...done].map((r) => r.id)),
     taskMinutesSpent([...tasks, ...tasksDone].map((t) => t.id)).catch(() => new Map<number, number>()),
+    untrackedKeys().catch(() => new Set<string>()),
   ]);
   // Tasks from #tasks sit alongside the production work, timed the same way.
   const items = open
@@ -208,7 +212,8 @@ async function loadWork(now = new Date()) {
   const doneItems = done
     .map((r) => toItem(r, spent.get(r.id) ?? 0))
     .filter((i): i is WorkItem => i !== null)
-    .concat(tasksDone.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)));
+    .concat(tasksDone.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)))
+    .map((i) => (untracked.has(itemKey(i) ?? "") ? { ...i, untracked: true } : i));
   const norm = (t: string) => t.toLowerCase().replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const forgotten = forgottenWork(open, now, {
     script: (r) => Boolean(scriptFor({ id: r.id, code: r.code, title: r.title })),
@@ -1340,11 +1345,16 @@ export async function startWeb(): Promise<void> {
 
   app.get<{ Querystring: { next?: string; budget?: string } }>("/my-day", async (request, reply) => {
     const now = new Date();
-    const [s, work, tracked] = await Promise.all([shell("myday"), loadWork(now), minutesByDay(ORG_TZ, dateIn(ORG_TZ, now))]);
+    const [s, loaded, tracked] = await Promise.all([shell("myday"), loadWork(now), minutesByDay(ORG_TZ, dateIn(ORG_TZ, now))]);
     const today = dateIn(ORG_TZ, now);
     const days = nextDays(7, now);
     const offs = new Set(s.daysOff ?? []);
-    const projected = projectBatches(days.slice(1), work.open, { paused: new Set(work.paused.keys()), daysOff: offs });
+    // The category switches: only the kinds of work left on count anywhere on the page.
+    const hidden = (request.cookies.myday_hide ?? "").split(".").filter((g) => MYDAY_GROUPS.some((x) => x.id === g));
+    const shown = shownTypes(hidden);
+    const exploded = request.cookies.myday_explode === "1";
+    const work = { ...loaded, items: loaded.items.filter((i) => shown.has(i.type)), doneItems: loaded.doneItems.filter((i) => shown.has(i.type)) };
+    const projected = projectBatches(days.slice(1), work.open, { paused: new Set(work.paused.keys()), daysOff: offs }).filter((i) => shown.has(i.type));
     const all = [...work.items, ...projected];
     const budget = [15, 30, 60, 120].includes(Number(request.query.budget)) ? Number(request.query.budget) : null;
     const asked = request.query.next !== undefined;
@@ -1356,12 +1366,41 @@ export async function startWeb(): Promise<void> {
         loads: dayLoads(all, days, today), trackedToday: tracked.get(today) ?? 0, running: work.timer,
         focus: asked ? whatNext(work.items, now, budget) : null, budget, asked,
         voLeft: { n: vos.length, minutes: vos.reduce((n, i) => n + remaining(i), 0) },
+        hidden, exploded,
       }),
     );
   });
 
+  // My Day's switches, kept in this browser: which kinds of work show, and batches as one row each upload.
+  const keepYear = { path: "/", sameSite: "lax" as const, httpOnly: true, maxAge: 60 * 60 * 24 * 365 };
+  app.post<{ Body: { show?: string | string[] } }>("/my-day/show", async (request, reply) => {
+    const raw = request.body?.show;
+    const show = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const hide = MYDAY_GROUPS.map((g) => g.id).filter((g) => !show.includes(g));
+    reply.setCookie("myday_hide", hide.join("."), keepYear);
+    return reply.redirect("/my-day");
+  });
+  app.post<{ Body: { on?: string } }>("/my-day/explode", async (request, reply) => {
+    reply.setCookie("myday_explode", request.body?.on === "1" ? "1" : "0", keepYear);
+    return reply.redirect("/my-day");
+  });
+  // One upload of an exploded batch done: the batch's count goes up by one.
+  app.post<{ Body: { id?: string; back?: string } }>("/my-day/unit", async (request, reply) => {
+    const id = Number(request.body?.id);
+    const r = hasDatabase && id ? await getRecordById(id) : null;
+    if (r?.batchNo && r.channel && r.airDate) await setBatchProgress(r.channel, r.airDate, (r.batchDone ?? 0) + 1);
+    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+  });
+  // Clear the time tracked on a piece that's already done — someone else did it.
+  app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/clear", async (request, reply) => {
+    const id = Number(request.body?.id);
+    if (hasDatabase && id) await clearTime(request.body?.kind === "task" ? { taskId: id } : { recordId: id });
+    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+  });
+
   app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/start", async (request, reply) => {
     const id = Number(request.body?.id);
+    if (hasDatabase && id) await forgetUntracked(`${request.body?.kind === "task" ? "t" : "r"}${id}`);
     if (hasDatabase && id) await (request.body?.kind === "task" ? startTaskTimer(id) : startTimer(id));
     return reply.redirect(safeBack(request.body?.back, "/my-day"));
   });
@@ -1370,8 +1409,10 @@ export async function startWeb(): Promise<void> {
     return reply.redirect(safeBack(request.body?.back, "/my-day"));
   });
   // Done: the timer stops and the work is cleared.
-  app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/done", async (request, reply) => {
+  app.post<{ Body: { id?: string; kind?: string; back?: string; notime?: string } }>("/timer/done", async (request, reply) => {
     const id = Number(request.body?.id);
+    // Done with no time: someone else did it, so nothing tracked on it counts as yours.
+    if (hasDatabase && id && request.body?.notime === "1") await clearTime(request.body?.kind === "task" ? { taskId: id } : { recordId: id });
     if (hasDatabase && id && request.body?.kind === "task") {
       // Clearing a task stops its timer too; a repeating one opens its next.
       await setTaskStatus(id, true);
@@ -1868,9 +1909,42 @@ export async function startWeb(): Promise<void> {
   /** A day off has no daily batches: they go when it's marked, and come back when it's a working day again. */
   async function markDayOff(date: string, on: boolean): Promise<void> {
     await setDayOff(date, on);
-    if (on) await clearBatchesOn(date);
-    else await reopenBatchesOn(date);
+    if (on) {
+      await clearBatchesOn(date);
+      await spreadOff(date).catch((err) => console.error("[days off] couldn't spread the work:", err));
+    } else await reopenBatchesOn(date);
     gapCache = null;
+  }
+
+  /**
+   * The work due on a new day off, spread over the working days from
+   * tomorrow up to it (today, if it's tomorrow) — balanced against what those
+   * days already hold, most pressing first — rather than all on the day before.
+   */
+  async function spreadOff(date: string): Promise<void> {
+    const now = new Date();
+    const today = dateIn(ORG_TZ, now);
+    if (date <= today) return;
+    const [due, offs, work] = await Promise.all([dueOnDay(date), listDaysOff(), loadWork(now)]);
+    const pieces = due.map((r) => toItem(r)).filter((i): i is MyWorkItem => i !== null);
+    if (!pieces.length) return;
+    const off = new Set(offs);
+    const between = (from: string) => {
+      const out: string[] = [];
+      for (let d = from; d < date; d = shiftDate(d, 1)) if (!off.has(d)) out.push(d);
+      return out;
+    };
+    let days = between(shiftDate(today, 1));
+    if (!days.length) days = between(today);
+    if (!days.length) return;
+    const ids = new Set(pieces.map((i) => i.id));
+    const projected = projectBatches(days.filter((d) => d > today), work.open, { paused: new Set(work.paused.keys()), daysOff: off });
+    const load = new Map<string, number>();
+    for (const i of [...work.items, ...projected]) {
+      if (ids.has(i.id) || !i.day || !days.includes(i.day)) continue;
+      load.set(i.day, (load.get(i.day) ?? 0) + remaining(i));
+    }
+    await saveDayOffMoves(date, spreadDayOff(pieces, days, load));
   }
 
   // Settings: the sidebar's items, the dashboard's lists, the days off.

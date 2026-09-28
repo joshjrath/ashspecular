@@ -252,7 +252,10 @@ export async function listDaysOff(): Promise<string[]> {
  */
 export async function setDayOff(day: string, on: boolean): Promise<void> {
   if (on) await pool.query(`INSERT INTO days_off (day) VALUES ($1::date) ON CONFLICT (day) DO NOTHING`, [day]);
-  else await pool.query(`DELETE FROM days_off WHERE day = $1::date`, [day]);
+  else {
+    await pool.query(`DELETE FROM days_off WHERE day = $1::date`, [day]);
+    await pool.query(`DELETE FROM day_off_moves WHERE day_off = $1::date`, [day]);
+  }
   // A deadline that moved may be late now, or no longer late: either way it
   // gets a fresh nudge if it goes past its time.
   await pool.query(
@@ -261,6 +264,24 @@ export async function setDayOff(day: string, on: boolean): Promise<void> {
        AND (${SET_DUE} AT TIME ZONE '${ORG_TZ}')::date = $1::date`,
     [day],
   );
+}
+
+/** Open work due on a day as set (its own deadline, before any day off moves it): what a day off has to spread. */
+export async function dueOnDay(day: string): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE status = 'open' AND batch_no IS NULL AND paused_at IS NULL
+       AND (${SET_DUE} AT TIME ZONE '${ORG_TZ}')::date = $1::date`,
+    [day],
+  );
+  return rows.map(hydrate);
+}
+
+/** Where a day off spread its work: record → the working day it's now due. */
+export async function saveDayOffMoves(dayOff: string, moves: Map<number, string>): Promise<void> {
+  await pool.query(`DELETE FROM day_off_moves WHERE day_off = $1::date`, [dayOff]);
+  for (const [id, day] of moves) {
+    await pool.query(`INSERT INTO day_off_moves (record_id, day_off, day) VALUES ($1, $2::date, $3::date) ON CONFLICT DO NOTHING`, [id, dayOff, day]);
+  }
 }
 
 /**
@@ -473,7 +494,7 @@ function hydrate(r: Row): StoredRecord {
  * time on the last working day before it (off_adjusted, migration 020).
  * Recurring batches keep theirs — each is its own day's work.
  */
-const standing = (col: string) => `CASE WHEN batch_no IS NULL THEN off_adjusted(${col}) ELSE ${col} END`;
+const standing = (col: string) => `CASE WHEN batch_no IS NULL THEN off_placed(id, ${col}) ELSE ${col} END`;
 
 /** The deadline as set: the voiceover time, then any other deadline, then the script's. */
 const SET_DUE = "COALESCE(vo_due, deadline, script_due)";

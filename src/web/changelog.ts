@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-28-myday-switches-spread-days-off",
+    title: "My Day switches and exploded batches; days off spread their work",
+    changes: [
+      { text: "My Day has switches for VO, Revision, Task, Batch, Long-form and Gaming. Switch one off and it leaves the whole page, totals included.", href: "/my-day" },
+      { text: "⤢ Explode batches shows every upload in today's batches as its own row. ✓ ticks one upload.", href: "/my-day" },
+      { text: "No time, in Done today, clears the time tracked on something someone else did. It stays logged but doesn't count as yours.", href: "/my-day" },
+      { text: "A day off now spreads its work evenly over the days before it, most pressing first. 4 VOs on a day off 5 days away become one VO a day, instead of all four on the day before.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-28-specular-compilations",
     title: "Specular compilations in Story Lab: the daily Movie and the Sleep every 4 days",
     changes: [

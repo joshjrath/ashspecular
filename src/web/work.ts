@@ -108,6 +108,10 @@ export interface WorkItem {
   record?: StoredRecord;
   /** Set when the piece is a task from #tasks rather than a record. */
   task?: Task;
+  /** One upload of an exploded batch: the nth of its batch's units. */
+  unit?: { n: number; of: number };
+  /** Logged done with no time tracked — someone else did it. */
+  untracked?: boolean;
 }
 
 /** A piece's key across records and tasks — "r12", "t5" — for the running timer. */
@@ -174,6 +178,78 @@ export function toItem(r: StoredRecord, spent = 0): WorkItem | null {
 }
 
 export const remaining = (i: WorkItem) => Math.max(0, Math.round(i.est - i.spent));
+
+/** My Day's category switches: each covers one or more kinds of work. */
+export const MYDAY_GROUPS: Array<{ id: string; label: string; types: WorkType[] }> = [
+  { id: "vo", label: "VO", types: ["vo", "moviesvo"] },
+  { id: "revision", label: "Revision", types: ["revision"] },
+  { id: "task", label: "Task", types: ["task"] },
+  { id: "batch", label: "Batch", types: ["reading", "bits"] },
+  { id: "longform", label: "Long-form", types: ["longform"] },
+  { id: "gaming", label: "Gaming", types: ["gaming"] },
+];
+/** The kinds of work left showing when these switches are off. */
+export function shownTypes(hidden: string[]): Set<WorkType> {
+  return new Set(MYDAY_GROUPS.filter((g) => !hidden.includes(g.id)).flatMap((g) => g.types));
+}
+
+/**
+ * A batch as its uploads, one row each: a Bits batch of 5 with 2 done is 3
+ * rows, "3 of 5" to "5 of 5", each a fifth of the batch's time. Anything
+ * else stays as it is.
+ */
+export function explodeBatch(i: WorkItem): WorkItem[] {
+  const target = i.record?.batchTarget ?? 1;
+  if (!isBatch(i.type) || i.id === null || target <= 1) return [i];
+  const done = Math.min(target, i.record?.batchDone ?? 0);
+  const left = target - done;
+  if (left <= 0) return [i];
+  return Array.from({ length: left }, (_, k) => ({
+    ...i,
+    title: `${i.title} · ${done + k + 1} of ${target}`,
+    est: i.est / target,
+    spent: i.spent / left,
+    unit: { n: done + k + 1, of: target },
+  }));
+}
+
+/** How pressing a piece is when a day off spreads it: VOs first, the editors wait on them. */
+const SPREAD_RANK: Record<WorkType, number> = { vo: 0, moviesvo: 0, revision: 1, gaming: 2, longform: 2, reading: 3, bits: 3, task: 4 };
+
+/**
+ * Spread a day off's work over the working days before it: each day takes
+ * its even share, the lightest days (by the load they already hold) take any
+ * extras — a tie going to the later day, so work isn't pulled earlier than it
+ * needs to be — and the most pressing pieces take the earliest slots. Four VOs and four empty
+ * days before the day off: one VO a day.
+ */
+export function spreadDayOff(items: WorkItem[], days: string[], load: Map<string, number> = new Map()): Map<number, string> {
+  const out = new Map<number, string>();
+  const pieces = items.filter((i) => i.id !== null);
+  if (!days.length || !pieces.length) return out;
+  // Every day takes its even share (4 over 4 days is one a day); what's left
+  // over goes one each to the lightest days, by the load they already hold.
+  const base = Math.floor(pieces.length / days.length);
+  const avg = pieces.reduce((n, i) => n + i.est, 0) / pieces.length;
+  const slots: string[] = days.flatMap((d) => Array.from({ length: base }, () => d));
+  const extra = [...days]
+    .reverse()
+    .map((d, k) => ({ d, k, load: (load.get(d) ?? 0) + base * avg }))
+    .sort((a, b) => a.load - b.load || a.k - b.k)
+    .slice(0, pieces.length - slots.length)
+    .map((x) => x.d);
+  slots.push(...extra);
+  slots.sort();
+  const ordered = [...pieces].sort(
+    (a, b) =>
+      SPREAD_RANK[a.type] - SPREAD_RANK[b.type] ||
+      (a.airDate ?? "9999").localeCompare(b.airDate ?? "9999") ||
+      (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0) ||
+      a.id! - b.id!,
+  );
+  ordered.forEach((i, k) => out.set(i.id!, slots[k]!));
+  return out;
+}
 
 /**
  * The daily batches each recurring channel will open on each of these days

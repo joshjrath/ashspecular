@@ -60,3 +60,27 @@ export async function minutesByDay(zone: string, from: string): Promise<Map<stri
   );
   return new Map(rows.map((r) => [r.day, Number(r.secs) / 60]));
 }
+
+/**
+ * Log a piece done with no time on it — someone else did it: whatever was
+ * tracked on it goes (a timer running on it stops), and it's marked so Done
+ * today doesn't count it as your work.
+ */
+export async function clearTime(item: { recordId?: number; taskId?: number }, untracked = true): Promise<void> {
+  const col = item.taskId ? "task_id" : "record_id";
+  const id = item.taskId ?? item.recordId;
+  if (!id) return;
+  await pool.query(`DELETE FROM time_entries WHERE ${col} = $1`, [id]);
+  if (untracked) await pool.query("INSERT INTO untracked_done (key) VALUES ($1) ON CONFLICT DO NOTHING", [`${item.taskId ? "t" : "r"}${id}`]);
+}
+
+/** Work logged with no time, by key ("r12", "t5"). */
+export async function untrackedKeys(): Promise<Set<string>> {
+  const { rows } = await pool.query<{ key: string }>("SELECT key FROM untracked_done");
+  return new Set(rows.map((r) => r.key));
+}
+
+/** Timing it again means it's yours after all. */
+export async function forgetUntracked(key: string): Promise<void> {
+  await pool.query("DELETE FROM untracked_done WHERE key = $1", [key]);
+}

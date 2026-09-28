@@ -61,7 +61,7 @@ import { channelGaps, uploadGaps } from "../src/web/gaps.js";
 import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelEstimate, taskCategoryEstimate, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
-import { taskItem, isRequired } from "../src/web/work.js";
+import { taskItem, isRequired, explodeBatch, shownTypes, spreadDayOff } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
@@ -1656,6 +1656,23 @@ const myDay = renderMyDay(shellFix, {
 });
 t("My Day: the load, a timer running, the week by kind, and What next", [myDay.includes('class="timerbar"'), myDay.includes("today's load"), myDay.includes('class="lrow today"'), myDay.includes("2 pieces that fit 30 min"), /class="fchip on"[^>]*>30 min/.test(myDay)], [true, true, true, true, true]);
 t("…each piece shows tracked against its estimate, with start and done", [myDay.includes("25m / 40m"), myDay.includes('action="/timer/start"'), myDay.includes('action="/timer/done"'), myDay.includes('class="wbtn on"')], [true, true, true, true]);
+t("My Day switches: a kind switched off leaves the page", [[...shownTypes(["vo", "batch"])].sort(), shownTypes([]).size], [["gaming", "longform", "revision", "task"], 8]);
+const bitsRec = mk({ id: 230, category: "bits", channel: "Specular FNAF Bits", title: "Specular FNAF Bits", batchNo: 1, batchTarget: 5, batchDone: 2, airDate: wToday });
+const units = explodeBatch({ ...toItem(bitsRec)!, spent: 3 });
+t("an exploded batch: one row per upload left, each its share of the time", [units.length, units.map((u) => u.title), units[0]!.est * 5, units.reduce((n, u) => n + u.spent, 0), units[0]!.unit], [3, ["Specular FNAF Bits · 3 of 5", "Specular FNAF Bits · 4 of 5", "Specular FNAF Bits · 5 of 5"], toItem(bitsRec)!.est, 3, { n: 3, of: 5 }]);
+t("…anything else stays one row", explodeBatch(toItem(lateVo)!).length, 1);
+const exploded = renderMyDay(shellFix, { now: wNow, today: wToday, required: [toItem(bitsRec)!], ahead: [], done: [{ ...toItem(lateVo)!, untracked: true }, { ...toItem(todayVo)!, spent: 20 }], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 }, hidden: ["task"], exploded: true });
+t("My Day: switches (Task off), exploded rows tick one upload, and No time on what's done", [
+  (exploded.match(/name="show" value="[a-z]+" checked/g) ?? []).length, exploded.includes('value="task" onchange'), (exploded.match(/action="\/my-day\/unit"/g) ?? []).length,
+  exploded.includes("⤡ Group batches"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
+], [5, true, 3, true, true, 1]);
+const spreadVos = [301, 302, 303, 304].map((id) => ({ ...toItem(mk({ id, category: "stories", title: `VO ${id}`, airDate: "2026-10-04", voDue: new Date("2026-10-03T22:00:00Z") }))! }));
+const offDays = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"];
+t("a day off in 5 days with 4 VOs on it: one VO a day until then, not all on the day before", [...spreadDayOff(spreadVos, offDays, new Map([["2026-09-29", 60]])).values()].sort(), offDays);
+const sp6 = spreadDayOff([...spreadVos, ...[305, 306].map((id) => toItem(mk({ id, kind: "review", category: "stories", title: `Rev ${id}`, deadline: new Date("2026-10-03T22:00:00Z") }))!)], offDays, new Map([["2026-09-29", 120]]));
+const perDay = (m: Map<number, string>) => offDays.map((d) => [...m.values()].filter((x) => x === d).length);
+t("…six pieces over four days: two days take two, the lightest ones, and VOs go first", [perDay(sp6), sp6.get(301), sp6.get(305)! > sp6.get(304)!], [[1, 1, 2, 2], "2026-09-29", true]);
+t("…nowhere to spread: nothing moves", spreadDayOff(spreadVos, []).size, 0);
 const voPage = renderVoQueue(shellFix, { now: wNow, queue: voQueue(wItems, wNow), running: null });
 t("VO Queue: count, time left, words and reading time, and recording mode", [voPage.includes("VOs to record"), voPage.includes("7,500"), voPage.includes('href="/vo/record"'), voPage.includes("4,500 words · ~30m read")], [true, true, true, true]);
 const wRec = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [toItem(todayVo)!], running: null, skipped: [], brief: "A brief." });

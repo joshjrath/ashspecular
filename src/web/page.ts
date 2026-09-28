@@ -32,7 +32,7 @@ import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
 import {
-  DEFAULT_ESTIMATES, batchType, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
+  DEFAULT_ESTIMATES, MYDAY_GROUPS, batchType, explodeBatch, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
   type DayLoad, type FocusPick, type WorkType, type Forgotten, type WorkItem,
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
@@ -1686,6 +1686,20 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .wnwhen { color: var(--ink3); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .wnx { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 16px; padding: 0 4px; }
 .wnx:hover { color: var(--late); }
+.mdsw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.mdsw .mdlab { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-right: 2px; }
+.mdsw label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: var(--card); color: var(--ink3); border-radius: 999px; padding: 5px 11px 5px 9px; font: 600 12.5px var(--ui); user-select: none; }
+.mdsw label i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--wc); }
+.mdsw label:has(input:checked) { color: var(--ink); } .mdsw label:has(input:checked) i { background: var(--wc); }
+.mdsw input { position: absolute; opacity: 0; pointer-events: none; }
+.mdsw label:has(input:focus-visible) { outline: 2px solid var(--wc); }
+.mdsw .mdx { margin-left: auto; }
+.mdpill { border: 0; cursor: pointer; border-radius: 999px; padding: 6px 12px; background: var(--card); color: var(--ink2); font: 600 12.5px var(--ui); white-space: nowrap; }
+.mdpill:hover { background: var(--line); color: var(--ink); }
+.wrow.done .wnum { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
+.wrow.done .wclr { margin: 0 0 0 8px; display: inline; } .wrow.done .wclr .mdpill { background: var(--sunk); padding: 4px 10px; font-size: 11.5px; }
+.wnt { color: var(--ink3); font-size: 12px; }
+@media (max-width: 600px) { .mdsw .mdx { margin-left: 0; } }
 .spgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px; }
 .spcard { background: var(--sunk); border-radius: 14px; border-top: 3px solid var(--ch); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; transition: opacity .15s; }
 .spcard.busy { opacity: .45; pointer-events: none; }
@@ -7058,9 +7072,26 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
             on
               ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
               : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
-          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
+          }${
+            i.unit
+              ? `<form method="post" action="/my-day/unit"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="This upload's done — the batch counts one more">✓</button></form>`
+              : `<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
+          }`
     }</div>
   </div>`;
+}
+
+/** My Day's category switches, and whether batches show one row per upload. */
+function mydaySwitches(hidden: string[], exploded: boolean): string {
+  return `<form method="post" action="/my-day/show" class="mdsw" aria-label="What My Day shows">
+    <span class="mdlab">Show</span>
+    ${MYDAY_GROUPS.map((g) => {
+      const colour = TYPE_BY_ID.get(g.types[0]!)!.colour;
+      return `<label style="--wc:${colour}"><input type="checkbox" name="show" value="${g.id}"${hidden.includes(g.id) ? "" : " checked"} onchange="this.form.submit()"><i></i>${esc(g.label)}</label>`;
+    }).join("")}
+    <noscript><button class="mdpill">Apply</button></noscript>
+    <button class="mdpill mdx" formaction="/my-day/explode" name="on" value="${exploded ? "0" : "1"}" title="${exploded ? "Fold the day's batches back into one row" : "Every upload in every batch as its own row in Today"}">${exploded ? "⤡ Group batches" : "⤢ Explode batches"}</button>
+  </form>`;
 }
 
 /**
@@ -7068,7 +7099,8 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
  * 2h left"), opened to tick them one by one — a dozen 10-minute rows would
  * bury the VOs.
  */
-function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string): string {
+function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded = false): string {
+  if (exploded) return items.flatMap(explodeBatch).map((i) => workRow(i, now, running, back)).join("");
   const batches = items.filter((i) => isBatch(i.type));
   const rest = items.filter((i) => !isBatch(i.type));
   if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
@@ -7082,7 +7114,7 @@ function groupBatches(items: WorkItem[], now: Date, running: string | null, back
     <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">Batch</span>
       <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
-      <div class="wacts"><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
+      <div class="wacts"><form method="post" action="/my-day/explode"><input type="hidden" name="on" value="1"><button class="wbtn" title="Every upload in every batch as its own row">⤢</button></form><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
     </summary>
     <div class="wlist">${batches.map((i) => workRow(i, now, running, back)).join("")}</div>
   </details>`;
@@ -7135,6 +7167,10 @@ export interface MyDayData {
   budget: number | null;
   asked: boolean;
   voLeft: { n: number; minutes: number };
+  /** Category switches turned off (MYDAY_GROUPS ids). */
+  hidden?: string[];
+  /** Batches shown as one row per upload. */
+  exploded?: boolean;
 }
 
 /**
@@ -7188,10 +7224,10 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
   const todayList = `<section class="panel"><h2>Today <span class="sub">— ${d.required.length} to do · ${esc(fmtMin(leftToday))} left${
     d.required.some((i) => whyNow(i, d.now).endsWith("late")) ? ` · <b class="late">${d.required.filter((i) => whyNow(i, d.now).endsWith("late")).length} late</b>` : ""
   }</span></h2>
-    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back)}</div>` : `<div class="empty">Everything due today is done. Do ahead is below.</div>`}
+    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? false)}</div>` : `<div class="empty">Everything due today is done. Do ahead is below.</div>`}
   </section>`;
 
-  const estDone = d.done.reduce((n, i) => n + i.est, 0);
+  const estDone = d.done.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0);
   const spentDone = d.done.reduce((n, i) => n + i.spent, 0);
   const doneList = d.done.length
     ? `<section class="panel"><h2>Done today <span class="sub">— ${d.done.length} · estimated ${esc(fmtMin(estDone))}${
@@ -7201,10 +7237,19 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
         .map((i) => {
           const t = TYPE_BY_ID.get(i.type)!;
           const diff = i.spent >= 1 ? Math.round(i.spent - i.est) : null;
-          return `<div class="wrow done" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
+          const kind = i.task ? '<input type="hidden" name="kind" value="task">' : "";
+          return `<div class="wrow done${i.untracked ? " untracked" : ""}" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
             <div class="wmain"><a class="wt" href="${workHref(i)}">${esc(i.title)}</a></div>
-            <div class="wnum">${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
-              diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
+            <div class="wnum">${
+              i.untracked
+                ? `<span class="wnt">logged · no time</span>`
+                : `${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
+                    diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
+                  }`
+            }${
+              !i.untracked && i.id !== null
+                ? `<form method="post" action="/timer/clear" class="wclr" onsubmit="return confirm('Someone else did this? Its ${i.spent >= 1 ? esc(fmtMin(i.spent)) + " of tracked time goes" : "estimate stops counting as yours"}.')"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="/my-day"><button class="mdpill" title="Someone else did it: clear its tracked time and don't count it as yours">No time</button></form>`
+                : ""
             }</div></div>`;
         })
         .join("")}</div></section>`
@@ -7221,6 +7266,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     shell,
     `${pageHeader("My Day", `<a class="clear secondary" href="/vo">VO Queue</a>`)}
     ${timerBar(d.running, back)}
+    ${mydaySwitches(d.hidden ?? [], d.exploded ?? false)}
     <div class="stats">${tiles}</div>
     ${focus}
     <div class="mydaygrid">${todayList}${week}</div>
