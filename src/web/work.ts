@@ -108,8 +108,6 @@ export interface WorkItem {
   record?: StoredRecord;
   /** Set when the piece is a task from #tasks rather than a record. */
   task?: Task;
-  /** One upload of an exploded batch: the nth of its batch's units. */
-  unit?: { n: number; of: number };
   /** Logged done with no time tracked — someone else did it. */
   untracked?: boolean;
 }
@@ -191,26 +189,6 @@ export const MYDAY_GROUPS: Array<{ id: string; label: string; types: WorkType[] 
 /** The kinds of work left showing when these switches are off. */
 export function shownTypes(hidden: string[]): Set<WorkType> {
   return new Set(MYDAY_GROUPS.filter((g) => !hidden.includes(g.id)).flatMap((g) => g.types));
-}
-
-/**
- * A batch as its uploads, one row each: a Bits batch of 5 with 2 done is 3
- * rows, "3 of 5" to "5 of 5", each a fifth of the batch's time. Anything
- * else stays as it is.
- */
-export function explodeBatch(i: WorkItem): WorkItem[] {
-  const target = i.record?.batchTarget ?? 1;
-  if (!isBatch(i.type) || i.id === null || target <= 1) return [i];
-  const done = Math.min(target, i.record?.batchDone ?? 0);
-  const left = target - done;
-  if (left <= 0) return [i];
-  return Array.from({ length: left }, (_, k) => ({
-    ...i,
-    title: `${i.title} · ${done + k + 1} of ${target}`,
-    est: i.est / target,
-    spent: i.spent / left,
-    unit: { n: done + k + 1, of: target },
-  }));
 }
 
 /** How pressing a piece is when a day off spreads it: VOs first, the editors wait on them. */

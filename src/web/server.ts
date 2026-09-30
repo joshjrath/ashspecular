@@ -70,7 +70,7 @@ import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
 import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads, type Upload } from "../jobs/youtube.js";
 import { addDays, cadenceFor, dailyFor, dayOf, daysBetween, usualGap } from "./cadence.js";
-import { GAP_HORIZON_DAYS, uploadGaps, type UploadGap } from "./gaps.js";
+import { GAP_HORIZON_DAYS, nextToAssign, uploadGaps, type UploadGap } from "./gaps.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, ownPaceChannels, perDayFor, setOwnPaces } from "./targets.js";
 import { gamingSeries, nextUp, type SeriesVideo } from "./gaming/series.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
@@ -97,7 +97,7 @@ import { addTask, deleteTask, repeatTask, editTask, getTask, knownPeople, listTa
 import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } from "../tasks/parse.js";
 import {
   dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, isVo, setEstimates, voQueue, whatNext, WORK_TYPES,
-  MYDAY_GROUPS, explodeBatch, shownTypes, spreadDayOff, itemKey, type WorkItem as MyWorkItem,
+  MYDAY_GROUPS, shownTypes, spreadDayOff, itemKey, type WorkItem as MyWorkItem,
   LOG_RANGES, logByDay, logDays, typeOf, type LogRange, type LoggedEntry,
   type WorkItem,
 } from "./work.js";
@@ -372,6 +372,26 @@ let gapCache: { at: number; gaps: UploadGap[] } | null = null;
 async function currentGaps(): Promise<UploadGap[]> {
   if (!hasDatabase) return [];
   if (gapCache && Date.now() - gapCache.at < 60_000) return gapCache.gaps;
+  const { channels, today, dismissed } = await gapInputs();
+  // A day cleared by hand stays cleared; the chain still counts it as the expected day.
+  const gaps = uploadGaps(channels, today).filter((g) => !dismissed.has(`${g.channel}|${g.date}`));
+  gapCache = { at: Date.now(), gaps };
+  return gaps;
+}
+
+/**
+ * The next video that needs assigning: the channel that runs out of lined-up
+ * videos first, however far ahead, and the day its next upload would be.
+ * Worked out fresh each time, so adding or moving a video shows at once.
+ */
+async function nextAssignments(): Promise<UploadGap[]> {
+  if (!hasDatabase) return [];
+  const { channels, today, dismissed } = await gapInputs();
+  return nextToAssign(channels, today, (g) => dismissed.has(`${g.channel}|${g.date}`));
+}
+
+/** Every channel with a posting target, and each day it has a video on (posted or scheduled). */
+async function gapInputs(): Promise<{ channels: Array<{ channel: string; every: number; days: string[] }>; today: string; dismissed: Set<string> }> {
   await refreshOwnPaces();
   const today = dateIn(ORG_TZ);
   const from = addDays(today, -45);
@@ -392,10 +412,7 @@ async function currentGaps(): Promise<UploadGap[]> {
         ...aired.filter((a) => a.channel === c.channel).map((a) => a.day),
       ],
     }));
-  // A day cleared by hand stays cleared; the chain still counts it as the expected day.
-  const gaps = uploadGaps(channels, today).filter((g) => !dismissed.has(`${g.channel}|${g.date}`));
-  gapCache = { at: Date.now(), gaps };
-  return gaps;
+  return { channels, today, dismissed };
 }
 
 /** A gap is news from the day it comes within eight days (midnight ET). */
@@ -506,7 +523,7 @@ export async function startWeb(): Promise<void> {
   app.get("/", async (request, reply) => {
     if (!hasDatabase) return reply.type("text/html").send(renderEmptyState());
 
-    const [s, counters, byDay, grouped, channels, notices, shifted, finAlerts] = await Promise.all([
+    const [s, counters, byDay, grouped, channels, notices, shifted, finAlerts, nextUp] = await Promise.all([
       shell("dashboard"),
       stats(ORG_TZ),
       dueByDay(ORG_TZ, 14),
@@ -515,6 +532,7 @@ export async function startWeb(): Promise<void> {
       allNotices(),
       listOffShifted(),
       financeAlerts().catch((err) => (console.error("[finance] alerts failed:", err), [])),
+      nextAssignments().catch(() => []),
     ]);
 
     // Revisions get their own section; the columns are the work to voice.
@@ -530,6 +548,7 @@ export async function startWeb(): Promise<void> {
           cols: dashColumns(request), shifted: shifted.map((x) => x.record),
           order: cookieList("dash_order"),
           finance: dashboardAlerts(finAlerts),
+          nextUp,
           hideParts: cookieList("dash_hide").filter((x) => x === "unsorted" || x === "channels" || x === "revisions"),
         }),
       );
@@ -908,12 +927,15 @@ export async function startWeb(): Promise<void> {
     const target = UPLOAD_TARGETS[category];
     const ranges = target.kind === "daily" ? [14, 30, 60] : [30, 90, 180];
     const range = ranges.includes(Number(query.range)) ? Number(query.range) : ranges[1]!;
-    const channels = channelsIn(category);
+    // A paused channel is left out of the charts, unless asked for (Show paused).
+    const s = await shell("uploads");
+    const showPaused = requestCookies.getStore()?.uploads_paused === "show";
+    const pausedHere = channelsIn(category).filter((c) => s.pausedChannels?.[c]);
+    const channels = channelsIn(category).filter((c) => showPaused || !s.pausedChannels?.[c]);
     const now = new Date();
     const since = new Date(now.getTime() - (Math.max(range, 90) + 60) * 86_400_000);
     await refreshOwnPaces();
-    const [s, links, allUploads, allViews, history] = await Promise.all([
-      shell("uploads"),
+    const [links, allUploads, allViews, history] = await Promise.all([
       listChannelLinks(),
       listUploads(since),
       // A year and more of views, so every channel has twenty to compare with.
@@ -986,10 +1008,18 @@ export async function startWeb(): Promise<void> {
             : undefined,
           hooks,
           series,
+          paused: pausedHere.length ? { names: pausedHere, shown: showPaused } : undefined,
         },
         now,
       );
   };
+
+  // Show or hide paused channels on the Uploads charts, remembered in this browser.
+  app.get<{ Querystring: { show?: string; cat?: string } }>("/uploads/paused", async (request, reply) => {
+    reply.setCookie("uploads_paused", request.query.show === "1" ? "show" : "hide", { path: "/", sameSite: "lax", httpOnly: true, maxAge: 60 * 60 * 24 * 365 });
+    const cat = UPLOAD_CATEGORIES.find((c) => c.id === request.query.cat)?.id ?? "stories";
+    return reply.redirect(`/uploads?cat=${cat}`);
+  });
 
   app.get<{ Querystring: UploadsQuery }>("/uploads", async (request, reply) => {
     const shellHtml = await uploadsPage(request.query);
@@ -1415,13 +1445,6 @@ export async function startWeb(): Promise<void> {
   app.post<{ Body: { on?: string } }>("/my-day/explode", async (request, reply) => {
     reply.setCookie("myday_explode", request.body?.on === "1" ? "1" : "0", keepYear);
     return reply.redirect("/my-day");
-  });
-  // One upload of an exploded batch done: the batch's count goes up by one.
-  app.post<{ Body: { id?: string; back?: string } }>("/my-day/unit", async (request, reply) => {
-    const id = Number(request.body?.id);
-    const r = hasDatabase && id ? await getRecordById(id) : null;
-    if (r?.batchNo && r.channel && r.airDate) await setBatchProgress(r.channel, r.airDate, (r.batchDone ?? 0) + 1);
-    return reply.redirect(safeBack(request.body?.back, "/my-day"));
   });
   // Clear the time tracked on a piece that's already done — someone else did it.
   app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/clear", async (request, reply) => {

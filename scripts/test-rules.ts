@@ -57,12 +57,12 @@ import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
 import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
-import { channelGaps, uploadGaps } from "../src/web/gaps.js";
+import { channelGaps, nextToAssign, uploadGaps } from "../src/web/gaps.js";
 import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelEstimate, taskCategoryEstimate, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
-import { taskItem, isRequired, explodeBatch, shownTypes, spreadDayOff, logDays, logByDay } from "../src/web/work.js";
+import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
@@ -1659,14 +1659,11 @@ t("My Day: the load, a timer running, the week by kind, and What next", [myDay.i
 t("…each piece shows tracked against its estimate, with start and done", [myDay.includes("25m / 40m"), myDay.includes('action="/timer/start"'), myDay.includes('action="/timer/done"'), myDay.includes('class="wbtn on"')], [true, true, true, true]);
 t("My Day switches: a kind switched off leaves the page", [[...shownTypes(["vo", "batch"])].sort(), shownTypes([]).size], [["gaming", "longform", "revision", "task"], 8]);
 const bitsRec = mk({ id: 230, category: "bits", channel: "Specular FNAF Bits", title: "Specular FNAF Bits", batchNo: 1, batchTarget: 5, batchDone: 2, airDate: wToday });
-const units = explodeBatch({ ...toItem(bitsRec)!, spent: 3 });
-t("an exploded batch: one row per upload left, each its share of the time", [units.length, units.map((u) => u.title), units[0]!.est * 5, units.reduce((n, u) => n + u.spent, 0), units[0]!.unit], [3, ["Specular FNAF Bits · 3 of 5", "Specular FNAF Bits · 4 of 5", "Specular FNAF Bits · 5 of 5"], toItem(bitsRec)!.est, 3, { n: 3, of: 5 }]);
-t("…anything else stays one row", explodeBatch(toItem(lateVo)!).length, 1);
 const exploded = renderMyDay(shellFix, { now: wNow, today: wToday, required: [toItem(bitsRec)!], ahead: [], done: [{ ...toItem(lateVo)!, untracked: true }, { ...toItem(todayVo)!, spent: 20 }], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 }, hidden: ["task"], exploded: true });
-t("My Day: switches (Task off), exploded rows tick one upload, and No time on what's done", [
-  (exploded.match(/name="show" value="[a-z]+" checked/g) ?? []).length, exploded.includes('value="task" onchange'), (exploded.match(/action="\/my-day\/unit"/g) ?? []).length,
-  exploded.includes("⤡ Group batches"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
-], [5, true, 3, true, true, 1]);
+t("My Day: switches (Task off), exploded batches one row per channel with their progress, and No time on what's done", [
+  (exploded.match(/name="show" value="[a-z]+" checked/g) ?? []).length, exploded.includes('value="task" onchange'), exploded.includes('<span class="wunits">2/5 uploaded</span>'),
+  exploded.includes("my-day/unit"), exploded.includes("⤡ Group batches"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
+], [5, true, true, false, true, true, 1]);
 const spreadVos = [301, 302, 303, 304].map((id) => ({ ...toItem(mk({ id, category: "stories", title: `VO ${id}`, airDate: "2026-10-04", voDue: new Date("2026-10-03T22:00:00Z") }))! }));
 const offDays = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"];
 t("a day off in 5 days with 4 VOs on it: one VO a day until then, not all on the day before", [...spreadDayOff(spreadVos, offDays, new Map([["2026-09-29", 60]])).values()].sort(), offDays);
@@ -1895,6 +1892,17 @@ t("…each stretch sits at its time of day, by kind", [lg[0]!.pieces[0]!.from, l
 const tlPage = renderMyDay(shellFix, { now: wNow, today: wToday, required: [], ahead: [], done: [], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 },
   log: { range: "week", days: logByDay([{ start: new Date("2026-09-27T14:00:00Z"), end: new Date("2026-09-27T15:10:00Z"), type: "vo", title: "Morning VO" }], logDays("week", "2026-09-27")), daysOff: [] } });
 t("My Day: the week's timeline, a block where the work happened, tabs for longer ranges", [tlPage.includes('id="logged"'), (tlPage.match(/class="tlb"/g) ?? []).length, tlPage.includes("Morning VO · 10:00 AM–11:10 AM · 1h 10m"), tlPage.includes('href="/my-day?log=year#logged"'), [...tlPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } })], [true, 1, true, true, true]);
+
+section("Next to assign");
+const naChans = [
+  { channel: "Specular Anime", every: 4, days: ["2026-09-26", "2026-10-02", "2026-10-06", "2026-10-30"] },
+  { channel: "Specular FNAF", every: 4, days: ["2026-09-28", "2026-10-10"] },
+  { channel: "Specular Comics", every: 4, days: ["2026-08-01"] },
+];
+const na = nextToAssign(naChans, "2026-09-30");
+t("the channel that runs out first, however far ahead, and when its next upload would be", [na.map((g) => [g.channel, g.date, g.after])], [[["Specular FNAF", "2026-10-14", "2026-10-10"], ["Specular Anime", "2026-11-03", "2026-10-30"]]]);
+t("…add a video on it and the next channel takes its place", nextToAssign([{ ...naChans[0]! }, { ...naChans[1]!, days: [...naChans[1]!.days, "2026-11-20"] }], "2026-09-30")[0]!.channel, "Specular Anime");
+t("…a day cleared by hand is skipped for the one after", nextToAssign([naChans[1]!], "2026-09-30", (g) => g.date === "2026-10-14")[0]!.date, "2026-10-18");
 
 section("Posting check");
 t("titles: the same video reads as the same, a different one doesn't", [titleOverlap("What If Freddy Joined The Avengers?", "What If FREDDY Joined the Avengers? (FNAF)") >= 0.5, titleOverlap("What If Batman Was In The Boys?", "What If Spider-Man Was In The Boys?") >= 0.5], [true, false]);

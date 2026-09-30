@@ -30,9 +30,9 @@ import { corpus, learnsFrom, splitScript, type Norms } from "./stories/corpus.js
 import { formatOfTitle } from "./stories/formats.js";
 import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
-import type { UploadGap } from "./gaps.js";
+import { GAP_HORIZON_DAYS, type UploadGap } from "./gaps.js";
 import {
-  DEFAULT_ESTIMATES, MYDAY_GROUPS, LOG_RANGES, batchType, explodeBatch, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
+  DEFAULT_ESTIMATES, MYDAY_GROUPS, LOG_RANGES, batchType, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
   type DayLoad, type FocusPick, type WorkType, type Forgotten, type WorkItem, type LoggedDay, type LogRange,
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
@@ -514,6 +514,21 @@ button.clear.secondary:hover, a.clear.secondary:hover { background: var(--line);
 .off-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 6px;
   background: rgba(42,169,216,.16); color: #A8E0F5; font-weight: 700; font-size: 11px; white-space: nowrap; }
 .off-tag svg { width: 11px; height: 11px; }
+.nextassign { display: flex; align-items: center; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px;
+  background: var(--card); border-radius: var(--r); border-left: 4px solid var(--ch); }
+.nalead { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; min-width: 0; }
+.nalbl { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.nextassign.soon .nalbl { color: #FFB1AA; }
+.nach { display: inline-flex; align-items: center; gap: 7px; font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--ink); }
+.nach i { width: 10px; height: 10px; border-radius: 50%; background: var(--ch); }
+.nach:hover { text-decoration: underline; }
+.nawhen { font-size: 14px; color: var(--ink2); } .nawhen b { color: var(--ink); }
+.nasub { font-size: 12px; color: var(--ink3); }
+.nathen { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.nathen > span { color: var(--ink3); font-weight: 700; margin-right: 2px; }
+.nathen a { display: inline-flex; align-items: center; gap: 6px; background: var(--sunk); color: var(--ink2); border-radius: 999px; padding: 4px 10px; font-weight: 600; }
+.nathen a:hover { color: var(--ink); background: var(--line); }
+.nathen a i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch); } .nathen a b { color: var(--ink); }
 .gapstrip { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px;
   border-radius: 16px; background: rgba(226,87,76,.10); box-shadow: inset 0 0 0 1.5px rgba(226,87,76,.45); }
 .gapstrip .lbl { display: inline-flex; align-items: center; gap: 7px; font-family: var(--display); font-weight: 700; color: #FFB1AA; }
@@ -1749,6 +1764,7 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
   .hmwrap.quarter { --cell: 19px; }
   .tlbars { gap: 2px; padding-left: 28px; }
 }
+.upaused { color: var(--ink2); font-weight: 600; } .upaused:hover { color: var(--ink); text-decoration: underline; }
 .mdsw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
 .mdsw .mdlab { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-right: 2px; }
 .mdsw label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: var(--card); color: var(--ink3); border-radius: 999px; padding: 5px 11px 5px 9px; font: 600 12.5px var(--ui); user-select: none; }
@@ -1762,6 +1778,7 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .wrow.done .wnum { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
 .wrow.done .wclr { margin: 0 0 0 8px; display: inline; } .wrow.done .wclr .mdpill { background: var(--sunk); padding: 4px 10px; font-size: 11.5px; }
 .wnt { color: var(--ink3); font-size: 12px; }
+.wunits { color: var(--ink2); font-weight: 600; }
 @media (max-width: 600px) { .mdsw .mdx { margin-left: 0; } }
 .spgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px; }
 .spcard { background: var(--sunk); border-radius: 14px; border-top: 3px solid var(--ch); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; transition: opacity .15s; }
@@ -2299,6 +2316,27 @@ export function layout(title: string, shell: Shell | null, body: string): string
     var t = e.target && e.target.tagName;
     if (e.key === "[" && t !== "INPUT" && t !== "TEXTAREA" && !e.metaKey && !e.ctrlKey) toggleRail();
   });
+  // Stay where you were. A form that reloads the page (✓, ▶, a switch, Save)
+  // would otherwise land at the top: remember the scroll as it's sent, and
+  // put it back when the same page comes back — unless the page was sent to
+  // a named spot (#…), which wins. Forms that swap in place never navigate.
+  (function () {
+    var KEY = "keep-scroll";
+    function keep() {
+      try { sessionStorage.setItem(KEY, JSON.stringify({ path: location.pathname, y: window.scrollY, at: Date.now() })); } catch (err) {}
+    }
+    document.addEventListener("submit", function (e) { if (!e.defaultPrevented) keep(); });
+    // A switch that submits itself (form.submit()) sends no submit event.
+    var send = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function () { keep(); return send.call(this); };
+    var kept = null;
+    try { kept = JSON.parse(sessionStorage.getItem(KEY) || "null"); sessionStorage.removeItem(KEY); } catch (err) {}
+    if (!kept || kept.path !== location.pathname || location.hash || Date.now() - kept.at > 20000 || kept.y < 40) return;
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    var put = function () { window.scrollTo(0, Math.min(kept.y, document.documentElement.scrollHeight - window.innerHeight)); };
+    put();
+    window.addEventListener("load", put);
+  })();
   </script></body></html>`;
 }
 
@@ -2812,6 +2850,36 @@ function offToggle(day: string, off: boolean): string {
 /** × on a "Nothing assigned" chip or slot: the channel isn't posting then after all. */
 function gapDismiss(channel: string, days: string[], label: string): string {
   return `<form method="post" action="/gaps/dismiss" class="gapx"><input type="hidden" name="channel" value="${esc(channel)}"><input type="hidden" name="days" value="${esc(days.join(","))}"><button aria-label="${esc(label)}" title="${esc(label)} — it won't ask again">×</button></form>`;
+}
+
+/**
+ * The next video to assign: whichever channel runs out of lined-up videos
+ * first, however far ahead, and the day its next upload would be if nothing
+ * is added. Always on the dashboard; add a video on that channel (or move
+ * its schedule) and the next channel to run out takes its place.
+ */
+function nextAssignStrip(list: UploadGap[]): string {
+  const first = list[0];
+  if (!first) return "";
+  const when = (g: UploadGap) => `${weekdayOf(g.date)} ${usDate(g.date).replace(/\/\d{4}$/, "")}`;
+  const inText = first.inDays === 0 ? "today" : first.inDays === 1 ? "tomorrow" : `in ${first.inDays} days`;
+  const every = everyFor(first.channel);
+  const then = list.slice(1, 5);
+  return `<section class="nextassign${first.inDays <= GAP_HORIZON_DAYS ? " soon" : ""}" style="--ch:${channelColour(first.channel)}" aria-label="Next video to assign">
+    <div class="nalead">
+      <span class="nalbl">Next to assign</span>
+      <a class="nach" href="/day/${first.date}" title="Open ${esc(usDate(first.date))} on the calendar"><i></i>${esc(first.channel)}</a>
+      <span class="nawhen">next upload <b>${esc(when(first))}</b> · ${esc(inText)}</span>
+      <span class="nasub">its last lined-up video is ${esc(usDate(first.after))}${every ? ` · one every ${every} day${every === 1 ? "" : "s"}` : ""}</span>
+    </div>
+    ${
+      then.length
+        ? `<div class="nathen"><span>Then</span>${then
+            .map((g) => `<a href="/day/${g.date}" style="--ch:${channelColour(g.channel)}" title="${esc(`${g.channel}: next upload ${usDate(g.date)}, last lined up ${usDate(g.after)}`)}"><i></i>${esc(g.channel.replace(/^Specular /, ""))} <b>${esc(when(g))}</b></a>`)
+            .join("")}</div>`
+        : ""
+    }
+  </section>`;
 }
 
 function gapStrip(gaps: UploadGap[]): string {
@@ -3330,6 +3398,8 @@ export function renderDashboard(
     gaps?: UploadGap[];
     /** Finance's sustainability alerts, already drawn (finance/ui dashboardAlerts). */
     finance?: string;
+    /** Each channel's first upload with nothing assigned, soonest first: the next to assign. */
+    nextUp?: UploadGap[];
   },
 ): string {
   const tiles = [
@@ -3413,6 +3483,7 @@ export function renderDashboard(
     "Dashboard",
     shell,
     `${pageHeader("Dashboard", `<a class="clear nextbtn" href="/my-day?next=1#focus" title="The most pressing piece of your work, from My Day">What should I do next?</a>${bell(data.notices ?? [], data.seen ?? 0)}`)}
+    ${nextAssignStrip(data.nextUp ?? [])}
     <div class="stats">${tiles}</div>
     ${gapStrip(data.gaps ?? [])}
     ${data.finance ?? ""}
@@ -5429,6 +5500,8 @@ export function renderUploads(
     focus?: ChannelFocus;
     /** Gaming: every numbered series across the category, and how many uploads are one-offs. */
     series?: { series: Series[]; oneOffs: number };
+    /** Paused channels in this category, and whether they're shown anyway. */
+    paused?: { names: string[]; shown: boolean };
   },
   now = new Date(),
 ): string {
@@ -5765,7 +5838,15 @@ export function renderUploads(
     ).join("")}</nav>
     <div class="usub">${esc(catLabel)} · ${esc(describeTarget(category))}${
       checked ? ` · read ${esc(timeAgo(new Date(checked)))}` : ""
-    } · <span class="hint-inline">click a channel for its own page</span></div>`;
+    } · <span class="hint-inline">click a channel for its own page</span>${
+      data.paused
+        ? ` · <a class="upaused" href="/uploads/paused?cat=${category}&amp;show=${data.paused.shown ? "0" : "1"}" title="${esc(data.paused.names.join(", "))}">${
+            data.paused.shown
+              ? `⏸ Hide ${data.paused.names.length} paused`
+              : `⏸ ${data.paused.names.length} paused channel${data.paused.names.length === 1 ? "" : "s"} hidden · show`
+          }</a>`
+        : ""
+    }</div>`;
 
   return layout(
     focus ? focus.channel : "Uploads",
@@ -7153,11 +7234,7 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
             on
               ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
               : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
-          }${
-            i.unit
-              ? `<form method="post" action="/my-day/unit"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="This upload's done — the batch counts one more">✓</button></form>`
-              : `<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
-          }`
+          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
     }</div>
   </div>`;
 }
@@ -7331,7 +7408,7 @@ function mydaySwitches(hidden: string[], exploded: boolean): string {
       return `<label style="--wc:${colour}"><input type="checkbox" name="show" value="${g.id}"${hidden.includes(g.id) ? "" : " checked"} onchange="this.form.submit()"><i></i>${esc(g.label)}</label>`;
     }).join("")}
     <noscript><button class="mdpill">Apply</button></noscript>
-    <button class="mdpill mdx" formaction="/my-day/explode" name="on" value="${exploded ? "0" : "1"}" title="${exploded ? "Fold the day's batches back into one row" : "Every upload in every batch as its own row in Today"}">${exploded ? "⤡ Group batches" : "⤢ Explode batches"}</button>
+    <button class="mdpill mdx" formaction="/my-day/explode" name="on" value="${exploded ? "0" : "1"}" title="${exploded ? "Fold the day's batches back into one row" : "Every batch channel as its own row in Today"}">${exploded ? "⤡ Group batches" : "⤢ Explode batches"}</button>
   </form>`;
 }
 
@@ -7341,7 +7418,16 @@ function mydaySwitches(hidden: string[], exploded: boolean): string {
  * bury the VOs.
  */
 function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded = false): string {
-  if (exploded) return items.flatMap(explodeBatch).map((i) => workRow(i, now, running, back)).join("");
+  // Exploded: each batch channel its own row, with how many of its uploads are done.
+  if (exploded) {
+    return items
+      .map((i) => {
+        const target = i.record?.batchTarget ?? 1;
+        const extra = isBatch(i.type) && target > 1 ? `<span class="wunits">${Math.min(target, i.record?.batchDone ?? 0)}/${target} uploaded</span>` : "";
+        return workRow(i, now, running, back, extra);
+      })
+      .join("");
+  }
   const batches = items.filter((i) => isBatch(i.type));
   const rest = items.filter((i) => !isBatch(i.type));
   if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
@@ -7355,7 +7441,7 @@ function groupBatches(items: WorkItem[], now: Date, running: string | null, back
     <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">Batch</span>
       <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
-      <div class="wacts"><form method="post" action="/my-day/explode"><input type="hidden" name="on" value="1"><button class="wbtn" title="Every upload in every batch as its own row">⤢</button></form><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
+      <div class="wacts"><form method="post" action="/my-day/explode"><input type="hidden" name="on" value="1"><button class="wbtn" title="Every batch channel as its own row">⤢</button></form><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
     </summary>
     <div class="wlist">${batches.map((i) => workRow(i, now, running, back)).join("")}</div>
   </details>`;

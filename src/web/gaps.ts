@@ -59,3 +59,20 @@ export function uploadGaps(
     .flatMap((c) => channelGaps(c.channel, c.every, c.days, today, horizon))
     .sort((a, b) => a.date.localeCompare(b.date) || a.channel.localeCompare(b.channel));
 }
+
+/**
+ * Which channel runs out of assigned videos first, however far ahead: each
+ * channel's first expected upload with nothing on it, soonest first. The
+ * first is the next video that needs assigning; add one on that channel (or
+ * move its schedule) and the next soonest takes its place.
+ */
+export function nextToAssign(
+  channels: Array<{ channel: string; every: number; days: string[] }>,
+  today: string,
+  skip: (g: UploadGap) => boolean = () => false,
+): UploadGap[] {
+  return channels
+    .map((c) => channelGaps(c.channel, c.every, c.days, today, 400).find((g) => !skip(g)))
+    .filter((g): g is UploadGap => Boolean(g))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.channel.localeCompare(b.channel));
+}

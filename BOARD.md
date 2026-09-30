@@ -85,6 +85,16 @@ Recurring batches are left out; they fall due every evening. **Desktop alerts**
 in the panel asks your browser for permission, then an open dashboard checks
 every minute and pops a system notification for anything new.
 
+**Next to assign** sits at the top of the dashboard all the time. It names
+the channel that runs out of lined-up videos first, however far ahead (even
+if every channel has a month assigned), and the day its next upload would
+be if nothing is added. It counts from the channel's last scheduled video,
+at the channel's pace. Below it are the next four channels to run out. It's
+worked out fresh on every load: add a video on that channel, or move its
+schedule on the calendar, and the date or the channel changes to match.
+Paused and resting channels (quiet for a month) aren't counted, and neither
+is a day cleared from *Nothing assigned*.
+
 **Nothing assigned.** Every channel with a posting target (each Stories
 channel, one every four days; each Gaming channel, its own usual gap) is
 expected to post again that many days after its **last video lined up**:
@@ -323,6 +333,10 @@ once.
   channels with no YouTube link on the Uploads page, or paused and removed
   videos. Only yesterday is ever judged, so switching this on didn't push any
   history.
+
+**Staying in place.** Anything that reloads the page (✓, ▶, a switch, Save)
+brings you back to where you were on it instead of the top, unless it was
+meant to open a particular section.
 
 **Days off.** A day off is a day no work can be done, so the work due on it is
 **spread over the working days from tomorrow up to it**, not piled onto the
@@ -630,10 +644,9 @@ can be changed.)
 - **Today:** everything late or due today. Each piece shows tracked time
   against its estimate on a bar, with ▶ to time it and ✓ to clear it.
   Today's Bits/Reading batches fold into one line you can open.
-  **⤢ Explode batches** (on that line, or next to the switches) shows every
-  upload in every batch as its own row, "Specular DC · 3 of 5", each with its
-  share of the batch's time. ✓ on one counts that upload done, and the batch
-  clears when the last one is ticked. **⤡ Group batches** folds them back.
+  **⤢ Explode batches** (on that line, or next to the switches) shows each
+  batch channel as its own row, with how many of its uploads are done
+  ("2/5 uploaded"), its time, ▶ and ✓. **⤡ Group batches** folds them back.
 - **Time logged:** what the timer actually saw.
   - **Week** (the default) is a timeline of this week, Monday to Sunday. Each
     day is a lane across the hours, with every stretch of work placed where
@@ -694,7 +707,10 @@ Paused work never counts in any of these.
 ## Uploads — every category, its own way
 
 The switch at the top of **Uploads** picks a category, and the whole page
-changes to suit it:
+changes to suit it. A paused channel is left out of the category's charts,
+tiles and tables. **⏸ N paused channels hidden · show**, under the switch,
+brings them back, and this browser remembers the choice. A paused channel's
+own page always shows it.
 
 | Category | Counts | Target | View |
 |---|---|---|---|

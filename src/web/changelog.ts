@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-30-next-to-assign",
+    title: "Next to assign on the dashboard; paused channels off the Uploads charts",
+    changes: [
+      { text: "The dashboard always shows the next video to assign: the channel that runs out first, however far ahead, and the day its next upload would be. It updates as soon as you add or move a video.", href: "/" },
+      { text: "Exploding batches on My Day now shows one row per channel, with how many of its uploads are done, instead of every short.", href: "/my-day" },
+      { text: "Paused channels are hidden from the Uploads charts. Show them with the ⏸ link under the category switch.", href: "/uploads" },
+      { text: "Clicking ✓, ▶, a switch or Save no longer jumps you back to the top of the page.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-09-30-time-logged",
     title: "My Day: a timeline of the time you logged",
     changes: [
