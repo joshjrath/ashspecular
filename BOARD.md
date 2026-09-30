@@ -1089,6 +1089,260 @@ from the script's length at reading pace, or from a runtime typed in by hand.
 A video with none of those counts as the catalog's typical length and is
 marked *est.*
 
+## Idea Feed — Bits ideas from Tumblr, ranked for you to decide
+
+**Idea Feed** in the sidebar (after Story Lab) reads Tumblr for posts a Bits
+Short could be built on and ranks them, best first. It only suggests: nothing
+is approved, published or sent to production unless you press the button. The
+sidebar count is strong new ideas (75 or more, read in full, found in the last
+3 days) you haven't decided on yet.
+
+**Setup.** Two variables on Railway:
+
+- `TUMBLR_API_KEY`: register an app at
+  [tumblr.com/oauth/apps](https://www.tumblr.com/oauth/apps) (any name and
+  website; the callback URL can be the board's address) and copy its **OAuth
+  consumer key**. No login or secret is needed: the feed only reads public
+  posts.
+- `ANTHROPIC_API_KEY`, which the board already uses elsewhere. Without it,
+  posts are stored and wait to be read.
+
+`IDEAS_MODEL` picks a different Claude model for the analysis; leave it unset
+for the default. When a model declines to answer about a post, the call falls
+back to another model on Anthropic's side where the model supports that.
+
+### What Tumblr allows, and how the feed stays inside it
+
+- **The official API only.** No scraping.
+- **Tags, not keywords.** Tumblr's API has no keyword search, so every
+  "search" is a tag: one tag per call, 20 posts per call.
+- **The limits.** A key gets 1,000 calls an hour and 5,000 a day. The feed
+  stays under 900 an hour and under the daily cap (4,000 by default). It also
+  spreads the day's calls across the day, so a few busy tags can't use it all
+  up by the afternoon.
+- **When Tumblr says stop.** A rate-limit answer pauses all reading for half an
+  hour. A rejected key pauses it too, and the Sources page says why.
+- **Each tag at its own pace.** A tag's weight sets how often it's read:
+
+  | Weight | Read every |
+  |---|---|
+  | 5 | 10 minutes |
+  | 4 | 15 minutes |
+  | 3 | 30 minutes |
+  | 2 | hour |
+  | 1 | 2 hours |
+
+  From there it adjusts. A tag that fills every page is read twice as often,
+  down to every 5 minutes. One with nothing new is read half again as rarely,
+  up to 4 times its pace and never less than every 4 hours.
+- **Reading a tag.** Each read goes back until it reaches posts it has already
+  seen, at most 3 pages. A failed read keeps the tag's place and tries again
+  in 15 minutes.
+- **Engagement.** Notes come with every post. Likes and reblogs are fetched
+  separately, only for posts that get the full read.
+
+### What happens to a post
+
+1. **It's stored first**, before anything judges it: the text, pictures, tags,
+   author, notes and the original link. So anything can be re-scored later.
+2. **Duplicates.** A plain reblog is the post it reblogs: one card, for the
+   original. A reblog that adds its own commentary (20 characters or more)
+   stands on its own, because the commentary may be the joke. The same text
+   posted twice is one post.
+3. **The gentle filter** catches obvious junk before any AI: ads and
+   giveaways, shops, tag spam, empty posts, and a tag's own excluded words and
+   minimum notes. Filtered posts aren't deleted. They stay in **New**, marked,
+   with **Analyze anyway**.
+4. **The quick look.** Claude reads posts 20 at a time: is there a Short in
+   this, for which channel, about whom. A quick look scores 0–35, so every
+   full read ranks above it.
+5. **The full read**, one post at a time with its pictures. It's for posts
+   the quick look rates 0.55 or better, and for every post pasted in by hand.
+   It gives:
+   - the **original observation**: the one specific detail the idea can't
+     lose;
+   - a **suggested Bit** built on it (title, premise, direction). The rule is
+     source-specific detail → new premise → franchise-specific escalation;
+   - the **classification** and **canon confidence**;
+   - eight part-scores;
+   - which existing Bits and ideas it repeats, and why.
+
+### The Idea Score
+
+The score is a ranking, not a forecast. 84 means near the top of what the feed
+has, not "84% likely to do well".
+
+Claude rates eight parts from 0 to 1. The score is their weighted average:
+
+| Part | Weight |
+|---|---|
+| Franchise specificity | 18% |
+| Comedy / scenario potential | 18% |
+| Visual potential | 15% |
+| Originality | 14% |
+| Context efficiency | 12% |
+| Source specificity | 9% |
+| Character recognition | 7% |
+| Audience fit | 7% |
+
+Then the code adjusts it:
+
+| Adjustment | Points |
+|---|---|
+| Engagement for the post's age (notes against hours since posting) | −3 to +6 |
+| Similar to existing work (by how similar and how recent) | up to −40 |
+| Same premise and comedy mechanism as existing work, however old | at least −20 |
+| The post, or its original, was already used | −50 |
+| A canon claim Claude isn't sure of | −4 |
+| A fourth-wall or meta concept | −3 |
+
+Engagement is one small signal, never the main one.
+
+Every card shows **Why this ranked high** and **Potential problems**.
+**How the 84 was reached** lists every part and adjustment.
+
+### Classification and canon
+
+A card's classification is the tag its Short would carry:
+
+- **CANON** and **CANON-INSPIRED** carry no tag.
+- **FAN THEORY**, **HEADCANON**, **AU**, **WHAT IF?**, **CROSSOVER** and
+  **META** each carry their name.
+
+Change it from the dropdown on the card. A change made by hand sticks through
+re-analysis.
+
+**Canon confidence** is Claude's estimate of how accurate the facts behind the
+premise are, and it's labelled *AI estimate*. It's never a verification. When
+a lore assumption needs checking, the card says **⚠ Canon verification
+needed** and names the assumption. It stays until you press **Mark canon
+checked**.
+
+### Similarity
+
+Each post is compared with every published Bit, every approved idea and every
+rejected source. The comparison is by premise and comedy mechanism, not title:
+"Peter Meets Female Peter" and "Peter Meets Petra Parker" are one idea, but
+"Batman Was In The Boys" doesn't cover "Spider-Man Was In The Boys".
+
+How much a match counts depends on its age:
+
+| Match from | Counts |
+|---|---|
+| This week | 100% |
+| This month | 85% |
+| Last 3 months | 60% |
+| This year | 35% |
+| Older | 20% |
+
+A rejected idea counts half as much. An approved idea not made yet counts in
+full.
+
+When there's nothing to compare with yet, or the check fails, the card says
+**Similarity check unavailable**. It never says "0% similar".
+
+### The feed
+
+**Tabs:**
+
+| Tab | Shows |
+|---|---|
+| For you | Best first, fading a little with age |
+| New | Everything but duplicates, newest first, filtered posts included |
+| High priority | 85 and over |
+| Hidden gems | 70 and over with 50 notes or fewer, or posted over a month ago |
+| Saved, Approved, Used, Rejected | What you decided |
+
+**Filters:** channel, classification, minimum score, search, and *needs a
+canon check*.
+
+**On each card:**
+
+- **View original post ↗**, always.
+- **☆ Save** keeps it for later. Saving doesn't mark it used.
+- **✓ Approve** approves the suggested Bit as it is. **Edit & develop**
+  changes the title, premise, direction, channel or classification first.
+  Either way it creates an idea, linked to its source for good.
+- **Reject** with a reason: too similar, weak joke, too generic, too much
+  context, lore problem, wrong channel, not visual, already used, don't like
+  it, or other. You can add a note. Rejected ideas count in later similarity
+  checks.
+- **↻ Re-analyze**, or **Retry analysis** after a failure.
+
+**Approved ideas** are under the Approved tab. Each has a production status:
+draft, approved, assigned, scripting, illustration, editing, scheduled,
+published. **Published** marks its source Used, and a used source costs 50
+points anywhere it turns up again.
+
+**+ Add a post by link** takes a Tumblr link, read through the API.
+Any other link works with its text pasted in. Either way it's read in full
+straight away, even past the day's cap.
+
+### Sources & settings
+
+Linked from the feed:
+
+- **Status:** Tumblr calls today and this hour, quick looks and full reads
+  against their caps, tokens used and a rough cost at list prices.
+- **Watched tags**, grouped by channel. Each tag has its channels, on/off,
+  weight, excluded words and minimum notes, plus **Read now** and **Remove**.
+  Add a tag at the top. These 18 are watched from the start:
+
+  | Channel | Tags (weight) |
+  |---|---|
+  | Animation | ben 10, avatar the last airbender, teen titans (3 each) |
+  | Anime | jujutsu kaisen (4); death note, naruto (3) |
+  | Pokemon | pokemon (4), pokemon games (2) |
+  | Undertale | undertale, deltarune (4 each) |
+  | Gaming | sonic the hedgehog, resident evil (3 each) |
+  | Studios | marvel, dc comics, invincible, spider-man (3 each) |
+  | FNAF | fnaf (4), five nights at freddys (3) |
+
+- **Caps.** Anything over a cap waits for tomorrow.
+
+  | Setting | Default |
+  |---|---|
+  | Quick looks a day | 600 |
+  | Full reads a day | 60 |
+  | Quick-look score that earns a full read | 0.55 |
+  | Tumblr calls a day | 4,000 |
+
+- **Re-score** runs the current analysis again on posts already stored,
+  without reading Tumblr again. Pick the last 24 hours, 7 days, 30 days or
+  everything unused, one channel or all, from the quick look or as a full
+  read.
+- **Retry every failed analysis.**
+
+### When something fails
+
+- A failed analysis keeps its card, marked *analysis failed*, and tries again
+  up to 3 times. After that, use **Retry analysis**.
+- A failed read keeps the tag's place, so no posts are skipped.
+
+### What this version doesn't do yet
+
+**Limits of the data:**
+
+- Engagement is read when a post is found, not followed over time.
+- Replies are counted only when Tumblr's first page of notes holds all of
+  them.
+- Published Bits are compared by their titles; their scripts aren't read.
+
+**Planned for phase 2:**
+
+- better duplicate detection by meaning;
+- keeping batches varied, and assigning ideas to batches;
+- canon verification workflows;
+- learning from rejections;
+- analytics.
+
+**Planned for phase 3:**
+
+- linking the published Short and its performance back to its source;
+- ranking that learns from performance;
+- more providers. The provider layer is generic, and Tumblr is only the
+  first.
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their
@@ -1355,6 +1609,8 @@ In the service you already have:
 6. For Tasks, make a Discord channel named `#tasks`, or set
    `TASKS_CHANNEL_IDS` to the channel's ID. The bot needs to be able to see
    it.
+7. For the Idea Feed, `TUMBLR_API_KEY`: the OAuth consumer key of an app
+   registered at tumblr.com/oauth/apps (see the Idea Feed section).
 
 Redeploy. The log should say:
 

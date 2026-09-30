@@ -90,6 +90,9 @@ import { clearTime, forgetUntracked, loggedBetween, minutesByDay, minutesSpent, 
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postcheck.js";
+import { strongUnseen } from "../db/ideas.js";
+import { registerIdeaFeed } from "./bitsfeed/routes.js";
+import { startIdeaJobs } from "../jobs/ideas.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { REPEAT, type Repeat } from "../tasks/repeat.js";
@@ -269,6 +272,8 @@ async function shell(active: string): Promise<Shell> {
       forgotten: work ? work.forgotten.length + gaps.length : undefined,
       tasks: work ? work.tasks.length : undefined,
       financeAlerts: hasDatabase ? (await financeAlerts().catch(() => [])).length || undefined : undefined,
+      // Strong Bits ideas from the last three days nobody has decided on yet.
+      ideas: hasDatabase ? (await strongUnseen().catch(() => 0)) || undefined : undefined,
       tasksUrgent: work ? work.tasks.filter((t) => t.priority === "urgent" || (t.due && t.due.getTime() < Date.now())).length : undefined,
     },
     lastIntake: at,
@@ -495,6 +500,12 @@ export async function startWeb(): Promise<void> {
 
   // Finance: its own section, its own tabs, the same shell.
   if (hasDatabase) registerFinance(app, shell);
+
+  // The Bits Idea Feed: its pages, and the reading and analysis in the background.
+  if (hasDatabase) {
+    registerIdeaFeed(app, shell);
+    startIdeaJobs();
+  }
 
   // The subscribable calendar. Two months back, a year ahead.
   app.get<{ Querystring: Record<string, string | undefined> }>("/calendar.ics", async (request, reply) => {

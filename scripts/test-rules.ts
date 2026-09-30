@@ -85,6 +85,14 @@ import { summarize } from "../src/revisions/summarize.js";
 import { videoKey } from "../src/db/revisions.js";
 import { NeighbourIndex, scoreIdea, writeNext } from "../src/web/stories/writenext.js";
 import { indexPublic } from "../src/web/stories/lab.js";
+import { fromLegacy, fromNpf, oldestStamp, parseTumblrUrl } from "../src/ideas/tumblr.js";
+import { decodeEntities, htmlToText, imagesIn } from "../src/ideas/html.js";
+import { addsCommentary, basicFilter } from "../src/ideas/filter.js";
+import { engagementSignal, recencyWeight, scoreIdea as scoreBitsIdea, triageScore, type ScoreInput, type SimilarMatch } from "../src/ideas/score.js";
+import { nearestHistory, wordsOf, type HistoryItem } from "../src/ideas/similar.js";
+import { nextPollMinutes, pacedAllowance } from "../src/ideas/pace.js";
+import { estimateCost, feedHref, ideaCard, renderIdeaFeed, renderIdeaSources } from "../src/web/bitsfeed/pages.js";
+import type { SourceRow } from "../src/db/ideas.js";
 
 let pass = 0;
 let fail = 0;
@@ -1035,7 +1043,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 13 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 14 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -1914,6 +1922,182 @@ t("matched by title first, a retitled upload stands in for the next, the rest mi
 t("nothing uploaded: everything missed", matchPosts([{ id: 7, title: "X" }], []).missed, [7]);
 const missedPage = renderRecord(shellFix, mk({ id: 240, category: "stories", channel: "Specular FNAF", title: "Foxy In The Boys", airDate: "2026-09-30" }), { missed: { id: 5, day: "2026-09-29", pushedTo: "2026-09-30", moved: 2 } });
 t("the record says it was pushed, with It was posted to put it back", [missedPage.includes("Not seen on Specular FNAF on 9/29/2026, so it was pushed to 9/30/2026 with 2 later videos"), missedPage.includes('action="/missed/5/undo"')], [true, true]);
+
+section("Idea Feed");
+t("post HTML as text: paragraphs and bullets kept, tags gone, entities decoded", htmlToText("<p>Sans &amp; Papyrus</p><p>It&#8217;s a <b>bad</b> time<br>really</p><ul><li>one</li><li>two</li></ul><link rel=x>"), "Sans & Papyrus\n\nIt’s a bad time\nreally\n\n• one\n• two");
+t("…images in order, once each, web links only; entities", [imagesIn('<img src="https://64.media.tumblr.com/a.jpg"><img src="https://64.media.tumblr.com/a.jpg"> <img alt="x" src=\'http://x.com/b.png\'> <img src="data:image/png;base64,AAA">'), decodeEntities("&lt;3 &#x1F480; &hellip; &bogus;")], [["https://64.media.tumblr.com/a.jpg", "http://x.com/b.png"], "<3 💀 … &bogus;"]);
+t("Tumblr links: every shape Tumblr uses; tag pages, blogs and junk aren't posts", [
+  parseTumblrUrl("https://www.tumblr.com/gojo-fan/734219876543210987/when-gojo-meets"),
+  parseTumblrUrl("gojo-fan.tumblr.com/post/734219876543210987/slug"),
+  parseTumblrUrl("https://www.tumblr.com/blog/view/gojo-fan/734219876543210987"),
+  parseTumblrUrl("https://blog.example.com/post/734219876543210987"),
+  parseTumblrUrl("https://www.tumblr.com/tagged/undertale"),
+  parseTumblrUrl("https://www.tumblr.com/gojo-fan"),
+  parseTumblrUrl("not a link at all"),
+], [{ blog: "gojo-fan", id: "734219876543210987" }, { blog: "gojo-fan", id: "734219876543210987" }, { blog: "gojo-fan", id: "734219876543210987" }, { blog: "blog.example.com", id: "734219876543210987" }, null, null, null]);
+
+const legacyReblog = {
+  id_string: "734300000000000001", blog_name: "papyrus-cooks", type: "photo", timestamp: 1790000000, note_count: 812, tags: ["undertale", "sans"],
+  post_url: "https://www.tumblr.com/papyrus-cooks/734300000000000001/sans-never",
+  caption: "<p>skele-theories:</p><blockquote><p>Sans has a key to every door in the Underground.</p></blockquote><p>and he has never once used one to go home</p>",
+  photos: [{ original_size: { url: "https://64.media.tumblr.com/big.jpg", width: 1280, height: 960 }, alt_sizes: [{ url: "https://64.media.tumblr.com/640.jpg", width: 640, height: 480 }, { url: "https://64.media.tumblr.com/250.jpg", width: 250, height: 188 }] }],
+  reblogged_root_id: "734200000000000000",
+  trail: [
+    { blog: { name: "skele-theories" }, post: { id: "734200000000000000" }, content_raw: "<p>Sans has a key to every door in the Underground.</p>", is_root_item: true },
+    { blog: { name: "papyrus-cooks" }, post: { id: "734300000000000001" }, content_raw: "<p>and he has never once used one to go home</p>", is_current_item: true },
+  ],
+};
+const lr = fromLegacy(legacyReblog)!;
+t("a reblog: the whole chain in order, keyed to its original, what it added kept apart, a picture at a readable size", [lr.externalId, lr.url, lr.rootKey, lr.isReblog, lr.addedText, lr.body, lr.media.map((m) => m.url), lr.notes, lr.postedAt?.toISOString()], [
+  "734300000000000001", "https://www.tumblr.com/papyrus-cooks/734300000000000001/sans-never", "tumblr:734200000000000000", true, "and he has never once used one to go home",
+  "skele-theories: Sans has a key to every door in the Underground.\n\npapyrus-cooks: and he has never once used one to go home", ["https://64.media.tumblr.com/640.jpg"], 812, "2026-09-21T14:13:20.000Z",
+]);
+const plainReblog = fromLegacy({ ...legacyReblog, id_string: "734300000000000002", post_url: "", trail: [legacyReblog.trail[0]] })!;
+t("…a plain reblog adds nothing: same original, no commentary, linked by blog and id", [plainReblog.rootKey, plainReblog.addedText, addsCommentary(plainReblog), addsCommentary(lr), plainReblog.url], ["tumblr:734200000000000000", null, false, true, "https://www.tumblr.com/papyrus-cooks/734300000000000002"]);
+const legacyAsk = fromLegacy({ id_string: "734400000000000002", blog_name: "fnaf-lore", type: "answer", timestamp: 1790003600, asking_name: "springbonnie-stan", question: "<p>Does Freddy ever get a day off?</p>", answer: "<p>No. They run 24/7 and <b>that's</b> the horror.</p>", tags: Array.from({ length: 80 }, (_, i) => `t${i}`) })!;
+t("an ask names who asked; an original isn't a reblog; tags capped at 60; no id, no post", [legacyAsk.body, legacyAsk.isReblog, legacyAsk.rootKey, legacyAsk.tags.length, fromLegacy({ type: "text", body: "x" })], ["springbonnie-stan asked: Does Freddy ever get a day off?\n\nNo. They run 24/7 and that's the horror.", false, "tumblr:734400000000000002", 60, null]);
+const npfAsk = fromNpf({
+  id_string: "734219876543210987", blog_name: "pkmn-thoughts", timestamp: 1790007200, note_count: 3400, tags: ["pokemon"],
+  content: [
+    { type: "text", text: "Is Psyduck's headache why it's so powerful?" },
+    { type: "text", text: "Yes. It only uses its full power when the headache peaks." },
+    { type: "image", media: [{ url: "https://64.media.tumblr.com/p1280.jpg", width: 1280, height: 720 }, { url: "https://64.media.tumblr.com/p540.jpg", width: 540, height: 304 }], alt_text: "Psyduck holding its head" },
+  ],
+  layout: [{ type: "ask", blocks: [0], attribution: { type: "blog", blog: { name: "duck-appreciator" } } }],
+  trail: [],
+})!;
+t("NPF: the ask's asker named, the picture's description kept as text", [npfAsk.body, npfAsk.media, npfAsk.isReblog, npfAsk.url], [
+  "duck-appreciator asked: Is Psyduck's headache why it's so powerful?\nYes. It only uses its full power when the headache peaks.\n[image: Psyduck holding its head]",
+  [{ url: "https://64.media.tumblr.com/p540.jpg", width: 540, height: 304, alt: "Psyduck holding its head" }], false, "https://www.tumblr.com/pkmn-thoughts/734219876543210987",
+]);
+const npfReblog = fromNpf({ id_string: "734500000000000003", blog_name: "b", content: [{ type: "text", text: "and nobody ever asks Psyduck how it feels" }], layout: [], trail: [{ blog: { name: "a" }, post: { id: "734219876543210987" }, content: [{ type: "text", text: "Psyduck's headache is its power" }], layout: [] }] })!;
+t("…an NPF reblog: every voice, keyed to its original, its own words kept apart", [npfReblog.body, npfReblog.rootKey, npfReblog.addedText], ["a: Psyduck's headache is its power\n\nb: and nobody ever asks Psyduck how it feels", "tumblr:734219876543210987", "and nobody ever asks Psyduck how it feels"]);
+t("paging back: the oldest stamp on the page, featured tags by their featured time", [oldestStamp([{ timestamp: 1790000500 }, { timestamp: 1790000100 }, { timestamp: 1700000000, featured_timestamp: 1790000300 }]), oldestStamp([])], [1790000100, null]);
+
+const fsrc = (body: string, o: { tags?: string[]; notes?: number | null; media?: Array<{ url: string }> } = {}) => ({ body, title: null, media: [] as Array<{ url: string }>, tags: [] as string[], notes: 10 as number | null, ...o });
+t("the gentle filter: ads, promos, tag spam, empty posts, a tag's excluded words, too few notes", [
+  basicFilter(fsrc("GIVEAWAY! Reblog to win a Sans plush"), null).reason,
+  basicFilter(fsrc("Commissions open! Check my Etsy"), null).reason,
+  basicFilter(fsrc("sans", { tags: Array.from({ length: 35 }, (_, i) => `tag${i}`) }), null).reason,
+  basicFilter(fsrc(""), null).reason,
+  basicFilter(fsrc("Mettaton would host the Oscars", { tags: ["undertale", "nsfw"] }), { exclusions: ["NSFW"], minNotes: 0 }).reason,
+  basicFilter(fsrc("Mettaton would host the Oscars", { notes: 3 }), { exclusions: [], minNotes: 20 }).reason,
+], ["Looks like an ad or giveaway", "Looks promotional", "Tag spam (35 tags)", "Empty post", "Excluded word: nsfw", "Under 20 notes when found"]);
+t("…and lets the rest through: a real post, a picture with no words, an excluded word inside another word", [
+  basicFilter(fsrc("Sans has a key to every door in the Underground and never goes home"), { exclusions: [], minNotes: 5 }).keep,
+  basicFilter(fsrc("", { media: [{ url: "https://64.media.tumblr.com/x.jpg" }] }), null).keep,
+  basicFilter(fsrc("Asgore has the biggest heart in the Underground"), { exclusions: ["art"], minNotes: 0 }).keep,
+  basicFilter(fsrc("Asgore makes pottery", { tags: ["fan art"] }), { exclusions: ["art"], minNotes: 0 }).reason,
+], [true, true, true, "Excluded word: art"]);
+
+t("similar work counts less the older it is; a rejected idea half as much; an idea approved but not made yet in full", [
+  recencyWeight("bit", "2026-09-27", "2026-09-30"), recencyWeight("bit", "2026-09-10", "2026-09-30"), recencyWeight("bit", "2026-07-15", "2026-09-30"),
+  recencyWeight("bit", "2026-01-10", "2026-09-30"), recencyWeight("bit", "2024-01-01", "2026-09-30"), recencyWeight("rejected", "2026-09-29", "2026-09-30"),
+  recencyWeight("idea", null, "2026-09-30"), recencyWeight("bit", null, "2026-09-30"),
+], [1, 0.85, 0.6, 0.35, 0.2, 0.5, 1, 0.35]);
+const readAt = new Date("2026-09-30T12:00:00Z");
+const fast = engagementSignal(100, new Date("2026-09-30T11:30:00Z"), readAt)!;
+const slow = engagementSignal(200, new Date("2023-09-30T12:00:00Z"), readAt)!;
+t("engagement is read against age: 100 notes in half an hour beats 200 over three years; no count, no signal", [fast > 0.85, slow < 0.1, engagementSignal(null, readAt, readAt), engagementSignal(5, null, readAt)], [true, true, null, null]);
+
+const baseInput: ScoreInput = {
+  scores: { franchise_specificity: 0.9, comedy_potential: 0.9, visual_potential: 0.8, originality: 0.8, context_efficiency: 0.7, source_specificity: 0.9, character_recognition: 0.9, audience_fit: 0.8 },
+  whyItWorks: ["Sans's shortcuts are already a running joke"], warnings: [], classification: "CANON_INSPIRED", canonConfidence: 0.8, canonCheckRequired: false, canonChecks: [],
+  engines: ["escalation"], notes: null, postedAt: null, readAt, matches: [], usedSource: null,
+};
+const ib = scoreBitsIdea(baseInput);
+t("the Idea Score: the parts' weighted mean, the three strongest parts as reasons, then the AI's", [ib.score, ib.base, ib.adjustments, ib.why, ib.problems, ib.similarity], [
+  84, 84, [], ["Extremely franchise-specific", "Strong comedic scenario", "Built on one specific detail", "No recent premise collision", "Sans's shortcuts are already a running joke"], [], 0,
+]);
+const sm = (o: Partial<SimilarMatch>): SimilarMatch => ({ kind: "bit", ref: "bit:a", title: "Flowey Tries To Grow Up", channel: "Specular Undertale Bits", date: "2026-09-25", similarity: 0.82, sameMechanism: false, reason: "", recency: 1, effective: 0.82, ...o });
+const near82 = scoreBitsIdea({ ...baseInput, matches: [sm({})] });
+t("…close to a recent Bit costs points (82% → −27) and says so", [near82.score, near82.adjustments, near82.problems, near82.why.includes("No recent premise collision")], [57, [{ label: "Similar to existing work", points: -27 }], ["82% similar to “Flowey Tries To Grow Up”"], false]);
+const exactOld = scoreBitsIdea({ ...baseInput, matches: [sm({ similarity: 0.9, sameMechanism: true, date: "2024-05-01", recency: 0.2, effective: 0.18 })] });
+t("…the same premise costs at least 20, however old", [exactOld.score, exactOld.adjustments, exactOld.problems[0]], [64, [{ label: "Same premise as an existing Bit", points: -20 }], "Same premise as “Flowey Tries To Grow Up” (5/1/2024)"]);
+const unavailable = scoreBitsIdea({ ...baseInput, matches: null, similarityNote: "no Bits uploads or ideas on record yet" });
+t("…a check that couldn't run is shown as unavailable, never as 0% similar", [unavailable.score, unavailable.similarity, unavailable.problems, unavailable.why.includes("No recent premise collision")], [84, null, ["Similarity check unavailable — no Bits uploads or ideas on record yet"], false]);
+t("…a source already used: −50", [scoreBitsIdea({ ...baseInput, usedSource: "Sans Finally Sleeps" }).score, scoreBitsIdea({ ...baseInput, usedSource: "Sans Finally Sleeps" }).problems], [34, ["This post (or its original) already became “Sans Finally Sleeps”"]]);
+const hot = scoreBitsIdea({ ...baseInput, notes: 100, postedAt: new Date("2026-09-30T11:30:00Z") });
+const cold = scoreBitsIdea({ ...baseInput, notes: 2, postedAt: new Date("2023-09-30T12:00:00Z") });
+t("…engagement for its age is a small nudge, −3 to +6", [hot.adjustments, hot.why.includes("Unusually high engagement velocity"), cold.adjustments], [[{ label: "Engagement for its age", points: 5 }], true, [{ label: "Little engagement for its age", points: -3 }]]);
+const canonUnsure = scoreBitsIdea({ ...baseInput, classification: "CANON", canonConfidence: 0.4, canonChecks: ["Does Sans hold every key in canon?"] });
+const headcanon = scoreBitsIdea({ ...baseInput, classification: "HEADCANON" });
+t("…an unsure canon claim: −4 and a check to make; fan interpretation is named, not penalised", [canonUnsure.adjustments, canonUnsure.problems, headcanon.score, headcanon.problems], [[{ label: "Canon claim not certain", points: -4 }], ["Canon check: Does Sans hold every key in canon?"], 84, ["Based on fan interpretation (headcanon)"]]);
+const weakParts = scoreBitsIdea({ ...baseInput, scores: { ...baseInput.scores, visual_potential: 0.3, context_efficiency: 0.4 }, engines: ["fourth_wall_meta"] });
+t("…weak parts are its problems, weakest first; meta concepts −3; the score stays 0–100", [weakParts.problems, weakParts.adjustments, scoreBitsIdea({ ...baseInput, scores: {}, usedSource: "x" }).score], [["Hard to show — mostly explanation", "Needs a lot of set-up"], [{ label: "Meta concepts are easy to overuse", points: -3 }], 0]);
+t("a quick look scores 0–35, so every full read ranks above it", [triageScore(1), triageScore(0.5), triageScore(2), triageScore(Number.NaN)], [35, 18, 35, 0]);
+
+const hist: HistoryItem[] = [
+  { kind: "bit", ref: "bit:a", title: "Flowey Tries To Grow Up", channel: "Specular Undertale Bits", date: "2026-09-25" },
+  { kind: "bit", ref: "bit:b", title: "Sans Takes A Day Off", channel: "Specular Undertale Bits", date: "2026-08-01" },
+  { kind: "bit", ref: "bit:c", title: "Sans Sleeps Through The Whole Game", channel: "Specular Undertale Bits", date: "2026-06-01" },
+  { kind: "idea", ref: "idea:3", title: "Gojo Meets Female Gojo", premise: "Gojo meets his genderbent counterpart", channel: "Specular Anime Bits", date: null },
+  { kind: "idea", ref: "idea:4", title: "A Door With Every Key", channel: "Specular Anime Bits", date: null },
+  { kind: "rejected", ref: "src:9", title: "Pikachu Learns To Cook", channel: "Specular Pokemon Bits", date: "2026-09-01" },
+];
+const nq = { characters: ["Sans"], franchises: ["Undertale"], text: "Sans has a key to every door and never takes a day off to sleep", channel: "Specular Undertale Bits" };
+t("likely repeats: shared characters first, then shared words and the same channel; the unrelated left out", [nearestHistory(nq, hist).map((h) => h.ref), nearestHistory(nq, hist, 2).map((h) => h.ref), wordsOf("What If Gojo's Aliens Were In The Boys?")], [["bit:b", "bit:c", "idea:4"], ["bit:b", "bit:c"], ["gojo", "alien", "boys"]]);
+
+t("reading pace: busy tags twice as often (not under 5 min), quiet ones half again as rarely (up to 4× their pace, 4 hours at most), the rest drift back", [
+  nextPollMinutes(3, 30, { filled: true, fresh: 60 }), nextPollMinutes(3, 30, { filled: false, fresh: 0 }), nextPollMinutes(3, 45, { filled: false, fresh: 0 }),
+  nextPollMinutes(3, 120, { filled: false, fresh: 0 }), nextPollMinutes(3, 60, { filled: false, fresh: 5 }), nextPollMinutes(5, 6, { filled: true, fresh: 60 }),
+  nextPollMinutes(1, 200, { filled: false, fresh: 0 }), nextPollMinutes(3, 0, { filled: false, fresh: 5 }),
+], [15, 45, 68, 120, 45, 5, 240, 30]);
+t("…the day's Tumblr calls spread across the day: an hour's share at midnight, all of it by the end", [pacedAllowance(4000, 0), pacedAllowance(4000, 720), pacedAllowance(4000, 1439)], [167, 2167, 4000]);
+
+t("feed links: tabs and filters in the address, back to page one on any change", [
+  feedHref({ tab: "foryou", channel: null, cls: null, canon: false, min: null, q: "", page: 3 }),
+  feedHref({ tab: "foryou", channel: null, cls: null, canon: false, min: null, q: "", page: 0 }, { tab: "saved", channel: "Specular Undertale Bits", canon: true }),
+  feedHref({ tab: "new", channel: null, cls: "AU", canon: false, min: 70, q: "sans", page: 0 }, { page: 2 }),
+], ["/ideas", "/ideas?tab=saved&ch=Specular+Undertale+Bits&canon=1", "/ideas?tab=new&cls=AU&min=70&q=sans&page=2"]);
+
+const srcRow: SourceRow = {
+  id: 41, provider: "tumblr", externalId: "734300000000000001", url: "https://www.tumblr.com/papyrus-cooks/734300000000000001/sans-never", author: "papyrus-cooks",
+  authorUrl: "https://www.tumblr.com/papyrus-cooks", postedAt: new Date("2026-09-29T12:00:00Z"), ingestedAt: new Date("2026-09-29T13:00:00Z"), postType: "photo", title: null,
+  body: "skele-theories: Sans has a key to every door in the Underground.\n\npapyrus-cooks: and he has never once used one to go home <script>", media: [], tags: ["undertale", "sans"],
+  notes: 812, likes: 600, reblogs: 200, replies: null, engagementAt: new Date("2026-09-29T13:00:00Z"), rootKey: "tumblr:734200000000000000", isReblog: true,
+  addedText: "and he has never once used one to go home", channels: ["Specular Undertale Bits"], discoveredVia: "tag:undertale", stage: "analyzed", pending: null, processingAt: null,
+  attempts: 1, filterReason: null, error: null, duplicateOf: null, depth: "full", score: 84, channel: "Specular Undertale Bits", classification: "CANON_INSPIRED",
+  classificationManual: false, canonCheck: true, canonVerifiedAt: null, similarity: null, decision: null, decidedAt: null, rejectReason: null, rejectNote: null,
+  analysis: {
+    id: 5, depth: "full", version: "bits-feed-1", model: null, similarity: null, similarityStatus: "unavailable", at: new Date("2026-09-29T13:01:00Z"), breakdown: unavailable,
+    result: { headline: "Sans has every key and never goes home", irreplaceable_detail: "A key to every door, and he never once uses one to go home", suggested_title: "Sans Finally Uses His Keys", suggested_premise: "Papyrus locks him out.", comedy_engines: ["escalation"], canon_confidence: 0.55, canon_checks: ["Does Sans hold every key in canon?"] },
+  },
+  ideaId: null, ideaStatus: null,
+};
+const card = ideaCard(srcRow);
+t("a card: the original post linked, the AI's canon confidence called an estimate, verification and similarity flagged honestly", [
+  card.includes('<a class="iview" href="https://www.tumblr.com/papyrus-cooks/734300000000000001/sans-never" target="_blank" rel="noreferrer">View original post ↗</a>'),
+  card.includes("⚠ Canon verification needed"), card.includes("Canon confidence <b>55%</b> <small>AI estimate</small>"),
+  card.includes("⚠ Similarity check unavailable — no Bits uploads or ideas on record yet"), card.includes("Why this ranked high"), card.includes("Potential problems"),
+  card.includes('action="/ideas/s/41/approve"'), card.includes('value="weak_joke"'), card.includes("<script>"), card.includes("600 likes · 200 reblogs"),
+], [true, true, true, true, true, true, true, true, false, true]);
+t("…a bad link is never linked; filtered and failed posts stay, with a way on", [
+  ideaCard({ ...srcRow, url: "javascript:alert(1)" }).includes('href="javascript:'),
+  ideaCard({ ...srcRow, stage: "filtered", filterReason: "Looks promotional", depth: null, score: null, analysis: null }).includes("Filtered before analysis: Looks promotional"),
+  ideaCard({ ...srcRow, stage: "error", error: "Claude was busy", depth: null, score: null, analysis: null }).includes("Analysis failed: Claude was busy"),
+  ideaCard({ ...srcRow, stage: "error", error: "Claude was busy", depth: null, score: null, analysis: null }).includes("Retry analysis"),
+], [false, true, true, true]);
+const simCard = ideaCard({ ...srcRow, analysis: { ...srcRow.analysis!, similarityStatus: "ok", similarity: [sm({ reason: "Both escalate Flowey's attempts" })] } });
+t("…similar work shown with its date and why", [simCard.includes('<details class="isim warn">'), simCard.includes("82% similar</b> to “Flowey Tries To Grow Up” · 9/25/2026"), simCard.includes("Both escalate Flowey's attempts")], [true, true, true]);
+
+const ifSettings = { polling: true, ai: true, triageCap: 600, fullCap: 60, fullThreshold: 0.55, tumblrDailyCap: 4000 };
+const ifFeed = { id: 3, provider: "tumblr", query: "undertale", channels: ["Specular Undertale Bits"], enabled: true, weight: 4, exclusions: ["nsfw"], minNotes: 0, cursor: {}, pollMinutes: 15,
+  nextPollAt: new Date(Date.now() + 600_000), lastAttemptAt: null, lastSuccessAt: null, lastError: null, lastPostAt: null, found24h: 12, found7d: 80 };
+const reader = { pausedUntil: null, reason: "", callsThisHour: 4 };
+const srcOff = renderIdeaSources(shellFix, { feeds: [ifFeed], settings: ifSettings, usage: new Map(), tumblr: false, ai: false, model: "x", reader });
+const srcOn = renderIdeaSources(shellFix, { feeds: [ifFeed], settings: ifSettings, usage: new Map([["ai-triage", { kind: "ai-triage", calls: 1, items: 20, input: 0, output: 0, cacheRead: 0 }]]), tumblr: true, ai: true, model: "x", reader });
+t("Sources: how to connect when there's no key; caps, pace and the watched tags when there is", [
+  srcOff.includes("tumblr.com/oauth/apps") && srcOff.includes("TUMBLR_API_KEY"), srcOff.includes("Waiting for <code>ANTHROPIC_API_KEY</code>"),
+  srcOn.includes("(1 batch)"), srcOn.includes("Spread across the day: up to"), srcOn.includes("<b>#undertale</b>"), srcOn.includes('value="nsfw"'), estimateCost("not-a-model", { input: 1, output: 1, cacheRead: 1 }),
+], [true, true, true, true, true, true, null]);
+const feedPage = renderIdeaFeed(shellFix, {
+  query: { tab: "foryou", channel: null, cls: null, canon: false, min: null, q: "", page: 0 }, rows: [srcRow], total: 1,
+  counts: { foryou: 1, new: 3, high: 1, gems: 0, saved: 0, approved: 0, used: 0, rejected: 0 },
+  pulse: { scanned: 9, strong: 1, high: 1, waiting: 2, errors: 0, filtered: 2 },
+  status: { tumblr: true, ai: true, lastRead: new Date(), feeds: 18, failing: 0, aiCapped: false, paused: "" },
+});
+t("the feed: tabs, the card, and scripts that parse", [feedPage.includes("High priority"), feedPage.includes('id="s-41"'), [...feedPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } })], [true, true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

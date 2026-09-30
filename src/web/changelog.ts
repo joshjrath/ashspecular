@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-30-bits-idea-feed",
+    title: "Idea Feed: Bits ideas from Tumblr, ranked for you to decide",
+    changes: [
+      { text: "The new Idea Feed reads the Tumblr tags watched for each Bits channel and ranks the posts a Short could be built on. Nothing is approved or sent to production by itself.", href: "/ideas" },
+      { text: "Each card shows the original observation, a suggested Bit, its classification (Canon to Meta), the AI's canon confidence, similar Bits already made, why it ranked high and its potential problems. View original post ↗ is always there.", href: "/ideas" },
+      { text: "Save, Reject with a reason, or Approve (as it is, or edited first). Approving creates an idea linked to its source for good, with a production status, under Approved.", href: "/ideas?tab=approved" },
+      { text: "Paste a Tumblr link with + Add a post by link to have it read in full straight away.", href: "/ideas?tab=new" },
+      { text: "Sources & settings: the tags watched per channel, daily caps, re-scoring and the day's usage. It needs TUMBLR_API_KEY (an app's OAuth consumer key from tumblr.com/oauth/apps) and ANTHROPIC_API_KEY on Railway.", href: "/ideas/sources" },
+    ],
+  },
+  {
     id: "2026-09-30-next-to-assign",
     title: "Next to assign on the dashboard; paused channels off the Uploads charts",
     changes: [
