@@ -86,7 +86,7 @@ import { addLabAddition, listIdeaMarks, listLabAdditions, markIdea, removeLabAdd
 import { writeNext } from "./stories/writenext.js";
 import { addScript, getScript, listScripts, removeScript, scriptsFor, updateScriptBody } from "../db/scripts.js";
 import { readDoc } from "./gdoc.js";
-import { clearTime, forgetUntracked, minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent, untrackedKeys } from "../db/timers.js";
+import { clearTime, forgetUntracked, loggedBetween, minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent, untrackedKeys } from "../db/timers.js";
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postcheck.js";
@@ -98,6 +98,7 @@ import { PRIORITY, TASK_CATEGORY, parseTask, type Priority, type TaskCategory } 
 import {
   dayLoads, doAhead, forgottenWork, isRequired, nextDays, projectBatches, remaining, taskItem, toItem, isVo, setEstimates, voQueue, whatNext, WORK_TYPES,
   MYDAY_GROUPS, explodeBatch, shownTypes, spreadDayOff, itemKey, type WorkItem as MyWorkItem,
+  LOG_RANGES, logByDay, logDays, typeOf, type LogRange, type LoggedEntry,
   type WorkItem,
 } from "./work.js";
 import { dismissGaps, dismissedGaps, pauseChannel, pausedChannels, resumeChannel } from "../db/channels.js";
@@ -1356,7 +1357,23 @@ export async function startWeb(): Promise<void> {
   // ── My Day, timers, the VO Queue, recording mode, forgotten work ──────
   const safeBack = (b: unknown, fallback: string) => (typeof b === "string" && /^\/[a-z0-9/_?=&#.-]*$/i.test(b) ? b : fallback);
 
-  app.get<{ Querystring: { next?: string; budget?: string } }>("/my-day", async (request, reply) => {
+  /** Time logged over a range, each stretch labelled with its kind of work. */
+  async function timeLog(range: LogRange, today: string, shown?: Set<string>) {
+    const days = logDays(range, today);
+    const from = instantIn(days[0]!, "00:00", ORG_TZ)!;
+    const to = instantIn(shiftDate(days[days.length - 1]!, 1), "00:00", ORG_TZ)!;
+    const rows = hasDatabase ? await loggedBetween(from, to).catch(() => []) : [];
+    const entries: LoggedEntry[] = [];
+    for (const r of rows) {
+      const type = r.taskId ? "task" : typeOf({ kind: r.kind, batchNo: r.batchNo, channel: r.channel, category: r.category } as StoredRecord);
+      if (!type || (shown && !shown.has(type))) continue;
+      const title = r.batchNo && r.channel ? r.channel : r.title ?? r.code ?? "(untitled)";
+      entries.push({ start: r.start, end: r.end, type, title });
+    }
+    return logByDay(entries, days);
+  }
+
+  app.get<{ Querystring: { next?: string; budget?: string; log?: string } }>("/my-day", async (request, reply) => {
     const now = new Date();
     const [s, loaded, tracked] = await Promise.all([shell("myday"), loadWork(now), minutesByDay(ORG_TZ, dateIn(ORG_TZ, now))]);
     const today = dateIn(ORG_TZ, now);
@@ -1366,6 +1383,7 @@ export async function startWeb(): Promise<void> {
     const hidden = (request.cookies.myday_hide ?? "").split(".").filter((g) => MYDAY_GROUPS.some((x) => x.id === g));
     const shown = shownTypes(hidden);
     const exploded = request.cookies.myday_explode === "1";
+    const logRange: LogRange = LOG_RANGES.find((r) => r.id === request.query.log)?.id ?? "week";
     const work = { ...loaded, items: loaded.items.filter((i) => shown.has(i.type)), doneItems: loaded.doneItems.filter((i) => shown.has(i.type)) };
     const projected = projectBatches(days.slice(1), work.open, { paused: new Set(work.paused.keys()), daysOff: offs }).filter((i) => shown.has(i.type));
     const all = [...work.items, ...projected];
@@ -1380,6 +1398,7 @@ export async function startWeb(): Promise<void> {
         focus: asked ? whatNext(work.items, now, budget) : null, budget, asked,
         voLeft: { n: vos.length, minutes: vos.reduce((n, i) => n + remaining(i), 0) },
         hidden, exploded,
+        log: { range: logRange, days: await timeLog(logRange, today, shown), daysOff: s.daysOff ?? [] },
       }),
     );
   });

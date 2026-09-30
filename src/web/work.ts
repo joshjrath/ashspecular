@@ -21,7 +21,7 @@
  * estimate less what's been tracked on it.
  */
 import { CATEGORIES, CHANNELS, isLongFormRecurring } from "../catalog.js";
-import { ORG_TZ, dateIn, shortsDay } from "../parse/derive.js";
+import { ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
 import type { StoredRecord } from "../db/records.js";
 import type { Task } from "../db/tasks.js";
 import { TASK_CATEGORY } from "../tasks/parse.js";
@@ -469,3 +469,78 @@ export function nextDays(n: number, now = new Date()): string[] {
 }
 
 export { shortsDay };
+
+// ── time logged, over a week, a month, a quarter or a year ────────────────
+
+/** One stretch of tracked time, as the timer recorded it. */
+export interface LoggedEntry {
+  start: Date;
+  end: Date;
+  type: WorkType;
+  title: string;
+}
+/** A stretch within one day: minutes from that day's midnight (local). */
+export interface LoggedPiece {
+  from: number;
+  to: number;
+  type: WorkType;
+  title: string;
+}
+export interface LoggedDay {
+  day: string;
+  pieces: LoggedPiece[];
+  minutes: number;
+  byType: Partial<Record<WorkType, number>>;
+}
+
+export type LogRange = "week" | "month" | "quarter" | "year";
+export const LOG_RANGES: Array<{ id: LogRange; label: string }> = [
+  { id: "week", label: "Week" },
+  { id: "month", label: "Month" },
+  { id: "quarter", label: "3 months" },
+  { id: "year", label: "Year" },
+];
+
+/**
+ * The days a range covers, oldest first. The week is this one, Monday to
+ * Sunday; the rest end today and start on a Monday, so they sit in whole
+ * weeks: the last 5 weeks, 13 weeks, or 53 weeks.
+ */
+export function logDays(range: LogRange, today: string): string[] {
+  const dow = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // Monday 0
+  const monday = shiftDate(today, -dow);
+  const weeks = range === "week" ? 1 : range === "month" ? 5 : range === "quarter" ? 13 : 53;
+  const first = shiftDate(monday, -7 * (weeks - 1));
+  const last = range === "week" ? shiftDate(monday, 6) : today;
+  const out: string[] = [];
+  for (let d = first; d <= last; d = shiftDate(d, 1)) out.push(d);
+  return out;
+}
+
+/**
+ * Each day's tracked time, cut at midnight (a timer running past it counts
+ * toward both days), from `days`' first to last.
+ */
+export function logByDay(entries: LoggedEntry[], days: string[], zone = ORG_TZ): LoggedDay[] {
+  const out = new Map(days.map((d) => [d, { day: d, pieces: [] as LoggedPiece[], minutes: 0, byType: {} as Partial<Record<WorkType, number>> }]));
+  for (const e of entries) {
+    let at = e.start;
+    while (at < e.end) {
+      const day = dateIn(zone, at);
+      const midnight = instantIn(day, "00:00", zone)!;
+      const next = instantIn(shiftDate(day, 1), "00:00", zone)!;
+      const until = e.end < next ? e.end : next;
+      const d = out.get(day);
+      if (d) {
+        const from = (at.getTime() - midnight.getTime()) / 60_000;
+        const to = (until.getTime() - midnight.getTime()) / 60_000;
+        d.pieces.push({ from, to, type: e.type, title: e.title });
+        d.minutes += to - from;
+        d.byType[e.type] = (d.byType[e.type] ?? 0) + (to - from);
+      }
+      at = until;
+    }
+  }
+  for (const d of out.values()) d.pieces.sort((a, b) => a.from - b.from);
+  return [...out.values()];
+}

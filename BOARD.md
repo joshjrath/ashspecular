@@ -634,6 +634,19 @@ can be changed.)
   upload in every batch as its own row, "Specular DC · 3 of 5", each with its
   share of the batch's time. ✓ on one counts that upload done, and the batch
   clears when the last one is ticked. **⤡ Group batches** folds them back.
+- **Time logged:** what the timer actually saw.
+  - **Week** (the default) is a timeline of this week, Monday to Sunday. Each
+    day is a lane across the hours, with every stretch of work placed where
+    it happened and coloured by kind. Hover or tap a block for what it was,
+    when, and for how long.
+  - **Month** (the last 5 weeks) is a bar a day, split by kind.
+  - **3 months** and **Year** are calendars of squares, brighter the more
+    was logged that day.
+  - Every range shows the total, how many days had time, the average on days
+    worked, the busiest day, and the split by kind. The longer ranges also
+    open as a table.
+  - A timer running past midnight counts toward both days. The Show switches
+    apply here too.
 - **Logging without time:** in **Done today**, **No time** on a piece that
   someone else did clears whatever was tracked on it. It then shows as
   *logged · no time* and doesn't count toward your tracked or estimated time.

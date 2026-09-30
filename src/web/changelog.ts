@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-30-time-logged",
+    title: "My Day: a timeline of the time you logged",
+    changes: [
+      { text: "Time logged shows this week as a timeline: each day's timer stretches where they happened, coloured by kind of work, with day totals.", href: "/my-day#logged" },
+      { text: "Switch to Month for a bar a day, or 3 months and Year for a calendar of how much was logged each day. Each range has totals, the busiest day and the split by kind.", href: "/my-day?log=year#logged" },
+    ],
+  },
+  {
     id: "2026-09-30-posting-check",
     title: "Daily posting check: missed videos push themselves a day",
     changes: [

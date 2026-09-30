@@ -11,7 +11,7 @@
  * belongs to.
  */
 import { CATEGORIES, CHANNELS, channelInk, contrastRatio, isLongFormRecurring, type CategoryId } from "../catalog.js";
-import { ORG_TZ, REVIEW_HOURS, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
+import { ORG_TZ, REVIEW_HOURS, TEAM_TZ, VO_BUFFER_DAYS, dateIn, daysUntil, instantIn, relativeDay, renderIn, shortsDay, usDate } from "../parse/derive.js";
 import type { ScriptReport, ScriptRow, ScriptStatus } from "./scriptcheck.js";
 import type { ChannelLink, Upload } from "../jobs/youtube.js";
 import { STORIES_EVERY_DAYS, addDays, dayOf, daysBetween, type ChannelCadence, type PaceState } from "./cadence.js";
@@ -32,8 +32,8 @@ import type { StoredScript } from "../db/scripts.js";
 import type { Release } from "./changelog.js";
 import type { UploadGap } from "./gaps.js";
 import {
-  DEFAULT_ESTIMATES, MYDAY_GROUPS, batchType, explodeBatch, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
-  type DayLoad, type FocusPick, type WorkType, type Forgotten, type WorkItem,
+  DEFAULT_ESTIMATES, MYDAY_GROUPS, LOG_RANGES, batchType, explodeBatch, TYPE_BY_ID, VO_WPM, WORK_TYPES, channelEstimate, estimateOverrides, isBatch, itemKey, taskCategoryEstimate, typeEstimate, readMinutes, remaining, whyNow,
+  type DayLoad, type FocusPick, type WorkType, type Forgotten, type WorkItem, type LoggedDay, type LogRange,
 } from "./work.js";
 import { scriptFor } from "./scriptindex.js";
 import { PRIORITIES, PRIORITY, TASK_CATEGORIES, TASK_CATEGORY } from "../tasks/parse.js";
@@ -1686,6 +1686,69 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .wnwhen { color: var(--ink3); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .wnx { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 16px; padding: 0 4px; }
 .wnx:hover { color: var(--late); }
+.tlog { position: relative; margin-bottom: 14px; }
+.tlog .fhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.tlog .fhead h2 { margin: 0; }
+.tlstats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.tlstat { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tlstat b { font-family: var(--display); font-size: 20px; line-height: 1.1; color: var(--ink); }
+.tlstat span { font-size: 11.5px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tlmix { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; margin-bottom: 8px; }
+.tlmix i { background: var(--wc); min-width: 3px; }
+.tllegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink2); margin-bottom: 14px; }
+.tllegend span { display: inline-flex; align-items: center; gap: 6px; } .tllegend i { width: 9px; height: 9px; border-radius: 3px; background: var(--wc); }
+.tllegend b { color: var(--ink); font-weight: 700; }
+.tlweek { display: flex; flex-direction: column; gap: 5px; }
+.tlrow { display: grid; grid-template-columns: 52px minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+.tlday { display: flex; flex-direction: column; font-size: 11px; color: var(--ink3); line-height: 1.2; } .tlday b { color: var(--ink2); font-size: 12.5px; }
+.tlrow.today .tlday b { color: var(--yellow); }
+.tllane { position: relative; height: 26px; background: var(--sunk); border-radius: 8px; overflow: hidden; }
+.tlrow.future .tllane { opacity: .45; } .tlrow.off .tllane { background: repeating-linear-gradient(135deg, var(--sunk) 0 6px, #26262C 6px 12px); }
+.tlaxis .tllane { background: none; height: 16px; overflow: visible; }
+.tltick { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--ink3); }
+.tlgrid { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.05); }
+.tlb { position: absolute; top: 3px; bottom: 3px; background: var(--wc); border-radius: 4px; cursor: default; }
+.tlb:hover { filter: brightness(1.2); }
+.tlnow { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--yellow); border-radius: 1px; }
+.tlnote { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: var(--ink3); }
+.tltot { text-align: right; font-weight: 700; font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tlbars { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 150px; padding: 0 0 18px 34px;
+  background: linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px) 34px 0 / 100% 50% no-repeat, linear-gradient(to bottom, transparent calc(50% - 9px), rgba(255,255,255,.05) calc(50% - 9px), rgba(255,255,255,.05) calc(50% - 8px), transparent calc(50% - 8px)); }
+.tlymax, .tlyhalf { position: absolute; left: 0; font-size: 10.5px; color: var(--ink3); } .tlymax { top: -6px; } .tlyhalf { top: calc(50% - 15px); }
+.tlcol { position: relative; display: flex; align-items: flex-end; height: 100%; }
+.tlcol.future { opacity: .3; }
+.tlstack { width: 100%; height: 100%; display: flex; flex-direction: column-reverse; gap: 2px; }
+.tlstack i { background: var(--wc); display: block; min-height: 2px; }
+.tlstack i:last-child { border-radius: 4px 4px 0 0; }
+.tlcol:hover .tlstack i { filter: brightness(1.2); }
+.tlcol.today::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--yellow); }
+.tlx { position: absolute; bottom: -18px; left: 0; font-size: 10.5px; color: var(--ink3); white-space: nowrap; }
+.hmwrap { --cell: 14px; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.hmwrap.quarter { --cell: 26px; }
+.hmdays { display: grid; grid-template-rows: 16px repeat(7, var(--cell)); gap: 3px; font-size: 10px; color: var(--ink3); flex: none; position: sticky; left: 0; z-index: 1; background: var(--card); padding-right: 4px; }
+.hmdays span { line-height: var(--cell); }
+.hmgrid { display: flex; gap: 3px; }
+.hmcol { display: grid; grid-template-rows: 16px repeat(7, var(--cell)); gap: 3px; flex: 0 0 var(--cell); }
+.hmm { font-size: 10px; color: var(--ink3); white-space: nowrap; overflow: visible; }
+.hmc { display: block; background: var(--hc); border-radius: 3px; width: var(--cell); height: var(--cell); }
+.hmc.today { outline: 2px solid var(--yellow); outline-offset: -2px; }
+.hmc.off { background: repeating-linear-gradient(135deg, var(--sunk) 0 3px, #2C2C33 3px 6px); }
+.hmc:hover { outline: 2px solid var(--ink2); outline-offset: -2px; }
+.hmlegend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--ink3); flex-wrap: wrap; }
+.hmlegend i { width: 12px; height: 12px; border-radius: 3px; background: var(--hc); }
+.hmlegend small { margin-left: 8px; }
+.tltable { margin-top: 12px; } .tltable summary { cursor: pointer; font-size: 12.5px; color: var(--ink3); font-weight: 700; }
+.tltable table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.tltable th { text-align: left; color: var(--ink3); font-size: 11px; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.tltable td { padding: 5px 8px; border-bottom: 1px solid var(--line); color: var(--ink2); } .tltable td:nth-child(2) { color: var(--ink); font-weight: 700; white-space: nowrap; }
+.tltip { position: absolute; z-index: 5; pointer-events: none; background: #0E0E11; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; max-width: 320px; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+@media (max-width: 700px) {
+  .tlstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tlrow { grid-template-columns: 36px minmax(0, 1fr) 54px; gap: 6px; }
+  .tltot { white-space: nowrap; font-size: 12px; }
+  .hmwrap.quarter { --cell: 19px; }
+  .tlbars { gap: 2px; padding-left: 28px; }
+}
 .mdsw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
 .mdsw .mdlab { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-right: 2px; }
 .mdsw label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: var(--card); color: var(--ink3); border-radius: 999px; padding: 5px 11px 5px 9px; font: 600 12.5px var(--ui); user-select: none; }
@@ -7099,6 +7162,166 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
   </div>`;
 }
 
+/** 2:14 PM, from minutes after midnight. */
+function clockOf(min: number): string {
+  const m = Math.round(min) % 1440;
+  const h = Math.floor(m / 60), mm = m % 60;
+  return `${h % 12 || 12}:${String(mm).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+const shortDay = (d: string) => new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+/** "VO 2h 10m · Revision 40m", biggest first. */
+function typeSplit(byType: Partial<Record<WorkType, number>>): string {
+  return WORK_TYPES.filter((t) => (byType[t.id] ?? 0) >= 1)
+    .sort((a, b) => byType[b.id]! - byType[a.id]!)
+    .map((t) => `${t.short} ${fmtMin(Math.round(byType[t.id]!))}`)
+    .join(" · ");
+}
+/** Heatmap steps: one hue, darker to brighter as the day holds more. */
+const LOG_HEAT = ["var(--sunk)", "#1D4A3E", "#1F6B52", "#2A9466", "#45BF80", "#8FE8B4"];
+const heatStep = (min: number) => (min < 1 ? 0 : min < 30 ? 1 : min < 60 ? 2 : min < 120 ? 3 : min < 240 ? 4 : 5);
+const HEAT_LABELS = ["none", "under 30m", "30m–1h", "1–2h", "2–4h", "4h+"];
+
+/**
+ * Time logged: what the timer actually saw. The week is a timeline — each day
+ * a lane across the hours, every stretch of work where it happened, in its
+ * kind's colour. A month is a bar a day, split by kind; three months and a
+ * year are a calendar of squares, brighter the more was logged. The same
+ * totals head every range, and everything has a hover.
+ */
+function timeLogPanel(log: NonNullable<MyDayData["log"]>, today: string, now: Date): string {
+  const days = log.days;
+  const past = days.filter((x) => x.day <= today);
+  const total = past.reduce((n, x) => n + x.minutes, 0);
+  const active = past.filter((x) => x.minutes >= 1);
+  const busiest = active.reduce<LoggedDay | null>((b, x) => (!b || x.minutes > b.minutes ? x : b), null);
+  const byType: Partial<Record<WorkType, number>> = {};
+  for (const x of past) for (const [k, v] of Object.entries(x.byType)) byType[k as WorkType] = (byType[k as WorkType] ?? 0) + v!;
+  const off = new Set(log.daysOff);
+  const tabs = LOG_RANGES.map((r) => `<a class="fchip${r.id === log.range ? " on" : ""}" href="/my-day?log=${r.id}#logged">${esc(r.label)}</a>`).join("");
+  const stats = [
+    { n: fmtMin(Math.round(total)), l: "logged" },
+    { n: `${active.length}`, l: `of ${past.length} days with time` },
+    { n: active.length ? fmtMin(Math.round(total / active.length)) : "—", l: "a day, on days worked" },
+    { n: busiest ? fmtMin(Math.round(busiest.minutes)) : "—", l: busiest ? `busiest · ${shortDay(busiest.day)} ${md(busiest.day)}` : "busiest day" },
+  ].map((t) => `<div class="tlstat"><b>${esc(t.n)}</b><span>${esc(t.l)}</span></div>`).join("");
+  const kinds = WORK_TYPES.filter((t) => (byType[t.id] ?? 0) >= 1).sort((a, b) => byType[b.id]! - byType[a.id]!);
+  const mix = total >= 1
+    ? `<div class="tlmix" role="img" aria-label="${esc(`By kind: ${typeSplit(byType)}`)}">${kinds
+        .map((t) => `<i style="--wc:${t.colour};flex:${byType[t.id]!.toFixed(1)}" data-tip="${esc(`${t.label} · ${fmtMin(Math.round(byType[t.id]!))} · ${Math.round((byType[t.id]! / total) * 100)}%`)}"></i>`)
+        .join("")}</div>
+      <div class="tllegend">${kinds.map((t) => `<span style="--wc:${t.colour}"><i></i>${esc(t.label)} <b>${esc(fmtMin(Math.round(byType[t.id]!)))}</b></span>`).join("")}</div>`
+    : "";
+
+  let chart = "";
+  if (log.range === "week") {
+    // The hours worth showing: from the week's earliest start to its latest end, at least 9 to 6.
+    const pieces = days.flatMap((x) => x.pieces);
+    const lo = Math.max(0, Math.min(9 * 60, ...pieces.map((p) => Math.floor(p.from / 60) * 60)));
+    const hi = Math.min(1440, Math.max(18 * 60, ...pieces.map((p) => Math.ceil(p.to / 60) * 60)));
+    const span = hi - lo;
+    const pct = (m: number) => (((m - lo) / span) * 100).toFixed(3);
+    const step = span > 12 * 60 ? 180 : 120;
+    const ticks: number[] = [];
+    for (let m = Math.ceil(lo / step) * step; m <= hi; m += step) ticks.push(m);
+    const hourLabel = (m: number) => { const h = (m / 60) % 24; return `${h % 12 || 12}${h < 12 ? "a" : "p"}`; };
+    const nowMin = (now.getTime() - instantIn(today, "00:00", ORG_TZ)!.getTime()) / 60_000;
+    const rows = days.map((x) => {
+      const future = x.day > today;
+      const blocks = x.pieces
+        .map((p) => {
+          const t = TYPE_BY_ID.get(p.type)!;
+          return `<i class="tlb" style="--wc:${t.colour};left:${pct(p.from)}%;width:max(3px,calc(${(((p.to - p.from) / span) * 100).toFixed(3)}% - 2px))" data-tip="${esc(`${t.label} · ${p.title} · ${clockOf(p.from)}–${clockOf(p.to)} · ${fmtMin(Math.max(1, Math.round(p.to - p.from)))}`)}"></i>`;
+        })
+        .join("");
+      const nowLine = x.day === today && nowMin >= lo && nowMin <= hi ? `<span class="tlnow" style="left:${pct(nowMin)}%"></span>` : "";
+      const note = off.has(x.day) ? `<span class="tlnote">Day off</span>` : future ? "" : x.pieces.length ? "" : `<span class="tlnote">Nothing logged</span>`;
+      return `<div class="tlrow${x.day === today ? " today" : ""}${future ? " future" : ""}${off.has(x.day) ? " off" : ""}">
+        <span class="tlday"><b>${esc(shortDay(x.day))}</b>${esc(md(x.day))}</span>
+        <div class="tllane">${ticks.map((m) => `<span class="tlgrid" style="left:${pct(m)}%"></span>`).join("")}${blocks}${nowLine}${note}</div>
+        <span class="tltot"${x.minutes >= 1 ? ` data-tip="${esc(typeSplit(x.byType))}"` : ""}>${future ? "" : x.minutes >= 1 ? esc(fmtMin(Math.round(x.minutes))) : "—"}</span>
+      </div>`;
+    }).join("");
+    chart = `<div class="tlweek">
+      <div class="tlrow tlaxis"><span></span><div class="tllane">${ticks.map((m) => `<span class="tltick" style="left:${pct(m)}%">${hourLabel(m)}</span>`).join("")}</div><span></span></div>
+      ${rows}</div>`;
+  } else if (log.range === "month") {
+    const max = Math.max(60, ...days.map((x) => x.minutes));
+    const top = Math.ceil(max / 60) * 60;
+    chart = `<div class="tlbars" style="--n:${days.length}">
+      <span class="tlymax">${esc(fmtMin(top))}</span><span class="tlyhalf">${esc(fmtMin(top / 2))}</span>
+      ${days.map((x) => {
+        const segs = WORK_TYPES.filter((t) => (x.byType[t.id] ?? 0) >= 0.5)
+          .map((t) => `<i style="--wc:${t.colour};height:${((x.byType[t.id]! / top) * 100).toFixed(2)}%"></i>`)
+          .join("");
+        const tip = x.day > today ? "" : `${shortDay(x.day)} ${usDate(x.day)} · ${x.minutes >= 1 ? `${fmtMin(Math.round(x.minutes))} — ${typeSplit(x.byType)}` : off.has(x.day) ? "day off" : "nothing logged"}`;
+        const monday = new Date(`${x.day}T12:00:00Z`).getUTCDay() === 1;
+        return `<div class="tlcol${x.day === today ? " today" : ""}${x.day > today ? " future" : ""}"${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="tlstack">${segs}</div>${monday ? `<span class="tlx">${esc(md(x.day))}</span>` : ""}</div>`;
+      }).join("")}
+    </div>`;
+  } else {
+    // Weeks as columns, Monday at the top — a calendar of squares.
+    const weeks: LoggedDay[][] = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    let lastMonth = "";
+    let lastLabel = -9;
+    const cols = weeks.map((w, wi) => {
+      const month = w[0]!.day.slice(0, 7);
+      // A month's name over its first week, unless the last name is too close to fit.
+      const show = month !== lastMonth && wi - lastLabel >= 3;
+      const label = show ? new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(new Date(`${w[0]!.day}T12:00:00Z`)) : "";
+      if (show) lastLabel = wi;
+      lastMonth = month;
+      return `<div class="hmcol"><span class="hmm">${esc(label)}</span>${w.map((x) => {
+        const step = heatStep(x.minutes);
+        const tip = `${shortDay(x.day)} ${usDate(x.day)} · ${x.minutes >= 1 ? `${fmtMin(Math.round(x.minutes))} — ${typeSplit(x.byType)}` : off.has(x.day) ? "day off" : "nothing logged"}`;
+        return `<i class="hmc${x.day === today ? " today" : ""}${off.has(x.day) ? " off" : ""}" style="--hc:${LOG_HEAT[step]}" data-tip="${esc(tip)}"></i>`;
+      }).join("")}</div>`;
+    }).join("");
+    chart = `<div class="hmwrap ${log.range}"><div class="hmdays"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="hmgrid">${cols}</div></div>
+      <script>(function () { var w = document.querySelector("#logged .hmwrap"); if (w) w.scrollLeft = w.scrollWidth; })();</script>
+      <div class="hmlegend"><span>Less</span>${LOG_HEAT.map((c, i) => `<i style="--hc:${c}" title="${HEAT_LABELS[i]}"></i>`).join("")}<span>More</span><small>${HEAT_LABELS.slice(1).join(" · ")}</small></div>`;
+  }
+
+  const table = log.range === "week"
+    ? ""
+    : `<details class="tltable"><summary>As a table</summary><table><thead><tr><th>Day</th><th>Logged</th><th>By kind</th></tr></thead><tbody>${[...past]
+        .reverse()
+        .filter((x) => x.minutes >= 1)
+        .map((x) => `<tr><td>${esc(`${shortDay(x.day)} ${usDate(x.day)}`)}</td><td>${esc(fmtMin(Math.round(x.minutes)))}</td><td>${esc(typeSplit(x.byType))}</td></tr>`)
+        .join("") || `<tr><td colspan="3">Nothing logged.</td></tr>`}</tbody></table></details>`;
+
+  return `<section class="panel tlog" id="logged">
+    <div class="fhead"><h2>Time logged <span class="sub">— what the timer saw, ${log.range === "week" ? "this week" : `the last ${log.range === "month" ? "5 weeks" : log.range === "quarter" ? "13 weeks" : "year"}`}</span></h2><div class="fchips">${tabs}</div></div>
+    <div class="tlstats">${stats}</div>
+    ${mix}
+    ${total >= 1 || log.range === "week" ? chart : `<div class="empty">No time logged in this range yet. Start a timer with ▶ on any piece of work.</div>`}
+    ${table}
+    <div class="tltip" role="tooltip" hidden></div>
+    <script>
+    (function () {
+      var box = document.getElementById("logged"), tip = box.querySelector(".tltip");
+      function show(el, x, y) {
+        tip.textContent = el.getAttribute("data-tip"); tip.hidden = false;
+        var r = box.getBoundingClientRect(), w = tip.offsetWidth;
+        tip.style.left = Math.max(8, Math.min(r.width - w - 8, x - r.left - w / 2)) + "px";
+        tip.style.top = (y - r.top - tip.offsetHeight - 12) + "px";
+      }
+      box.addEventListener("mousemove", function (e) {
+        var el = e.target.closest("[data-tip]");
+        if (el && el.getAttribute("data-tip")) show(el, e.clientX, e.clientY); else tip.hidden = true;
+      });
+      box.addEventListener("mouseleave", function () { tip.hidden = true; });
+      box.addEventListener("click", function (e) {
+        var el = e.target.closest("[data-tip]");
+        if (!el) { tip.hidden = true; return; }
+        var r = el.getBoundingClientRect(); show(el, r.left + r.width / 2, r.top);
+      });
+    })();
+    </script>
+  </section>`;
+}
+
 /** My Day's category switches, and whether batches show one row per upload. */
 function mydaySwitches(hidden: string[], exploded: boolean): string {
   return `<form method="post" action="/my-day/show" class="mdsw" aria-label="What My Day shows">
@@ -7189,6 +7412,8 @@ export interface MyDayData {
   hidden?: string[];
   /** Batches shown as one row per upload. */
   exploded?: boolean;
+  /** Time logged over a range: the week's timeline, or a month, quarter or year. */
+  log?: { range: LogRange; days: LoggedDay[]; daysOff: string[] };
 }
 
 /**
@@ -7289,6 +7514,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     ${focus}
     <div class="mydaygrid">${todayList}${week}</div>
     ${doneList}
+    ${d.log ? timeLogPanel(d.log, d.today, d.now) : ""}
     ${ahead}`,
   );
 }

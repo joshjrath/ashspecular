@@ -62,7 +62,7 @@ import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelE
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
-import { taskItem, isRequired, explodeBatch, shownTypes, spreadDayOff } from "../src/web/work.js";
+import { taskItem, isRequired, explodeBatch, shownTypes, spreadDayOff, logDays, logByDay } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
@@ -1882,6 +1882,19 @@ const comp = { id: 1, kind: "movie" as const, number: 7, title: "What If X? (Ful
 t("the output block: DATE | MOVIE ### | TITLE, the list in play order, the total", outputBlock(comp, 600).split("\n"), ["9/29/2026 | MOVIE 007 | What If X? (Full Movie)", "", "1. B — ~10:00 (est.)", "2. A — 20:00", "", "Total Source Runtime: 30:00 (some estimated)"]);
 t("the editor package reads as a script", packageBlock(comp), "INTRO\nIntro.\n\n[ 1. B ]\n\nTRANSITION 1\nInto A.\n\n[ 2. A ]");
 t("a Sleep's package is the editor notes", packageBlock({ ...comp, kind: "sleep" }).startsWith("Editor Notes:\nKeep stories back to back"), true);
+
+section("Time logged");
+t("ranges: this week Mon–Sun; the rest end today in whole weeks", [logDays("week", "2026-09-30")[0], logDays("week", "2026-09-30").at(-1), logDays("month", "2026-09-30").length, logDays("quarter", "2026-09-30")[0], logDays("year", "2026-09-30").length], ["2026-09-28", "2026-10-04", 31, "2026-07-06", 367]);
+// 11:30 PM ET on 9/28 to 12:45 AM ET on 9/29: split at midnight.
+const lg = logByDay([
+  { start: new Date("2026-09-29T03:30:00Z"), end: new Date("2026-09-29T04:45:00Z"), type: "vo", title: "Late VO" },
+  { start: new Date("2026-09-29T18:00:00Z"), end: new Date("2026-09-29T18:20:00Z"), type: "revision", title: "Rev" },
+], ["2026-09-28", "2026-09-29", "2026-09-30"]);
+t("a timer running past midnight counts toward both days", lg.map((x) => [x.day, Math.round(x.minutes)]), [["2026-09-28", 30], ["2026-09-29", 65], ["2026-09-30", 0]]);
+t("…each stretch sits at its time of day, by kind", [lg[0]!.pieces[0]!.from, lg[1]!.pieces.map((p) => [p.from, p.type]), lg[1]!.byType], [1410, [[0, "vo"], [840, "revision"]], { vo: 45, revision: 20 }]);
+const tlPage = renderMyDay(shellFix, { now: wNow, today: wToday, required: [], ahead: [], done: [], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 },
+  log: { range: "week", days: logByDay([{ start: new Date("2026-09-27T14:00:00Z"), end: new Date("2026-09-27T15:10:00Z"), type: "vo", title: "Morning VO" }], logDays("week", "2026-09-27")), daysOff: [] } });
+t("My Day: the week's timeline, a block where the work happened, tabs for longer ranges", [tlPage.includes('id="logged"'), (tlPage.match(/class="tlb"/g) ?? []).length, tlPage.includes("Morning VO · 10:00 AM–11:10 AM · 1h 10m"), tlPage.includes('href="/my-day?log=year#logged"'), [...tlPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } })], [true, 1, true, true, true]);
 
 section("Posting check");
 t("titles: the same video reads as the same, a different one doesn't", [titleOverlap("What If Freddy Joined The Avengers?", "What If FREDDY Joined the Avengers? (FNAF)") >= 0.5, titleOverlap("What If Batman Was In The Boys?", "What If Spider-Man Was In The Boys?") >= 0.5], [true, false]);

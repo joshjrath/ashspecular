@@ -84,3 +84,28 @@ export async function untrackedKeys(): Promise<Set<string>> {
 export async function forgetUntracked(key: string): Promise<void> {
   await pool.query("DELETE FROM untracked_done WHERE key = $1", [key]);
 }
+
+/**
+ * Every stretch of tracked time overlapping a window, with what it was on:
+ * the record's kind, category, channel and batch, or the task — enough to
+ * say what kind of work it was. A running timer counts up to now.
+ */
+export async function loggedBetween(from: Date, to: Date): Promise<Array<{
+  start: Date; end: Date; recordId: number | null; taskId: number | null;
+  kind: string | null; category: string | null; channel: string | null; batchNo: number | null; title: string | null; code: string | null;
+}>> {
+  const { rows } = await pool.query(
+    `SELECT e.started_at, COALESCE(e.ended_at, now()) AS ended_at, e.record_id, e.task_id,
+            r.kind, r.category, r.channel, r.batch_no, COALESCE(r.title, t.title) AS title, r.code
+       FROM time_entries e
+       LEFT JOIN records r ON r.id = e.record_id
+       LEFT JOIN tasks t ON t.id = e.task_id
+      WHERE e.started_at < $2 AND COALESCE(e.ended_at, now()) > $1
+      ORDER BY e.started_at`,
+    [from, to],
+  );
+  return rows.map((r) => ({
+    start: r.started_at, end: r.ended_at, recordId: r.record_id === null ? null : Number(r.record_id), taskId: r.task_id === null ? null : Number(r.task_id),
+    kind: r.kind, category: r.category, channel: r.channel, batchNo: r.batch_no === null ? null : Number(r.batch_no), title: r.title, code: r.code,
+  }));
+}
