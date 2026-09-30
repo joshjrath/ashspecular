@@ -2423,6 +2423,10 @@ const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; ico
     icon: `<path d="M15.2 12.6A6.2 6.2 0 0 1 7.4 4.8a6.2 6.2 0 1 0 7.8 7.8z"/>`,
   },
   {
+    kind: "missed", label: "Not posted", colour: "#F08C3A",
+    icon: `<rect x="3.5" y="4.5" width="13" height="12" rx="2"/><path d="M3.5 8.5h13M7 3v3M13 3v3"/><path d="m8 11 4 3M12 11l-4 3"/>`,
+  },
+  {
     kind: "gap", label: "Nothing assigned", colour: "#E2574C",
     icon: `<rect x="3.5" y="4.5" width="13" height="12" rx="2" stroke-dasharray="2.2 1.8"/><path d="M3.5 8.5h13M7 3v3M13 3v3"/><path d="M10 10.8v2.4"/><circle cx="10" cy="15" r=".5" fill="currentColor"/>`,
   },
@@ -2460,6 +2464,10 @@ function bell(notices: Notice[], seen: number): string {
       }
       case "airing": return `Airs ${esc(relativeDay(r.airDate!))} · ${esc(usDate(r.airDate!))}`;
       case "new": return `New ${esc(r.stage ?? "assignment")}${r.code ? ` · ${esc(r.code)}` : ""}`;
+      case "missed":
+        return n.missed
+          ? `Not posted ${esc(usDate(n.missed.day))} · pushed to ${esc(usDate(n.missed.pushedTo))}${n.missed.moved ? ` with ${n.missed.moved} more` : ""}`
+          : "Not posted";
       case "dayoff": {
         const due = r.voDue ?? r.deadline ?? r.scriptDue;
         return `Day off ${esc(usDate(dayOf(r.offFrom ?? n.at)))} · now due ${due ? esc(renderIn(due, ORG_TZ, "ET")) : "the day before"}`;
@@ -3613,6 +3621,8 @@ export function renderRecord(
     review?: RevisionReview | null;
     frameio?: boolean;
     summaryError?: string;
+    /** The posting check pushed it: when it was due, where it went. */
+    missed?: { id: number; day: string; pushedTo: string; moved: number } | null;
   } = {},
 ): string {
   const later = extra.later ?? 0;
@@ -3688,6 +3698,14 @@ export function renderRecord(
         }
       </form>
     </section>
+    ${
+      extra.missed && !r.uploadedAt
+        ? `<div class="mtoast missed" role="status"><span>Not seen on ${esc(r.channel ?? "its channel")} on ${esc(usDate(extra.missed.day))}, so it was pushed to ${esc(usDate(extra.missed.pushedTo))}${
+            extra.missed.moved ? ` with ${extra.missed.moved} later video${extra.missed.moved === 1 ? "" : "s"}` : ""
+          }.</span>
+             <form method="post" action="/missed/${extra.missed.id}/undo"><button title="Put the schedule back as it was and mark this uploaded">It was posted</button></form></div>`
+        : ""
+    }
     ${
       extra.moved
         ? `<div class="mtoast" role="status"><span>${esc(extra.moved.text)}</span>

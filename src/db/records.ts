@@ -835,17 +835,20 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
  *   airing    a video airs today or tomorrow        — the start of the day before
  *   new       an assignment was filed (last 3 days) — when it was filed
  *   dayoff    a day off brought a deadline forward  — when the day was marked
+ *   missed    the posting check found it not posted — when it was pushed
  *
  * Each carries the moment it happened, so "unread" is simply anything after
  * the last time the bell was opened. Recurring batches are left out: they
  * fall due every evening and would drown the rest.
  */
-export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "gap" | "update";
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "missed" | "gap" | "update";
 /** Something about one piece of work. */
 export interface RecordNotice {
   kind: Exclude<NoticeKind, "update" | "gap">;
   at: Date;
   record: StoredRecord;
+  /** A "missed" notice: the day it was meant to post, and where it was pushed. */
+  missed?: { id: number; day: string; pushedTo: string; moved: number; undone: boolean };
 }
 /** A change to the board itself: "What's new". */
 export interface UpdateNotice {

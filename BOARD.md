@@ -301,6 +301,29 @@ above it.
 Every record's page also has an **air date box** — for a phone, where dragging
 is awkward, or for a date weeks out.
 
+**The daily posting check.** Once a day the board checks whether each video
+scheduled to air yesterday actually went up on its channel, using the same
+YouTube reads as the Uploads tracker. It runs after the hourly read, once it's
+past 1 AM ET (so a video posted late at night has had time to reach the feed),
+and it judges each channel as soon as that channel has been read without an
+error. A channel that can't be read is left alone and tried again the next
+hour. It is never pushed on a guess, and each channel's day is judged only
+once.
+
+- **It went up.** The video is marked uploaded (green on the calendar) and
+  linked to the upload it matched. Matching goes by title first. If the title
+  changed at upload, any unclaimed upload from that day stands in for it.
+- **It didn't.** It's pushed to today, and the rest of that channel's schedule
+  moves a day with it (the same cascade as dragging it on the calendar). You
+  get a **Not posted** item in the bell and a message in the digest channel on
+  Discord. If the video was actually posted, **It was posted** on its page puts
+  the schedule back exactly as it was and marks it uploaded.
+- A video still missing the next day is pushed again, one day at a time.
+- Daily batches (Bits, Reading, the Specular movie) aren't checked. Nor are
+  channels with no YouTube link on the Uploads page, or paused and removed
+  videos. Only yesterday is ever judged, so switching this on didn't push any
+  history.
+
 **Days off.** A day off is a day no work can be done, so the work due on it is
 **spread over the working days from tomorrow up to it**, not piled onto the
 day before. Each of those days takes an even share (a day off in 5 days with

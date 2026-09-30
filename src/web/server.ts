@@ -89,6 +89,7 @@ import { readDoc } from "./gdoc.js";
 import { clearTime, forgetUntracked, minutesByDay, minutesSpent, runningTimer, startTaskTimer, startTimer, stopTimer, taskMinutesSpent, untrackedKeys } from "../db/timers.js";
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
+import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postcheck.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { REPEAT, type Repeat } from "../tasks/repeat.js";
@@ -419,10 +420,22 @@ async function withScores(list: StoredRecord[]): Promise<StoredRecord[]> {
   return list.map((r) => (scores.has(r.id) ? { ...r, reviewScore: scores.get(r.id)! } : r));
 }
 
+/** The posting check's pushes from the last week, for the bell. */
+async function missedNotices(): Promise<Notice[]> {
+  if (!hasDatabase) return [];
+  const list = (await listMissed({ days: 7 }).catch(() => [])).filter((m) => !m.undoneAt);
+  const out: Notice[] = [];
+  for (const m of list) {
+    const record = await getRecordById(m.recordId);
+    if (record) out.push({ kind: "missed", at: m.at, record, missed: { id: m.id, day: m.day, pushedTo: m.pushedTo, moved: m.moved, undone: false } });
+  }
+  return out;
+}
+
 /** Everything for the bell, newest first. */
 async function allNotices(): Promise<Notice[]> {
-  const [work, gaps] = await Promise.all([listNotices(ORG_TZ), currentGaps()]);
-  return [...work, ...gapNotices(gaps), ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
+  const [work, gaps, missed] = await Promise.all([listNotices(ORG_TZ), currentGaps(), missedNotices()]);
+  return [...work, ...missed, ...gapNotices(gaps), ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
 }
 
 export async function startWeb(): Promise<void> {
@@ -1608,6 +1621,7 @@ export async function startWeb(): Promise<void> {
           review,
           frameio: Boolean(process.env.FRAMEIO_TOKEN?.trim()) && record.links.some((l) => l.kind === "frameio"),
           summaryError: (request.query.sumerr ?? "").slice(0, 300),
+          missed: hasDatabase ? (await listMissed({ days: 30, recordId: record.id }).catch(() => [])).filter((m) => !m.undoneAt)[0] ?? null : null,
         }),
       );
   });
@@ -2082,11 +2096,55 @@ export async function startWeb(): Promise<void> {
     return reply.redirect(backTo(request.headers.referer, "/recurring"));
   });
 
+  /**
+   * The daily posting check, after each hourly read: yesterday's scheduled
+   * videos against what went up. Missed ones are pushed a day, the rest of
+   * the channel with them, and posted to the digest channel on Discord.
+   */
+  async function runPostCheck(): Promise<void> {
+    const r = await checkPosts(async (record, to, alone) => {
+      const m = await moveWithRest(record, to, "posting", alone);
+      return { ok: m.ok, moved: m.plan.moves.length };
+    });
+    if (r.checked.length) {
+      console.log(`[posts] ${r.day}: ${r.checked.length} channels checked, ${r.posted.length} posted, ${r.missed.length} missed${r.waiting.length ? `, waiting on ${r.waiting.join(", ")}` : ""}`);
+      gapCache = null;
+    }
+    if (!r.missed.length || !config.digestChannelId) return;
+    try {
+      const { client } = await import("../bot/client.js");
+      if (!client.isReady()) return;
+      const channel = await client.channels.fetch(config.digestChannelId);
+      if (!channel?.isSendable()) return;
+      const lines = await Promise.all(
+        r.missed.map(async (m) => {
+          const rec = await getRecordById(m.recordId);
+          const link = config.publicUrl ? ` · [open](${config.publicUrl}/r/${m.recordId})` : "";
+          return missedLine(m, rec ? displayTitle(rec) : `#${m.recordId}`, usDate) + link;
+        }),
+      );
+      await channel.send({
+        content: `📅 **Not posted yesterday** — ${r.missed.length === 1 ? "pushed a day" : `${r.missed.length} videos pushed a day`}\n${lines.join("\n")}\nPosted after all? Open it and press *It was posted* to put the schedule back.`,
+        allowedMentions: { parse: [] },
+      });
+    } catch (err) {
+      console.error("[posts] couldn't post to Discord:", err);
+    }
+  }
+
+  // It went up after all: put the channel's schedule back and mark it uploaded.
+  app.post<{ Params: { id: string } }>("/missed/:id/undo", async (request, reply) => {
+    const recordId = hasDatabase ? await undoMissed(Number(request.params.id), restoreMoves) : null;
+    gapCache = null;
+    return reply.redirect(recordId ? `/r/${recordId}` : backTo(request.headers.referer, "/"));
+  });
+
   // Read YouTube hourly (at :07), and once shortly after boot.
   if (hasDatabase) {
     const read = (why: string) =>
       syncUploads()
         .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
+        .then(() => runPostCheck())
         .then(() => announceBreakouts())
         .then((n) => n && console.log(`[uploads] announced ${n} breakout${n === 1 ? "" : "s"}`))
         .then(() => sampleAvatars())

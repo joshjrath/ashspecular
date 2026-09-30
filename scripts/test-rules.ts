@@ -61,6 +61,7 @@ import { channelGaps, uploadGaps } from "../src/web/gaps.js";
 import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelEstimate, taskCategoryEstimate, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/page.js";
+import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, explodeBatch, shownTypes, spreadDayOff } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
@@ -524,7 +525,7 @@ t("no separate pinned section", pages.dashboard.includes("group pinned"), false)
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
 t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
-t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 9);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 10);
 t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
 t("bell: each kind has its own icon colour",
   [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
@@ -1881,6 +1882,17 @@ const comp = { id: 1, kind: "movie" as const, number: 7, title: "What If X? (Ful
 t("the output block: DATE | MOVIE ### | TITLE, the list in play order, the total", outputBlock(comp, 600).split("\n"), ["9/29/2026 | MOVIE 007 | What If X? (Full Movie)", "", "1. B — ~10:00 (est.)", "2. A — 20:00", "", "Total Source Runtime: 30:00 (some estimated)"]);
 t("the editor package reads as a script", packageBlock(comp), "INTRO\nIntro.\n\n[ 1. B ]\n\nTRANSITION 1\nInto A.\n\n[ 2. A ]");
 t("a Sleep's package is the editor notes", packageBlock({ ...comp, kind: "sleep" }).startsWith("Editor Notes:\nKeep stories back to back"), true);
+
+section("Posting check");
+t("titles: the same video reads as the same, a different one doesn't", [titleOverlap("What If Freddy Joined The Avengers?", "What If FREDDY Joined the Avengers? (FNAF)") >= 0.5, titleOverlap("What If Batman Was In The Boys?", "What If Spider-Man Was In The Boys?") >= 0.5], [true, false]);
+const pcm = matchPosts(
+  [{ id: 1, title: "What If Freddy Joined The Avengers?" }, { id: 2, title: "Could Springtrap Survive Resident Evil?" }, { id: 3, title: "What If Foxy Was In The Boys?" }],
+  [{ videoId: "v1", title: "Springtrap Vs Umbrella Corp" }, { videoId: "v2", title: "What If Freddy Joined the Avengers? (FNAF)" }],
+);
+t("matched by title first, a retitled upload stands in for the next, the rest missed", [[...pcm.posted.entries()], pcm.missed], [[[1, "v2"], [2, "v1"]], [3]]);
+t("nothing uploaded: everything missed", matchPosts([{ id: 7, title: "X" }], []).missed, [7]);
+const missedPage = renderRecord(shellFix, mk({ id: 240, category: "stories", channel: "Specular FNAF", title: "Foxy In The Boys", airDate: "2026-09-30" }), { missed: { id: 5, day: "2026-09-29", pushedTo: "2026-09-30", moved: 2 } });
+t("the record says it was pushed, with It was posted to put it back", [missedPage.includes("Not seen on Specular FNAF on 9/29/2026, so it was pushed to 9/30/2026 with 2 later videos"), missedPage.includes('action="/missed/5/undo"')], [true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

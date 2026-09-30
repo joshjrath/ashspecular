@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-30-posting-check",
+    title: "Daily posting check: missed videos push themselves a day",
+    changes: [
+      { text: "Every morning after 1 AM ET, each video scheduled for yesterday is checked against its channel's uploads. Ones that went up are marked uploaded and linked to the video.", href: "/calendar" },
+      { text: "A video that wasn't posted moves to today, and the rest of its channel's schedule moves a day with it. You're told in the bell (Not posted) and in the digest channel on Discord.", href: "/calendar" },
+      { text: "If it was posted after all, It was posted on its page puts everything back.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-09-28-myday-switches-spread-days-off",
     title: "My Day switches and exploded batches; days off spread their work",
     changes: [
