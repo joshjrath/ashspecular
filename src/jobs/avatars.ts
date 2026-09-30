@@ -189,6 +189,30 @@ export function apart(colour: string, others: string[], min = 10): string {
   return tries.reduce((best, x) => (nearest(x.c) > nearest(best.c) ? x : best), tries[0]!).c;
 }
 
+/** "#RRGGBB" from hue (0–360), saturation and lightness (0–1). */
+function hsl(h: number, sat: number, l: number): string {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return `#${[f(0), f(8), f(4)].map((x) => Math.round(x * 255).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
+/**
+ * A colour for a new channel: of a wheel of mid-tone candidates, the one
+ * furthest from every colour already in use, so it reads as its own.
+ */
+export function distinctColour(taken: string[]): string {
+  let best = { c: "#8A8A93", d: -1 };
+  for (let h = 0; h < 360; h += 8) {
+    for (const [sat, l] of [[0.62, 0.5], [0.55, 0.62], [0.7, 0.42]] as const) {
+      const c = hsl(h, sat, l);
+      const d = taken.length ? Math.min(...taken.map((t) => deltaE(c, t))) : 100;
+      if (d > best.d) best = { c, d };
+    }
+  }
+  return best.c;
+}
+
 /**
  * Every channel's colour as it stands: set by hand, else sampled from its
  * avatar (kept apart from the rest), else the catalog's. Applied to the

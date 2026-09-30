@@ -135,6 +135,11 @@ export function parseAssignment(raw: string): Extraction | null {
     ? CHANNELS.find((c) => {
         const t = tag.toLowerCase();
         return c.name.toLowerCase() === t || c.name.toLowerCase() === `specular ${t}`;
+      }) ??
+      // A channel renamed in Settings still answers to its earlier names.
+      CHANNELS.find((c) => {
+        const t = tag.toLowerCase();
+        return (c.formerly ?? []).some((n) => n.toLowerCase() === t || n.toLowerCase() === `specular ${t}`);
       })
     : undefined;
 

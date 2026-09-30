@@ -14,9 +14,11 @@ import { openBatchesFor } from "../jobs/batches.js";
 import { VO_WPM } from "../web/work.js";
 
 /** Where each kind posts. */
-export const COMPILATION_CHANNEL: Record<Kind, string> = { movie: "Specular", sleep: "Specular Sleep" };
+/** The channel each kind posts on, by id: whatever it's called now. */
+const COMPILATION_CHANNEL_ID: Record<Kind, string> = { movie: "main", sleep: "sleep" };
+export const compilationChannel = (kind: Kind): string => CHANNELS.find((c) => c.id === COMPILATION_CHANNEL_ID[kind])?.name ?? (kind === "movie" ? "Specular" : "Specular Sleep");
 /** The channels whose long-form uploads are sources: every Stories channel. */
-export const SOURCE_CHANNELS = CHANNELS.filter((c) => c.category === "stories").map((c) => c.name);
+export const sourceChannels = () => CHANNELS.filter((c) => c.category === "stories").map((c) => c.name);
 
 const D = (col: string, as: string) => `to_char(${col}, 'YYYY-MM-DD') AS ${as}`;
 
@@ -51,7 +53,7 @@ export async function loadCatalog(): Promise<{ sources: Source[]; excluded: Arra
     pool.query(
       `SELECT video_id, title, channel, ${D("published_at AT TIME ZONE 'UTC'", "day")}, views, duration_s, duration_source
          FROM uploads WHERE channel = ANY($1) AND url NOT LIKE '%/shorts/%'`,
-      [SOURCE_CHANNELS],
+      [sourceChannels()],
     ),
     pool.query(
       `SELECT s.video_id, c.kind, COUNT(*) AS n FROM compilation_sources s JOIN compilations c ON c.id = s.compilation_id
@@ -144,11 +146,11 @@ export async function syncPosted(catalog: Source[]): Promise<number> {
     `SELECT u.video_id, u.title, u.channel, ${D("u.published_at AT TIME ZONE 'UTC'", "day")}
        FROM uploads u WHERE u.channel = ANY($1) AND u.url NOT LIKE '%/shorts/%'
         AND NOT EXISTS (SELECT 1 FROM compilations c WHERE c.upload_video_id = u.video_id)`,
-    [Object.values(COMPILATION_CHANNEL)],
+    [[compilationChannel("movie"), compilationChannel("sleep")]],
   );
   let added = 0;
   for (const r of rows) {
-    const kind: Kind = r.channel === COMPILATION_CHANNEL.movie ? "movie" : "sleep";
+    const kind: Kind = r.channel === compilationChannel("movie") ? "movie" : "sleep";
     // One this board planned, now uploaded: same title, planned for on or before the day it went up.
     const planned = await pool.query(
       `SELECT id FROM compilations WHERE kind = $1 AND status = 'planned' AND upload_video_id IS NULL
@@ -235,17 +237,17 @@ export async function planCompilation(pick: Pick, slot: string): Promise<number>
   }
   let recordId: number | null = null;
   if (pick.kind === "movie") {
-    await openBatchesFor(slot, (c) => c.name === COMPILATION_CHANNEL.movie).catch(() => null);
+    await openBatchesFor(slot, (c) => c.id === COMPILATION_CHANNEL_ID.movie).catch(() => null);
     const { rows } = await pool.query(
       "UPDATE records SET title = $2, updated_at = now() WHERE channel = $1 AND batch_no IS NOT NULL AND air_date = $3::date RETURNING id",
-      [COMPILATION_CHANNEL.movie, pick.title, slot],
+      [compilationChannel("movie"), pick.title, slot],
     );
     recordId = rows[0] ? Number(rows[0].id) : null;
   } else {
     const { rows } = await pool.query(
       `INSERT INTO records (kind, category, channel, title, air_date, deadline, vo_source, status, parsed_by, confidence, source_message_id, raw_content, note)
        VALUES ('assignment', 'movies', $1, $2, $3, $4, 'none', 'open', 'compilation', 1, $5, '', $6) RETURNING id`,
-      [COMPILATION_CHANNEL.sleep, pick.title, slot, instantIn(slot, DEADLINE_TIME, ORG_TZ), `compilation:${id}`, `Sleep compilation — ${pick.sources.length} sources, from Story Lab`],
+      [compilationChannel("sleep"), pick.title, slot, instantIn(slot, DEADLINE_TIME, ORG_TZ), `compilation:${id}`, `Sleep compilation — ${pick.sources.length} sources, from Story Lab`],
     );
     recordId = Number(rows[0].id);
   }

@@ -19,27 +19,17 @@
  * another model answers in the same call.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { ClaudeError as AnalysisError, askClaude, canUseClaude, type Usage } from "../ai/claude.js";
 import { z } from "zod";
 import { CLASSIFICATION_IDS, COMEDY_ENGINES } from "./types.js";
 import type { HistoryItem } from "./similar.js";
 
 export const ideasModel = () => process.env.IDEAS_MODEL?.trim() || process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
-export const canAnalyze = () => Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+export const canAnalyze = canUseClaude;
 
-/** Models that take the server-side refusal fallback. */
-const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
-
-let client: Anthropic | null = null;
-
-export interface Usage { input: number; output: number; cacheRead: number }
-
+export type { Usage };
 /** Why an analysis failed, and whether trying again later could help. */
-export class AnalysisError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
-    super(message);
-  }
-}
+export { AnalysisError };
 
 export interface ChannelHint { channel: string; tags: string[] }
 const channelList = (channels: ChannelHint[]) =>
@@ -201,43 +191,14 @@ function historyList(history: Array<HistoryItem & { id: string }>): string {
 
 // ── calling Claude ─────────────────────────────────────────────────────────
 
-async function ask<T>(opts: {
+function ask<T>(opts: {
   system: string;
   schema: z.ZodType<T>;
   effort: "low" | "medium";
   maxTokens: number;
   content: Anthropic.Beta.BetaContentBlockParam[];
 }): Promise<{ parsed: T; model: string; usage: Usage }> {
-  if (!canAnalyze()) throw new AnalysisError("ANTHROPIC_API_KEY isn't set.", false);
-  client ??= new Anthropic();
-  const model = ideasModel();
-  let response;
-  try {
-    response = await client.beta.messages.parse({
-      model,
-      max_tokens: opts.maxTokens,
-      ...(FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
-      output_config: { effort: opts.effort, format: betaZodOutputFormat(opts.schema) },
-      messages: [{ role: "user", content: opts.content }],
-    });
-  } catch (err) {
-    if (err instanceof Anthropic.BadRequestError) throw new AnalysisError(`Claude couldn't take this request: ${err.message}`, false);
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) throw new AnalysisError("Claude didn't accept ANTHROPIC_API_KEY.", false);
-    if (err instanceof Anthropic.RateLimitError) throw new AnalysisError("Claude's rate limit — trying again shortly.", true);
-    if (err instanceof Anthropic.APIConnectionError) throw new AnalysisError("Couldn't reach Claude — trying again shortly.", true);
-    if (err instanceof Anthropic.APIError) throw new AnalysisError(`Claude answered ${err.status ?? "an error"} — trying again shortly.`, (err.status ?? 500) >= 500);
-    throw new AnalysisError(err instanceof Error ? err.message : String(err), true);
-  }
-  const usage: Usage = {
-    input: response.usage.input_tokens ?? 0,
-    output: response.usage.output_tokens ?? 0,
-    cacheRead: response.usage.cache_read_input_tokens ?? 0,
-  };
-  if (response.stop_reason === "refusal") throw new AnalysisError("Claude declined to analyse this post.", false);
-  if (response.stop_reason === "max_tokens") throw new AnalysisError("The analysis ran too long and was cut off.", true);
-  if (!response.parsed_output) throw new AnalysisError("Claude's answer couldn't be read.", true);
-  return { parsed: response.parsed_output as T, model: response.model ?? model, usage };
+  return askClaude({ ...opts, model: ideasModel(), what: "analyse this post" });
 }
 
 /** The quick look at a batch of posts. */

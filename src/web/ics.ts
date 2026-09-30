@@ -179,4 +179,4 @@ export function buildIcs(
 }
 
 /** Channel names for the subscribe panel's category checkboxes. */
-export const FEED_CATEGORIES = CATEGORIES.map((c) => ({ id: c.id, label: c.label, channels: CHANNELS.filter((ch) => ch.category === c.id).length }));
+export const feedCategories = () => CATEGORIES.map((c) => ({ id: c.id, label: c.label, channels: CHANNELS.filter((ch) => ch.category === c.id).length }));

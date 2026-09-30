@@ -43,6 +43,8 @@ import type { RevisionReview } from "../db/revisions.js";
 import { severityOf, themeLabel } from "../revisions/score.js";
 import type { ChannelHistory, HistorySort } from "../revisions/history.js";
 import type { Card as IdeaCard, IdeaMark, Neighbour } from "./stories/writenext.js";
+import { focusSource, type ChannelProfile, type SetFocus, type focusChoices } from "./stories/domain.js";
+import type { AiIdeaRow } from "../db/storylab.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
@@ -187,6 +189,21 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .colrow .nm { font-weight: 700; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .colrow .src { color: var(--ink3); font-size: 12px; }
 .colrow .src a { color: #9FDDF4; }
+.colrow .chname { min-width: 0; width: 100%; padding: 4px 8px; margin: 0 0 2px -8px; border: 1px solid transparent; border-radius: 8px;
+  border-bottom: 1px dashed #4A4A55; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 13.5px; }
+.colrow .chname:hover { border-color: var(--line); }
+.colrow .chname:focus { border-color: var(--yellow); background: var(--sunk); outline: none; }
+.setsave .seterr { color: #FF8A80; font-weight: 700; font-size: 13.5px; }
+.chaddrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 12px; }
+.chaddrow label { display: flex; flex-direction: column; gap: 4px; color: var(--ink3); font-size: 12px; font-weight: 600; }
+.chaddrow input:not([type=color]), .chaddrow select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk);
+  color: var(--ink); font: inherit; font-size: 14px; }
+.chaddrow input[name=name] { width: min(260px, 70vw); }
+.chaddrow input[name=units] { width: 90px; }
+.chaddrow .chcol input { width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.chaddrow .chcol input::-webkit-color-swatch-wrapper { padding: 0; }
+.chaddrow .chcol input::-webkit-color-swatch { border: 1px solid rgba(255,255,255,.28); border-radius: 50%; }
+.chaddrow .chcol input::-moz-color-swatch { border: 1px solid rgba(255,255,255,.28); border-radius: 50%; }
 .linkbtn { border: 0; background: none; padding: 0; margin-left: 4px; color: #9FDDF4; font: inherit; cursor: pointer; text-decoration: underline; }
 .dicebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin: 10px 0 14px; }
 .dgroups { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1698,6 +1715,26 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .wnbucket ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .wnbucket li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .wnbucket li a { color: var(--ink); font-weight: 600; } .wnbucket li a:hover { text-decoration: underline; }
+.wnbucket li.wnbw { align-items: flex-start; }
+.wnbucket li.wnbw details { flex: 1; min-width: 0; }
+.wnbucket li.wnbw summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.wnbucket li.wnbw p { margin: 6px 0 4px; color: var(--ink2); font-size: 12.5px; }
+.ikind.written { color: #F3C6FF; }
+.wncard.written .iidea { color: #fff; }
+.wnbeats { margin: 4px 0 10px; padding-left: 20px; color: var(--ink2); font-size: 13px; line-height: 1.5; }
+.wnbeats li { margin: 2px 0; }
+.wnclaude { margin: -4px 0 14px; color: var(--ink3); font-size: 12.5px; line-height: 1.5; }
+.wnfocusrow { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; margin: -2px 0 8px; }
+.wnfocus { font-size: 12px; font-weight: 600; color: var(--ink2); }
+.wnai { font-size: 11.5px; font-weight: 700; color: #F3C6FF; }
+.wnai.bad { color: #FFB4A8; }
+.wnedit > summary { cursor: pointer; list-style: none; font-size: 11.5px; font-weight: 700; color: var(--ink3); padding: 2px 8px; border-radius: 999px; background: var(--sunk); }
+.wnedit > summary:hover { color: var(--ink); }
+.wnedit[open] { flex-basis: 100%; }
+.wnedit form { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; max-width: 560px; }
+.wnedit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink3); }
+.wnedit select, .wnedit textarea { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); color: var(--ink); font: inherit; font-size: 13.5px; }
+.wnedit button { align-self: flex-start; }
 .wnwhen { color: var(--ink3); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .wnx { border: 0; background: none; color: var(--ink3); cursor: pointer; font-size: 16px; padding: 0 4px; }
 .wnx:hover { color: var(--late); }
@@ -6416,7 +6453,24 @@ export interface StoryLabData {
   /** Title shapes added from the dice. */
   shapes?: Shape[];
   /** Write next, channel by channel: the cards, the idea bucket, how many rerolled away. */
-  writeNext?: Array<{ channel: string; cards: Array<IdeaCard & { blueprint: Blueprint | null }>; saved: IdeaMark[]; skipped: number }>;
+  writeNext?: Array<{
+    channel: string;
+    /** The channel's id, for its anchor and forms. */
+    id?: string;
+    cards: Array<IdeaCard & { blueprint: Blueprint | null }>;
+    saved: Array<IdeaMark & { written?: AiIdeaRow | null }>;
+    skipped: number;
+    /** What it's about (domain.ts), and what was set by hand. */
+    profile?: ChannelProfile;
+    set?: SetFocus | null;
+    /** Claude's ideas still waiting for it, and its last call's outcome. */
+    writtenLeft?: number;
+    lastRun?: { at: Date; ok: boolean; error: string | null } | null;
+  }>;
+  /** Claude's ideas: on or not, today's calls against the cap. */
+  claude?: { on: boolean; today: number; cap: number; kept: number; want: number };
+  /** Every focus a channel can be set to, grouped, for the picker. */
+  focusChoices?: ReturnType<typeof focusChoices>;
   /** The scripts added on the board, and how many came from the Drive. */
   library?: { scripts: StoredScript[]; drive: number; error: string };
   /** Stories uploads with no script anywhere, newest first, to link one to. */
@@ -6456,7 +6510,13 @@ const SOURCE_LABEL: Record<Neighbour["source"], string> = {
  * made or planned on any channel, ↻ for a fresh idea in its place and 🔖 to
  * save it to the channel's idea bucket.
  */
-function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Shape[], publicCount: number): string {
+function writeNextPanel(
+  list: NonNullable<StoryLabData["writeNext"]>,
+  shapes: Shape[],
+  publicCount: number,
+  claude: StoryLabData["claude"] | null,
+  choices: NonNullable<StoryLabData["focusChoices"]>,
+): string {
   const shapeName = (id: string | null | undefined) => (id ? shapes.find((x) => x.id === id)?.name ?? id : "");
   const hidden = (m: Record<string, string | null | number>) =>
     Object.entries(m)
@@ -6464,7 +6524,38 @@ function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Sh
       .join("");
   const idFields = (channel: string, i: IdeaCard["idea"], score: number) =>
     hidden({ channel, key: i.key, title: i.title, format: i.format, hero: i.hero?.id ?? null, world: i.world?.id ?? null, power: i.power?.id ?? null, target: i.target?.id ?? null, shape: i.shape ?? null, score });
-  const card = (channel: string, c: IdeaCard & { blueprint: Blueprint | null }) => `<li class="wncard"><details class="isg labidea">
+  const writtenCard = (channel: string, c: IdeaCard & { blueprint: Blueprint | null }) => {
+    const w = c.idea.ai!;
+    return `<li class="wncard written"><details class="isg labidea">
+      <summary>
+        <span class="wnscore" style="--sc:${scoreColour(c.score)}" title="Predicted ${c.predicted}× the channel's usual, from how the network's videos like it did">${c.score}<small>/100</small></span>
+        <span class="ikind written" title="Written by Claude for this channel, from its own videos and how they did">✨ Claude's idea</span>
+        <span class="iidea">${esc(c.idea.title)}</span>
+        ${
+          c.similar
+            ? `<span class="wnsim" title="Still an option — ↻ for another">Too close to “${esc(c.similar.title)}”${c.similar.channel ? ` · ${esc(c.similar.channel.replace(/^Specular /, ""))}` : ""} · ${esc(SOURCE_LABEL[c.similar.source])} (${esc(c.similar.why)})</span>`
+            : ""
+        }
+        <span class="iwhy">${esc(w.premise)}</span>
+        <span class="imore">The idea ▾</span>
+      </summary>
+      <div class="idetail">
+        ${w.beats.length ? `<h4>How it goes</h4><ol class="wnbeats">${w.beats.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+        <h4>Why this one</h4>
+        <ul class="labwhy">${[
+          w.why ? `<li><b class="up">Claude</b> ${esc(w.why)}</li>` : "",
+          ...w.modelledOn.map((m) => `<li><b class="${m.multiple !== null && m.multiple < 1 ? "down" : "up"}">${m.multiple !== null ? `${m.multiple.toFixed(1)}×` : "new"}</b> builds on “${esc(m.title)}”</li>`),
+          ...c.idea.reasons.map((r) => `<li><b class="${r.lift >= 1 ? "up" : "down"}">${esc(liftText(r.lift))}</b> ${esc(r.text)}</li>`),
+        ].join("")}</ul>
+        ${c.blueprint ? blueprintHtml(c.blueprint) : `<p class="hint">Claude wrote this one from the channel's own videos; its title isn't one of the lore's formats, so there's no blueprint — the beats above are the outline.</p>`}
+      </div>
+    </details>
+    <div class="wnacts">
+      <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="reroll"><button class="wnbtn" title="A fresh idea in its place — this one won't come back to this channel">↻ Reroll</button></form>
+      <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="save"><button class="wnbtn" title="Keep it in this channel's idea bucket, and get a fresh card">🔖 Save for later</button></form>
+    </div></li>`;
+  };
+  const card = (channel: string, c: IdeaCard & { blueprint: Blueprint | null }) => c.idea.ai ? writtenCard(channel, c) : `<li class="wncard"><details class="isg labidea">
       <summary>
         <span class="wnscore" style="--sc:${scoreColour(c.score)}" title="Predicted ${c.predicted}× the channel's usual">${c.score}<small>/100</small></span>
         <span class="ikind ${c.idea.format}">${esc(FORMAT_BY_ID.get(c.idea.format)?.name ?? c.idea.format)}${c.idea.shape ? ` · ${esc(shapeName(c.idea.shape))}` : ""}</span>
@@ -6490,25 +6581,71 @@ function writeNextPanel(list: NonNullable<StoryLabData["writeNext"]>, shapes: Sh
       <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="reroll"><button class="wnbtn" title="A fresh idea in its place — this one won't come back to this channel">↻ Reroll</button></form>
       <form method="post" action="/story-lab/idea" data-swap>${idFields(channel, c.idea, c.score)}<input type="hidden" name="do" value="save"><button class="wnbtn" title="Keep it in this channel's idea bucket, and get a fresh card">🔖 Save for later</button></form>
     </div></li>`;
+  const focusText = (p: ChannelProfile | undefined) =>
+    !p
+      ? ""
+      : p.open
+        ? "Anything goes (set by hand)"
+        : p.focus.length
+          ? `${p.focus.map((f) => f.label).join(" + ")} · ${focusSource(p.focus[0]!)}`
+          : "No single focus — ideas that share its characters or worlds";
+  const focusEdit = (w: (typeof list)[number]) => {
+    const setValue = w.set?.kind === "any" ? "any" : w.set?.kind && w.set.value ? `${w.set.kind}:${w.set.value}` : "";
+    const options = choices
+      .map((g) => `<optgroup label="${esc(g.group)}">${g.options.map((o) => `<option value="${esc(`${o.kind}:${o.value}`)}"${setValue === `${o.kind}:${o.value}` ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</optgroup>`)
+      .join("");
+    return `<details class="wnedit"><summary title="What this channel's videos are about: only ideas that fit it are offered here">✎ Focus</summary>
+      <form method="post" action="/story-lab/focus" data-swap>
+        ${hidden({ channel: w.channel })}
+        <label>What its videos are about<select name="focus">
+          <option value=""${setValue ? "" : " selected"}>Read it from its videos</option>
+          <option value="any"${setValue === "any" ? " selected" : ""}>Anything — no focus</option>
+          ${options}
+        </select></label>
+        <label>In your words <span class="hint">— Claude reads this when it writes ideas for the channel</span><textarea name="note" rows="2" maxlength="600" placeholder="e.g. anime characters in other worlds and fights; never western cartoons">${esc(w.set?.note ?? "")}</textarea></label>
+        <button class="wnbtn">Save focus</button>
+      </form></details>`;
+  };
   const section = (w: (typeof list)[number]) => {
     const ch = CHANNELS.find((c) => c.name === w.channel);
     const saved = w.saved.length
       ? `<details class="wnbucket"><summary>🔖 Idea bucket <b>${w.saved.length}</b></summary><ul>${w.saved
           .map((m) => {
+            const unsave = `<form method="post" action="/story-lab/idea" data-swap>${hidden({ channel: w.channel, key: m.key, do: "unsave" })}<button class="wnx" title="Take it out of the bucket">×</button></form>`;
+            if (m.written) {
+              return `<li class="wnbw"><span class="wnscore sm" style="--sc:${scoreColour(m.score)}">${m.score}</span><details><summary>✨ ${esc(m.title)}</summary>
+                <p>${esc(m.written.premise)}</p>${m.written.beats.length ? `<ol class="wnbeats">${m.written.beats.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}</details>
+                <span class="wnwhen">saved ${esc(usDate(dayOf(m.markedAt)))}</span>${unsave}</li>`;
+            }
             const q = new URLSearchParams({ format: m.shape ? "" : m.format, ...(m.hero ? { hero: m.hero } : {}), ...(m.world ? { world: m.world } : {}), ...(m.power ? { power: m.power } : {}), ...(m.target ? { target: m.target } : {}), ...(m.shape ? { shape: m.shape } : {}) });
-            return `<li><span class="wnscore sm" style="--sc:${scoreColour(m.score)}">${m.score}</span><a href="/story-lab?${esc(q.toString())}#blueprint">${esc(m.title)}</a><span class="wnwhen">saved ${esc(usDate(dayOf(m.markedAt)))}</span>
-              <form method="post" action="/story-lab/idea" data-swap>${hidden({ channel: w.channel, key: m.key, do: "unsave" })}<button class="wnx" title="Take it out of the bucket">×</button></form></li>`;
+            return `<li><span class="wnscore sm" style="--sc:${scoreColour(m.score)}">${m.score}</span><a href="/story-lab?${esc(q.toString())}#blueprint">${esc(m.title)}</a><span class="wnwhen">saved ${esc(usDate(dayOf(m.markedAt)))}</span>${unsave}</li>`;
           })
           .join("")}</ul></details>`
       : "";
+    const waiting =
+      claude?.on && w.lastRun && !w.lastRun.ok && !(w.writtenLeft ?? 0)
+        ? `<span class="wnai bad" title="${esc(w.lastRun.error ?? "")}">✨ Claude couldn't write ideas for it just now — trying again shortly</span>`
+        : claude?.on && (w.writtenLeft ?? 0) > 0
+          ? `<span class="wnai">✨ ${w.writtenLeft} of Claude's ideas waiting</span>`
+          : "";
     return `<section class="wnchan" id="wn-${esc(ch?.id ?? w.channel)}" style="--ch:${channelColour(w.channel)}">
       <header><i></i><b>${esc(w.channel)}</b>${w.skipped ? `<span class="wnskip">${w.skipped} rerolled away</span>` : ""}${saved}</header>
-      ${w.cards.length ? `<ul class="isugg">${w.cards.map((c) => card(w.channel, c)).join("")}</ul>` : `<p class="hint">Nothing left that fits — add something from the dice.</p>`}
+      <div class="wnfocusrow"><span class="wnfocus" title="Only ideas that fit this are offered on this channel">📌 ${esc(focusText(w.profile))}</span>${waiting}${focusEdit(w)}</div>
+      ${
+        w.cards.length
+          ? `<ul class="isugg">${w.cards.map((c) => card(w.channel, c)).join("")}</ul>`
+          : `<p class="hint">Nothing left that fits ${esc(w.channel)} — ${claude?.on ? "Claude is writing more for it" : "add ANTHROPIC_API_KEY for Claude's own ideas, or add something from the dice"}.</p>`
+      }
     </section>`;
   };
-  return `<div class="panel ideas" id="writenext"><h2>Write next <span class="sub">— two for every channel, best score first · the score predicts how it'll do against the channel's usual (50 = its usual)${
+  return `<div class="panel ideas" id="writenext"><h2>Write next <span class="sub">— two for every channel, only ideas that fit it, best score first · the score predicts how it'll do against the channel's usual (50 = its usual)${
     publicCount ? ` · checked against ${publicCount.toLocaleString("en-US")} public videos` : ""
   }</span></h2>
+    <p class="wnclaude">${
+      claude?.on
+        ? `✨ Beside the lore's ideas, Claude writes ideas for each channel from its own videos and how they did — any character, world or format that fits it, not just the lore's. Each is checked against every public video and scored from the network's results. ${claude.today} of ${claude.cap} calls today.`
+        : "✨ Add <code>ANTHROPIC_API_KEY</code> on Railway and Claude writes ideas for each channel from its own videos, beyond the lore's heroes, worlds and formats."
+    }</p>
     <div class="wnlist">${list.map(section).join("")}</div>
     <script>
     (function () {
@@ -6821,7 +6958,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
     ${d.specular ?? ""}
     ${
       d.writeNext
-        ? writeNextPanel(d.writeNext, d.shapes ?? [], d.publicCount ?? 0)
+        ? writeNextPanel(d.writeNext, d.shapes ?? [], d.publicCount ?? 0, d.claude ?? null, d.focusChoices ?? [])
         : `<div class="panel ideas"><h2>Write next <span class="sub">— open one for the full blueprint${
             d.publicCount ? ` · checked against ${d.publicCount.toLocaleString("en-US")} public videos${d.heldBack ? `, ${d.heldBack} already done and left out` : ""}` : ""
           }</span></h2>
@@ -6851,6 +6988,14 @@ export interface ColourRow {
   sampled: boolean;
   linked: boolean;
   error: string | null;
+  /** Names it had before a rename in Settings. */
+  previous?: string[];
+  /** Added in Settings, rather than one of the catalog's. */
+  added?: boolean;
+  /** An added channel with nothing filed under it: it can be taken off again. */
+  removable?: boolean;
+  /** A daily batch's uploads, for a channel that opens one. */
+  daily?: number | null;
 }
 
 export function renderSettings(
@@ -6858,6 +7003,10 @@ export function renderSettings(
   data: {
     railHide: string[]; dashHide: string[]; daysOff: string[]; shifted: StoredRecord[]; saved: boolean; scripts: boolean;
     colours?: ColourRow[]; coloursSaved?: string; estimatesSaved?: boolean;
+    /** A colour no channel wears yet, for the one being added. */
+    newColour?: string;
+    /** Why a rename or an addition didn't go through. */
+    channelError?: string;
   },
 ): string {
   const off = new Set(data.railHide);
@@ -6901,7 +7050,7 @@ export function renderSettings(
       ${daysOffStrip(data.daysOff, data.shifted)}
     </section>
     ${estimateSettings(data.estimatesSaved ?? false)}
-    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "") : ""}`,
+    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}`,
   );
 }
 
@@ -6950,10 +7099,12 @@ function estimateSettings(saved: boolean): string {
 }
 
 /**
- * Every channel's colour, where it comes from, and a picker to set one by
- * hand. Bits and Reading take theirs from their YouTube avatars.
+ * Every channel: its name, which can be changed (everywhere at once), its
+ * colour and where that comes from, with a picker to set one by hand — Bits
+ * and Reading take theirs from their YouTube avatars. Below, a channel can be
+ * added to any category.
  */
-function colourSettings(rows: ColourRow[], saved: string): string {
+function colourSettings(rows: ColourRow[], saved: string, error: string, newColour: string): string {
   const why = (r: ColourRow) =>
     r.source === "hand"
       ? `set by hand <button class="linkbtn" name="reset" value="${esc(r.id)}">Reset</button>`
@@ -6973,23 +7124,46 @@ function colourSettings(rows: ColourRow[], saved: string): string {
     if (!list.length) return "";
     return `<fieldset style="--c:${c.color}"><legend><i></i>${esc(c.label)}</legend>${list
       .map(
-        (r) => `<label class="colrow">
+        (r) => `<div class="colrow">
           <input type="color" name="c_${esc(r.id)}" value="${esc(r.colour.toLowerCase())}" aria-label="${esc(r.name)}'s colour">
-          <span class="nm">${esc(r.name)}</span>
-          <span class="src">${why(r)}</span>
-        </label>`,
+          <input class="chname" name="n_${esc(r.id)}" value="${esc(r.name)}" required maxlength="60" spellcheck="false" autocomplete="off" aria-label="${esc(r.name)}'s name">
+          <span class="src">${why(r)}${r.added ? ` · added here${r.daily ? ` · ${r.daily} a day` : ""}` : ""}${
+            r.previous?.length ? ` · <span title="A Discord message that uses an earlier name still finds it">was ${esc(r.previous.join(", "))}</span>` : ""
+          }${r.removable ? ` <button class="linkbtn" formaction="/settings/channels/remove" name="remove" value="${esc(r.id)}" formnovalidate onclick="return confirm('Take ${esc(r.name).replace(/'/g, "")} off the board?')">Take off</button>` : ""}</span>
+        </div>`,
       )
       .join("")}</fieldset>`;
   }).join("");
+  const categoryOptions = CATEGORIES.map((c) => `<option value="${c.id}">${esc(c.label)}</option>`).join("");
   return `<form class="panel setgroup settings colourset" id="colours" method="post" action="/settings/colours" style="margin-top:14px">
-    <h2>Channel colours <span class="sub">— Bits and Reading wear their YouTube avatars' colours, read on the server
-      and kept apart from every other channel's. Pick one to set it by hand.</span></h2>
+    <h2>Channels <span class="sub">— rename or recolour any channel: click a name to change it. A new name is used everywhere on the board straight away,
+      past videos included, and a Discord message that still uses the old one finds it. It doesn't have to match the
+      YouTube channel's own name. Bits and Reading wear their YouTube avatars' colours unless you pick one.</span></h2>
     <div class="colgrid">${groups}</div>
     <div class="setsave">
-      <button class="clear">Save colours</button>
-      <button class="clear secondary" name="sample" value="1" title="Read every Bits and Reading avatar again now">Read the avatars again</button>
+      <button class="clear">Save channels</button>
+      <button class="clear secondary" name="sample" value="1" formnovalidate title="Read every Bits and Reading avatar again now">Read the avatars again</button>
       ${saved ? `<span class="saved" role="status">${esc(saved)}</span>` : ""}
+      ${error ? `<span class="seterr" role="alert">${esc(error)}</span>` : ""}
     </div>
+  </form>
+  <form class="panel setgroup settings chadd" id="addchannel" method="post" action="/settings/channels/add" style="margin-top:14px">
+    <h2>Add a channel <span class="sub">— it's on every page straight away: the dashboard, the calendar, Uploads (link its YouTube
+      channel there), the bot files messages that name it, and a Bits or Reading channel opens its daily batch.</span></h2>
+    <div class="chaddrow">
+      <label class="chcol"><input type="color" name="colour" value="${esc(newColour.toLowerCase())}" aria-label="Its colour"></label>
+      <label>Name<input name="name" required maxlength="60" placeholder="Specular …" autocomplete="off"></label>
+      <label>Category<select name="category" id="chcat">${categoryOptions}</select></label>
+      <label class="chunits" hidden>Uploads a day<input type="number" name="units" min="0" max="50" value="5" inputmode="numeric"></label>
+      <button class="clear">Add channel</button>
+    </div>
+    <script>
+    (function () {
+      var cat = document.getElementById("chcat"), units = document.querySelector("#addchannel .chunits");
+      function sync() { units.hidden = !(cat.value === "bits" || cat.value === "reading"); }
+      cat.addEventListener("change", sync); sync();
+    })();
+    </script>
   </form>`;
 }
 

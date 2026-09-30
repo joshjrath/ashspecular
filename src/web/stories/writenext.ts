@@ -12,6 +12,7 @@
  */
 import { channelLab, keyOfTitle, norm, type LabIdea } from "./lab.js";
 import { readTitle } from "./lore.js";
+import { channelProfile, sharedByFocus, type ChannelProfile } from "./domain.js";
 
 /** Something an idea could be too close to. */
 export interface Neighbour {
@@ -111,6 +112,9 @@ export class NeighbourIndex {
   }
 }
 
+/** How closely an idea Claude wrote for a channel fits it: written from its own videos, as close as a lore idea in its focus. */
+const WRITTEN_FIT = 0.6;
+
 /** The score out of 100, and the predicted result against the channel's usual. */
 export function scoreIdea(idea: LabIdea, fitScore: number, similar: Similar | null): { score: number; predicted: number } {
   // A channel's own kind of video does better there: up to +30% for a close fit.
@@ -125,11 +129,13 @@ export function scoreIdea(idea: LabIdea, fitScore: number, similar: Similar | nu
  * never share a lead; what the channel rerolled away or saved stays out.
  */
 export function writeNext(opts: {
-  channels: Array<{ channel: string; titles: string[] }>;
+  channels: Array<{ channel: string; titles: string[]; profile?: ChannelProfile }>;
   ideas: LabIdea[];
   marks: IdeaMark[];
   neighbours: Neighbour[];
   perChannel?: number;
+  /** Ideas Claude wrote for each channel, from its own videos: only ever that channel's. */
+  written?: Map<string, LabIdea[]>;
 }): Map<string, Card[]> {
   const per = opts.perChannel ?? 2;
   const index = new NeighbourIndex(opts.neighbours);
@@ -143,28 +149,54 @@ export function writeNext(opts: {
   const out = new Map<string, Card[]>();
   // Every channel's showing cards are its own: no other channel takes one.
   const showingAnywhere = new Map(opts.marks.filter((m) => m.mark === "show").map((m) => [m.key, m.channel] as const));
-  for (const { channel, titles } of opts.channels) {
+  // Channels with a focus choose first, so an idea goes to the channel it's made for, not the first one with room.
+  const order = [...opts.channels].sort((a, b) => Number(Boolean(b.profile?.focus.length)) - Number(Boolean(a.profile?.focus.length)));
+  for (const { channel, titles, profile } of order) {
     const gone = new Set(opts.marks.filter((m) => m.channel === channel && m.mark !== "show").map((m) => m.key));
-    const ranked = channelLab(channel, titles, opts.ideas, 5000, Infinity)
+    const ranked = channelLab(channel, titles, opts.ideas, 5000, Infinity, profile ?? channelProfile(channel, titles))
       .filter((r) => !used.has(r.idea.key) && !gone.has(r.idea.key))
       .map((r) => {
         const similar = index.match(r.idea.title);
         return { ...r, similar, ...scoreIdea(r.idea, r.fitScore, similar) };
       })
       .sort((a, b) => b.score - a.score || b.predicted - a.predicted);
+    // Claude's ideas for this channel, written from its own videos, scored the same way (they fit it by construction).
+    for (const idea of opts.written?.get(channel) ?? []) {
+      if (used.has(idea.key) || gone.has(idea.key)) continue;
+      const similar = index.match(idea.title);
+      const fitScore = WRITTEN_FIT;
+      ranked.push({ idea, fit: ["written for this channel from its own videos"], fitScore, similar, ...scoreIdea(idea, fitScore, similar) });
+    }
+    ranked.sort((a, b) => b.score - a.score || b.predicted - a.predicted);
     const cards: Card[] = [];
     const mine = new Set<string>();
-    const pick = (strict: boolean) => {
+    // What every idea on a focused channel shares (FNAF's world on Specular FNAF) doesn't count as the two cards repeating each other.
+    const common = sharedByFocus(profile ?? channelProfile(channel, titles));
+    const kindOf = (i: LabIdea) => (i.ai ? "written" : "lore");
+    const pickOne = (strict: boolean, want: "written" | "lore" | null): boolean => {
       for (const r of ranked) {
-        if (cards.length >= per) return;
+        if (want && kindOf(r.idea) !== want) continue;
         if (used.has(r.idea.key)) continue;
         const owner = showingAnywhere.get(r.idea.key);
         if (owner && owner !== channel) continue;
         const t = tags(r.idea);
-        // A channel's two cards share no hero, world or power.
-        if (t.some((x) => mine.has(x))) continue;
-        if (strict && t.some((x) => (onPage.get(x) ?? 0) >= 2)) continue;
+        // A channel's two cards share no hero, world or power (beyond its focus).
+        if (t.some((x) => mine.has(x) && !common.has(x))) continue;
+        if (strict && t.some((x) => (onPage.get(x) ?? 0) >= 2 && !common.has(x))) continue;
         take(r, t);
+        return true;
+      }
+      return false;
+    };
+    // The best idea first; then, when both kinds are there, one of the other kind — so a channel sees Claude's ideas and the lore's side by side.
+    const pick = () => {
+      while (cards.length < per) {
+        const kinds = new Set(cards.map((c) => kindOf(c.idea)));
+        const want = kinds.size === 1 ? (kinds.has("written") ? "lore" : "written") : null;
+        // A channel with nothing left under the page's spread still gets its cards.
+        if (want && (pickOne(true, want) || pickOne(false, want))) continue;
+        if (pickOne(true, null) || pickOne(false, null)) continue;
+        return;
       }
     };
     const take = (r: (typeof ranked)[number], t: string[]) => {
@@ -181,9 +213,7 @@ export function writeNext(opts: {
     // The cards already showing stay, while they're still ideas to write: a reroll changes only its own card.
     const showing = new Set(opts.marks.filter((m) => m.channel === channel && m.mark === "show").map((m) => m.key));
     for (const r of ranked) if (showing.has(r.idea.key) && cards.length < per && !used.has(r.idea.key)) take(r, tags(r.idea));
-    pick(true);
-    // A channel with nothing left under the page's spread still gets its cards.
-    pick(false);
+    pick();
     cards.sort((a, b) => b.score - a.score);
     out.set(channel, cards);
   }

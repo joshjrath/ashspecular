@@ -1,8 +1,10 @@
 /**
- * The four categories and the channels inside them.
+ * The categories and the channels inside them.
  *
  * This is the single source of truth the parser matches against. Adding a
- * channel here is all that's needed for the bot to start recognising it.
+ * channel here — or in Settings, which keeps it in the database and applies
+ * it here at startup (applyChannelSettings) — is all that's needed for the
+ * bot to start recognising it. A channel renamed in Settings keeps its id.
  */
 
 export type CategoryId = "gaming" | "stories" | "reading" | "bits" | "movies";
@@ -62,6 +64,8 @@ export const CATEGORIES: Category[] = [
   },
 ];
 
+export const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
+
 export interface Channel {
   id: string;
   name: string;
@@ -98,6 +102,8 @@ export interface Channel {
      */
     format?: "long";
   };
+  /** Names it had before a rename in Settings, as they were written. */
+  formerly?: string[];
   /**
    * Matched only by its exact name or an alias, never by appearing inside a
    * longer message. The main channel is called just "Specular", which is in
@@ -158,13 +164,113 @@ export const CHANNELS: Channel[] = [
   { id: "sleep", name: "Specular Sleep", color: "#955890", category: "movies" },
 ];
 
-export const CHANNEL_NAMES = CHANNELS.map((c) => c.name);
+/** Each catalog channel as written above, before any rename, addition or colour set on the board. */
+const ORIGINAL = new Map(CHANNELS.map((c) => [c.id, { name: c.name, aliases: c.aliases ? [...c.aliases] : undefined, color: c.color }]));
 
-/** Each channel's colour as written above, before any sampled or hand-set one. */
-const CATALOG_COLOURS = new Map(CHANNELS.map((c) => [c.name, c.color]));
+/** An added channel's own colour, picked when it was added. */
+const addedColours = new Map<string, string>();
 
+/** A channel's colour before any sampled or hand-set one: the catalog's, or the one an added channel was given. */
 export function catalogColour(name: string): string {
-  return CATALOG_COLOURS.get(name) ?? "#8A8A93";
+  const c = CHANNELS.find((ch) => ch.name === name);
+  return (c && (ORIGINAL.get(c.id)?.color ?? addedColours.get(c.id))) ?? "#8A8A93";
+}
+
+/** Whether a channel is one of the catalog's own (not added on the board). */
+export const isCatalogChannel = (id: string) => ORIGINAL.has(id);
+
+/** The name a catalog channel had in the code, whatever it's called now. */
+export const originalName = (id: string) => ORIGINAL.get(id)?.name ?? null;
+
+/**
+ * A channel added on the board, or one of the catalog's renamed there. Kept
+ * in the database (db/channels.ts) and applied to CHANNELS in memory, so
+ * every page, the bot and the jobs see the same list.
+ */
+export interface ChannelSetting {
+  id: string;
+  name: string;
+  /** Added on the board, rather than one of the catalog's. */
+  added: boolean;
+  category: CategoryId | null;
+  /** An added channel's own colour (a hand-set one still wins). */
+  colour: string | null;
+  /** An added Bits or Reading channel's uploads a day: its daily batch. Null or 0: no batch. */
+  units: number | null;
+  /** Names it had before: a message that uses one still finds it. */
+  previous: string[];
+}
+
+/**
+ * Wear the names and channels set on the board. A renamed channel keeps its
+ * id — and with it its batches, links and history — and its earlier names
+ * still find it in a message. An added channel joins the end of its
+ * category. Starts from the catalog every time, so applying the same list
+ * twice is the same as once, and a channel taken off the list is gone.
+ */
+export function applyChannelSettings(settings: ChannelSetting[]): void {
+  for (let i = CHANNELS.length - 1; i >= 0; i--) if (!ORIGINAL.has(CHANNELS[i]!.id)) CHANNELS.splice(i, 1);
+  for (const c of CHANNELS) {
+    const o = ORIGINAL.get(c.id)!;
+    c.name = o.name;
+    c.aliases = o.aliases ? [...o.aliases] : undefined;
+    c.formerly = undefined;
+  }
+  addedColours.clear();
+  for (const s of settings) {
+    const name = s.name.trim();
+    if (!name) continue;
+    const known = CHANNELS.find((c) => c.id === s.id);
+    if (known) {
+      if (s.added) continue;
+      known.name = name;
+      continue;
+    }
+    if (!s.added || !s.category || !CATEGORY_IDS.includes(s.category)) continue;
+    const colour = s.colour && /^#[0-9a-f]{6}$/i.test(s.colour) ? s.colour.toUpperCase() : "#8A8A93";
+    addedColours.set(s.id, colour);
+    const ch: Channel = {
+      id: s.id,
+      name,
+      color: colour,
+      category: s.category,
+      ...(s.units && s.units > 0 ? { recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: Math.min(50, Math.round(s.units)) } } : {}),
+    };
+    const last = CHANNELS.map((c) => c.category).lastIndexOf(s.category);
+    if (last >= 0) CHANNELS.splice(last + 1, 0, ch);
+    else CHANNELS.push(ch);
+  }
+  // Earlier names find the channel in a message, unless another channel is called that now.
+  const current = new Set(CHANNELS.map((c) => c.name.toLowerCase()));
+  for (const s of settings) {
+    const c = CHANNELS.find((ch) => ch.id === s.id);
+    if (!c) continue;
+    const before = [...new Set([...s.previous, ...(s.added ? [] : [ORIGINAL.get(c.id)!.name])].map((n) => n.trim()))].filter(
+      (n) => n && n.toLowerCase() !== c.name.toLowerCase() && !current.has(n.toLowerCase()),
+    );
+    if (before.length) c.formerly = before;
+    const extra = before.map((n) => n.toLowerCase()).filter((n) => !(c.aliases ?? []).includes(n));
+    if (extra.length) c.aliases = [...(c.aliases ?? []), ...extra];
+  }
+}
+
+/** A name a channel could be given: trimmed, and why not when it can't. */
+export function checkChannelName(raw: string, forId: string | null): { name: string } | { error: string } {
+  const name = raw.replace(/\s+/g, " ").trim();
+  if (name.length < 2) return { error: "A channel needs a name." };
+  if (name.length > 60) return { error: "That name is too long (60 characters at most)." };
+  if (!/^[\p{L}\p{N} &'’.!?:,()+\/-]+$/u.test(name)) return { error: `“${name}” has characters a channel name can't use.` };
+  const taken = CHANNELS.find((c) => c.id !== forId && c.name.toLowerCase() === name.toLowerCase());
+  if (taken) return { error: `There's already a channel called ${taken.name}.` };
+  return { name };
+}
+
+/** An id for a channel added on the board, from its name: never one the catalog uses. */
+export function newChannelId(name: string): string {
+  const base = `u_${name.toLowerCase().replace(/^specular\s+/, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30) || "channel"}`;
+  let id = base;
+  for (let n = 2; CHANNELS.some((c) => c.id === id); n++) id = `${base}${n}`;
+  return id;
 }
 
 /**
@@ -175,7 +281,6 @@ export function catalogColour(name: string): string {
 export function applyChannelColours(colours: Map<string, string>): void {
   for (const c of CHANNELS) c.color = colours.get(c.name) ?? catalogColour(c.name);
 }
-export const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
 
 export function category(id: string): Category | undefined {
   return CATEGORIES.find((c) => c.id === id);
@@ -224,8 +329,6 @@ export function matchChannel(text: string | null): Channel | undefined {
     c.aliases?.some((a) => a.length >= 3 && containsPhrase(hay, a)),
   );
 }
-
-export const BITS_CHANNELS = CHANNELS.filter((c) => c.recurring && c.recurring.format !== "long");
 
 /** Whether a channel's recurring batch is long form (a midnight day) rather than Shorts (a 3 AM day). */
 export function isLongFormRecurring(channel: Pick<Channel, "recurring"> | undefined): boolean {

@@ -76,7 +76,12 @@ import { gamingSeries, nextUp, type SeriesVideo } from "./gaming/series.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, boardScripts, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";
 import { scriptFor, setScriptIndex } from "./scriptindex.js";
-import { channelLab, contrast, keyOfTitle, labIdeas, matchScripts, norm as normTitle, publicMatch, type LabIdea, type LabVideo, type PublicVideo } from "./stories/lab.js";
+import { channelLab, contrast, indexPublic, keyOfTitle, labIdeas, matchScripts, norm as normTitle, perfStats, publicMatch, shapeStats, writtenIdea, type LabIdea, type LabVideo, type PublicVideo } from "./stories/lab.js";
+import { channelProfile, focusBaseline, focusChoices, piecesOfTitle, type ChannelProfile, type FocusKind, type SetFocus } from "./stories/domain.js";
+import { aiRunSummary, dropAiIdea, dropChannelIdeas, listAiIdeas, listFocus, setFocus } from "../db/storylab.js";
+import { refillSoon, startStoryIdeas, WANT as WRITTEN_WANT, type StoryContext } from "../jobs/storyideas.js";
+import { dailyCap } from "./stories/brainstorm.js";
+import { canUseClaude } from "../ai/claude.js";
 import { blueprint } from "./stories/blueprint.js";
 import { checkDraft } from "./stories/check.js";
 import { SHAPES, SHAPE_BY_ID, applyAdditions, currentAdditions, diceItem, recentAdditions } from "./stories/added.js";
@@ -90,7 +95,8 @@ import { clearTime, forgetUntracked, loggedBetween, minutesByDay, minutesSpent, 
 import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postcheck.js";
-import { strongUnseen } from "../db/ideas.js";
+import { forgetHistory, strongUnseen } from "../db/ideas.js";
+import { addChannel, channelUse, listChannelSettings, loadChannelSettings, onChannelsChanged, removeChannel, renameChannel, startChannelSync } from "../db/channelsettings.js";
 import { registerIdeaFeed } from "./bitsfeed/routes.js";
 import { startIdeaJobs } from "../jobs/ideas.js";
 import { dashboardAlerts } from "./finance/ui.js";
@@ -116,7 +122,7 @@ const DICE_KINDS: DiceKind[] = ["shape", "hero", "world", "power", "target"];
 import { cascadeText, planCascade, type Cascade } from "./cascade.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { colourSources, loadChannelColours, sampleAvatars, sampledChannels, setChannelColour } from "../jobs/avatars.js";
+import { colourSources, distinctColour, loadChannelColours, sampleAvatars, sampledChannels, setChannelColour } from "../jobs/avatars.js";
 import { FORMATS, type FormatId } from "./stories/formats.js";
 import { HEROES, WORLDS } from "./stories/lore.js";
 import { channelHealth, postingSlots, scoreShorts, typicalShort } from "./shorts-perf.js";
@@ -470,6 +476,14 @@ export async function startWeb(): Promise<void> {
 
   if (hasDatabase) {
     await migrate();
+    // Channels added or renamed in Settings; when they change, colours and caches follow.
+    onChannelsChanged(async () => {
+      ownPaces = null;
+      forgetHistory();
+      await loadChannelColours();
+    });
+    await loadChannelSettings().catch((err) => console.error("[channels] load failed:", err));
+    startChannelSync();
     // The Shorts channels' avatar colours and any set by hand, before the first page.
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
     // Whatever's been added to Story Lab from its dice.
@@ -1085,7 +1099,10 @@ export async function startWeb(): Promise<void> {
         const stories = everything.filter((u) => storiesNames.includes(u.channel));
         const videos: LabVideo[] = stories.map((u) => ({ title: u.title, multiple: storyPerf.get(u.videoId)?.multiple ?? null, publishedAt: u.publishedAt }));
         const published: PublicVideo[] = everything.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
-        lab = channelLab(name, mine.map((u) => u.title), labIdeas(videos, now, 5000, published, [], false));
+        // Only ideas that fit the channel's focus: read from its videos, or set by hand in Story Lab.
+        const set = (await listFocus().catch(() => new Map<string, SetFocus>())).get(ch.id) ?? null;
+        const titles = mine.map((u) => u.title);
+        lab = channelLab(name, titles, labIdeas(videos, now, 5000, published, [], false), 8, 2, channelProfile(name, titles, set, focusBaseline(stories.map((u) => u.title))));
       }
       // Gaming: its series, and the next episode of each worth making.
       const series = category === "gaming" ? gamingSeries(seriesVideos(mine, perf), now).series : undefined;
@@ -1123,32 +1140,92 @@ export async function startWeb(): Promise<void> {
     /** Unassigned videos: open the list; the title just linked, or why it couldn't be. */
     open?: string; linked?: string; linkerr?: string;
   };
-  const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
+  /**
+   * What Story Lab and Claude's ideas both read: every Stories channel's videos
+   * (uploaded and on the board) with how each did, each channel's focus, the
+   * marks, and Claude's ideas still in play.
+   */
+  const storyBasics = async () => {
     const channels = channelsIn("stories");
     const now = new Date();
-    const [s, all, views, kept, marks, onBoard] = await Promise.all([
-      shell("storylab"),
+    const [all, views, marks, onBoard, focus, written] = await Promise.all([
       hasDatabase ? listUploads(new Date(0)) : Promise.resolve([]),
       hasDatabase ? loadVideoViews(new Date(0), channels) : Promise.resolve([]),
-      hasDatabase ? listScripts().catch(() => []) : Promise.resolve([]),
       hasDatabase ? listIdeaMarks().catch(() => []) : Promise.resolve([]),
       hasDatabase ? storiesOnBoard().catch(() => []) : Promise.resolve([]),
+      hasDatabase ? listFocus().catch(() => new Map<string, SetFocus>()) : Promise.resolve(new Map<string, SetFocus>()),
+      hasDatabase ? listAiIdeas().catch(() => []) : Promise.resolve([]),
     ]);
     const perf = scoreAll(views, now);
     const stories = all.filter((u) => channels.includes(u.channel));
     const videos: LabVideo[] = stories.map((u) => ({ title: u.title, multiple: perf.get(u.videoId)?.multiple ?? null, publishedAt: u.publishedAt }));
+    // Every video already public, on any channel, newest first — Stories ideas never repeat one.
+    const published: PublicVideo[] = [...all].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime()).map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
+    const planned: PublicVideo[] = onBoard.filter((r) => !r.uploaded && r.channel).map((r) => ({ title: r.title, url: "", channel: r.channel! }));
+    const titlesOf = (channel: string) => [...stories.filter((u) => u.channel === channel).map((u) => u.title), ...onBoard.filter((r) => r.channel === channel).map((r) => r.title)];
+    const idOf = (name: string) => CHANNELS.find((c) => c.name === name)?.id ?? name;
+    // What's ordinary across the network's Stories videos, so each channel's focus is what sets it apart.
+    const baseline = focusBaseline(channels.flatMap(titlesOf));
+    const profiles = new Map<string, ChannelProfile>(channels.map((ch) => [ch, channelProfile(ch, titlesOf(ch), focus.get(idOf(ch)) ?? null, baseline)]));
+    // Claude's ideas still to use: not rerolled away or saved, not made since (on any channel, or on the board).
+    const gone = new Set(marks.filter((m) => m.mark !== "show").map((m) => `${idOf(m.channel)}|${m.key}`));
+    const pubIndex = indexPublic(published);
+    const live = written.filter((w) => {
+      if (gone.has(`${w.channelId}|ai:${w.id}`)) return false;
+      const p = piecesOfTitle(w.title);
+      const made = publicMatch({ hero: p.hero, world: p.world, power: p.power, target: p.target, title: w.title }, published, pubIndex) ?? publicMatch({ hero: p.hero, world: p.world, power: p.power, target: p.target, title: w.title }, planned);
+      if (made) void dropAiIdea(w.id, `made: ${made.title} (${made.channel || "on the board"})`).catch(() => undefined);
+      return !made;
+    });
+    return { channels, now, all, perf, stories, videos, published, planned, marks, onBoard, focus, written, live, titlesOf, idOf, profiles };
+  };
+
+  /** What Claude reads to write a channel's ideas. */
+  const storyContext = async (): Promise<StoryContext> => {
+    const b = await storyBasics();
+    const briefs = b.channels.map((name) => {
+      const id = b.idOf(name);
+      return {
+        id,
+        name,
+        profile: b.profiles.get(name)!,
+        videos: b.stories.filter((u) => u.channel === name).map((u) => ({ title: u.title, multiple: b.perf.get(u.videoId)?.multiple ?? null })),
+        planned: b.onBoard.filter((r) => r.channel === name && !r.uploaded).map((r) => r.title),
+        // Everything it's been offered before — rerolled, saved, or written already — so nothing comes round again.
+        avoid: [...b.marks.filter((m) => m.channel === name).map((m) => m.title), ...b.written.filter((w) => w.channelId === id).map((w) => w.title)],
+      };
+    });
+    const available = new Map<string, number>();
+    for (const w of b.live) available.set(w.channelId, (available.get(w.channelId) ?? 0) + 1);
+    return { briefs, published: b.published, planned: b.planned, available };
+  };
+
+  const storyLab = async (query: LabQuery, check?: { title: string; text: string }) => {
+    const [s, kept, b, runs] = await Promise.all([
+      shell("storylab"),
+      hasDatabase ? listScripts().catch(() => []) : Promise.resolve([]),
+      storyBasics(),
+      hasDatabase ? aiRunSummary().catch(() => null) : Promise.resolve(null),
+    ]);
+    const { channels, now, stories, videos, published, marks, onBoard } = b;
     const scripts = corpus();
-    // Every video already public, on any channel — Stories ideas never repeat one.
-    const published: PublicVideo[] = all.map((u) => ({ title: u.title, url: u.url, channel: u.channel }));
+    // Claude's ideas, scored from the network's own results like any other.
+    const perfNow = perfStats(videos);
+    const shapes = shapeStats(videos);
+    const multiples = new Map(stories.map((u) => [normTitle(u.title), b.perf.get(u.videoId)?.multiple ?? null] as const));
+    const written = new Map<string, LabIdea[]>();
+    for (const w of b.live) {
+      const name = CHANNELS.find((c) => c.id === w.channelId)?.name;
+      if (!name || !channels.includes(name)) continue;
+      written.set(name, [...(written.get(name) ?? []), writtenIdea(w, name, perfNow, shapes, multiples)]);
+    }
     const heldBack: PublicVideo[] = [];
     // Every idea, best first — just-added dice items brought forward — then two per channel.
     const everything = labIdeas(videos, now, 100_000, published, heldBack, false, recentAdditions());
     const cards = writeNext({
-      channels: channels.map((channel) => ({
-        channel,
-        titles: [...stories.filter((u) => u.channel === channel).map((u) => u.title), ...onBoard.filter((r) => r.channel === channel).map((r) => r.title)],
-      })),
+      channels: channels.map((channel) => ({ channel, titles: b.titlesOf(channel), profile: b.profiles.get(channel) })),
       ideas: everything,
+      written,
       marks,
       // Too close to anything made or planned, on any channel.
       neighbours: [
@@ -1172,14 +1249,27 @@ export async function startWeb(): Promise<void> {
         ).catch((err) => console.error("[lab] couldn't keep the cards:", err));
       }
     }
-    const printOf = (idea: LabIdea) =>
-      blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id, shape: idea.shape });
-    const writeNextData = channels.map((channel) => ({
-      channel,
-      cards: (cards.get(channel) ?? []).map((c) => ({ ...c, blueprint: printOf(c.idea) })),
-      saved: marks.filter((m) => m.channel === channel && m.mark === "save"),
-      skipped: marks.filter((m) => m.channel === channel && m.mark === "skip").length,
-    }));
+    // One of Claude's ideas has a blueprint only when its title is a format the lore builds, with its lead — under its own title.
+    const printOf = (idea: LabIdea) => {
+      if (idea.ai && !(piecesOfTitle(idea.title).format && idea.hero)) return null;
+      const bp = blueprint({ format: idea.format, hero: idea.hero?.id, world: idea.world?.id, power: idea.power?.id, target: idea.target?.id, shape: idea.shape });
+      return bp && idea.ai ? { ...bp, title: idea.title, alternates: [] } : bp;
+    };
+    const byId = new Map(b.written.map((w) => [`ai:${w.id}`, w]));
+    const writeNextData = channels.map((channel) => {
+      const id = b.idOf(channel);
+      return {
+        channel,
+        id,
+        cards: (cards.get(channel) ?? []).map((c) => ({ ...c, blueprint: printOf(c.idea) })),
+        saved: marks.filter((m) => m.channel === channel && m.mark === "save").map((m) => ({ ...m, written: byId.get(m.key) ?? null })),
+        skipped: marks.filter((m) => m.channel === channel && m.mark === "skip").length,
+        profile: b.profiles.get(channel)!,
+        set: b.focus.get(id) ?? null,
+        writtenLeft: b.live.filter((w) => w.channelId === id).length,
+        lastRun: runs?.last.get(id) ?? null,
+      };
+    });
     const ideas = writeNextData.flatMap((w) => w.cards.map((c) => ({ idea: c.idea, blueprint: c.blueprint })));
     // A title shape picked in the builder ("shape:hundreddays") builds on its own format.
     const shape = query.shape && SHAPE_BY_ID.has(query.shape) ? SHAPE_BY_ID.get(query.shape)! : null;
@@ -1236,6 +1326,8 @@ export async function startWeb(): Promise<void> {
       shapes: [...SHAPES],
       dice,
       writeNext: writeNextData,
+      claude: { on: canUseClaude(), today: runs?.calls ?? 0, cap: dailyCap(), kept: runs?.kept ?? 0, want: WRITTEN_WANT },
+      focusChoices: focusChoices(),
       // Every Stories upload with no script anywhere — attached, in Story Lab or delivered on the Scripts tab.
       unassigned: {
         videos: stories
@@ -1260,6 +1352,8 @@ export async function startWeb(): Promise<void> {
   );
   // Specular compilations: the next Movie and Sleep, their pages, the catalog.
   if (hasDatabase) registerSpecular(app, shell, () => storyLab({}));
+  // Claude's ideas for each Stories channel, kept topped up in the background.
+  if (hasDatabase) startStoryIdeas(storyContext);
   // 🎲 Add what was rolled, or take an addition out again.
   app.post<{ Body: { kind?: string; id?: string } }>("/story-lab/add", async (request, reply) => {
     const kind = request.body?.kind as DiceKind;
@@ -1285,6 +1379,8 @@ export async function startWeb(): Promise<void> {
     const key = (b.key ?? "").slice(0, 300);
     const anchor = `#wn-${CHANNELS.find((c) => c.name === channel)?.id ?? ""}`;
     if (!hasDatabase || !channel || !key) return reply.redirect(`/story-lab${anchor}`);
+    // One of Claude's ideas used up: that channel's pool is topped up in the background.
+    if (key.startsWith("ai:") && (b.do === "reroll" || b.do === "save")) refillSoon(CHANNELS.find((c) => c.name === channel)?.id ?? "");
     if (b.do === "unsave") await unmarkIdea(channel, key);
     else if (b.do === "reroll" || b.do === "save") {
       const opt = (v: string | undefined) => (v ? v.slice(0, 100) : null);
@@ -1295,6 +1391,27 @@ export async function startWeb(): Promise<void> {
       });
     }
     return reply.redirect(`/story-lab${anchor}`);
+  });
+
+  // A channel's focus — what its videos are about — set by hand, or back to reading it from its videos; and its note for Claude.
+  app.post<{ Body: Record<string, string | undefined> }>("/story-lab/focus", async (request, reply) => {
+    const b = request.body ?? {};
+    const channel = channelsIn("stories").find((c) => c === b.channel);
+    const id = CHANNELS.find((c) => c.name === channel)?.id ?? "";
+    if (hasDatabase && channel) {
+      const raw = (b.focus ?? "").trim();
+      const [kind, ...rest] = raw.split(":");
+      const kinds: Array<FocusKind | "any"> = ["lead", "hero", "franchise", "format", "genre", "any"];
+      const focus = raw === "any" ? { kind: "any" as const, value: null } : kinds.includes(kind as FocusKind) && rest.join(":") ? { kind: kind as FocusKind, value: rest.join(":") } : null;
+      const before = (await listFocus().catch(() => new Map<string, SetFocus>())).get(id);
+      await setFocus(id, focus, b.note ?? null);
+      // A new focus or note: what Claude wrote to the old one is set aside, and it writes to the new one.
+      if ((before?.kind ?? null) !== (focus?.kind ?? null) || (before?.value ?? null) !== (focus?.value ?? null) || (before?.note ?? "") !== (b.note ?? "").replace(/\s+/g, " ").trim()) {
+        await dropChannelIdeas(id, "the channel's focus changed");
+        refillSoon(id);
+      }
+    }
+    return reply.redirect(`/story-lab#wn-${id}`);
   });
 
   // Drafts are posted: they're far too long for a link.
@@ -2038,9 +2155,16 @@ export async function startWeb(): Promise<void> {
     return reply.redirect("/settings?estimates=saved#estimates");
   });
 
-  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string } }>("/settings", async (request, reply) => {
-    const [s, shifted, sources] = await Promise.all([shell("settings"), listOffShifted(), colourSources()]);
+  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string } }>("/settings", async (request, reply) => {
+    const [s, shifted, sources, settings] = await Promise.all([shell("settings"), listOffShifted(), colourSources(), listChannelSettings().catch(() => [])]);
     const sampled = new Set(sampledChannels());
+    // An added channel with nothing filed under it yet can be taken off again.
+    const added = CHANNELS.filter((c) => settings.some((x) => x.id === c.id && x.added));
+    const unused = new Set<string>();
+    for (const c of added) {
+      const use = await channelUse(c.name).catch(() => null);
+      if (use && !use.records && !use.uploads) unused.add(c.id);
+    }
     return reply.type("text/html").send(
       renderSettings(s, {
         railHide: s.railHide ?? [],
@@ -2051,14 +2175,18 @@ export async function startWeb(): Promise<void> {
         scripts: Boolean(s.scripts),
         colours: CHANNELS.map((c) => {
           const src = sources.get(c.name);
+          const set = settings.find((x) => x.id === c.id);
           return {
             id: c.id, name: c.name, category: c.category, colour: c.color, source: src?.source ?? "catalog",
             sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
+            previous: set?.previous ?? [], added: Boolean(set?.added), removable: unused.has(c.id), daily: c.recurring?.units ?? null,
           };
         }),
+        newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
         estimatesSaved: request.query.estimates === "saved",
         coloursSaved:
-          request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
+          request.query.chmsg ? request.query.chmsg.slice(0, 300) : request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
+        channelError: (request.query.cherr ?? "").slice(0, 300),
       }),
     );
   });
@@ -2067,6 +2195,16 @@ export async function startWeb(): Promise<void> {
   // or read every Shorts avatar again now.
   app.post<{ Body: Record<string, string | undefined> }>("/settings/colours", async (request, reply) => {
     const body = request.body ?? {};
+    // Names first: a renamed channel's colour is then saved under its new name.
+    const renamed: string[] = [];
+    const failed: string[] = [];
+    for (const c of [...CHANNELS]) {
+      const v = body[`n_${c.id}`];
+      if (typeof v !== "string" || v.replace(/\s+/g, " ").trim() === c.name) continue;
+      const r = await renameChannel(c.id, v);
+      if ("error" in r) failed.push(r.error);
+      else if (r.from !== r.name) renamed.push(`${r.from} is now ${r.name}`);
+    }
     if (body.reset) {
       const c = CHANNELS.find((ch) => ch.id === body.reset);
       if (c) await setChannelColour(c.name, null);
@@ -2080,7 +2218,27 @@ export async function startWeb(): Promise<void> {
       const v = body[`c_${c.id}`];
       if (v && /^#[0-9a-f]{6}$/i.test(v) && v.toUpperCase() !== c.color.toUpperCase()) await setChannelColour(c.name, v);
     }
-    return reply.redirect("/settings?colours=saved#colours");
+    const q = new URLSearchParams({ colours: "saved" });
+    if (renamed.length) q.set("chmsg", `${renamed.join("; ")} — everywhere on the board.`);
+    if (failed.length) q.set("cherr", failed.join(" "));
+    return reply.redirect(`/settings?${q.toString()}#colours`);
+  });
+
+  // A new channel, in the category picked: on every page, and the bot knows it, straight away.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/channels/add", async (request, reply) => {
+    const b = request.body ?? {};
+    const units = b.units?.trim() ? Number(b.units) : null;
+    const r = await addChannel({ name: b.name ?? "", category: b.category ?? "", units, colour: b.colour ?? "" });
+    const q = new URLSearchParams("error" in r ? { cherr: r.error } : { chmsg: `Added ${r.name}.` });
+    return reply.redirect(`/settings?${q.toString()}#colours`);
+  });
+  // Take an added channel off again, while nothing's been filed under it.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/channels/remove", async (request, reply) => {
+    const id = request.body?.remove ?? "";
+    const name = CHANNELS.find((c) => c.id === id)?.name ?? "";
+    const r = await removeChannel(id);
+    const q = new URLSearchParams("error" in r ? { cherr: r.error } : { chmsg: `Took ${name} off the board.` });
+    return reply.redirect(`/settings?${q.toString()}#colours`);
   });
   app.post<{ Body: { show?: string | string[]; dash?: string | string[] } }>("/settings", async (request, reply) => {
     const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v : v ? [v] : []);

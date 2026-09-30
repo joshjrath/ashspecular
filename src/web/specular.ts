@@ -5,7 +5,7 @@
  */
 import type { FastifyInstance } from "fastify";
 import {
-  COMPILATION_CHANNEL, addExclusion, addSkip, discardCompilation, listCompilations, listExclusions, loadCatalog, loadPast, planCompilation,
+  compilationChannel, addExclusion, addSkip, discardCompilation, listCompilations, listExclusions, loadCatalog, loadPast, planCompilation,
   listSkips, removeExclusion, renameCompilation, savePackage, setRuntime, setSources, sourceTexts, syncPosted, takenDays, todayOrg, voiceSamples,
   type Compilation,
 } from "../db/compilations.js";
@@ -117,12 +117,12 @@ function sourceRow(s: { title: string; channel: string; runtime: number | null; 
 function pickCard(k: KindState, typical: number): string {
   const head = `<header><span class="spkind">${ICON[k.kind]} ${k.kind === "movie" ? "Movie" : "Sleep"}</span><span class="spslot">next slot · ${esc(usDate(k.slot))}</span></header>`;
   if (!k.pick) {
-    return `<article class="spcard" id="sp-${k.kind}" style="--ch:${channelColour(COMPILATION_CHANNEL[k.kind])}">${head}
+    return `<article class="spcard" id="sp-${k.kind}" style="--ch:${channelColour(compilationChannel(k.kind))}">${head}
       <p class="hint">Nothing left that fits without repeating an earlier ${k.kind === "movie" ? "Movie" : "Sleep"} — rerolled picks come back after three weeks.</p></article>`;
   }
   const p = k.pick;
   const hidden = `<input type="hidden" name="kind" value="${k.kind}"><input type="hidden" name="combo" value="${esc(p.combo)}">`;
-  return `<article class="spcard" id="sp-${k.kind}" style="--ch:${channelColour(COMPILATION_CHANNEL[k.kind])}">${head}
+  return `<article class="spcard" id="sp-${k.kind}" style="--ch:${channelColour(compilationChannel(k.kind))}">${head}
     <div class="sptitle"><h3>${esc(p.title)}</h3><span class="wnscore" style="--sc:${scoreColour(p.score)}">${p.score}<small>/100</small></span></div>
     <ol class="splist">${p.sources.map((s, i) => sourceRow(s, typical, i)).join("")}</ol>
     <p class="sptotal">Total source runtime <b>${clock(p.runtime)}</b> · ${p.sources.length} videos${p.estimated ? ` · ${p.estimated} estimated` : ""}${

@@ -23,6 +23,7 @@ import { FORMAT_BY_ID, formatOfTitle, type FormatId } from "./formats.js";
 import { HEROES, POWERS, WORLDS, readTitle, type Hero, type Power, type World } from "./lore.js";
 import { corpus, measure, type Script } from "./corpus.js";
 import { SHAPES, fillShape } from "./added.js";
+import { channelProfile, fitsChannel, type ChannelProfile } from "./domain.js";
 
 export interface LabVideo {
   title: string;
@@ -42,6 +43,19 @@ export interface LabIdea {
   reasons: Array<{ text: string; lift: number }>;
   /** A title shape added from the dice, on this format's structure. */
   shape?: string;
+  /** Written by Claude for one channel, from its videos: the idea in full. */
+  ai?: WrittenIdea;
+}
+
+export interface WrittenIdea {
+  id: number;
+  channel: string;
+  premise: string;
+  beats: string[];
+  why: string;
+  /** The channel's own videos it builds on, with how each did. */
+  modelledOn: Array<{ title: string; multiple: number | null }>;
+  createdAt: Date;
 }
 
 const TARGET_ONLY = new Set(["light", "joker", "walter", "avengers"]);
@@ -210,6 +224,102 @@ function buildIndex(published: PublicVideo[]): PublicIndex {
     }
   });
   return { pairs, words, postings };
+}
+
+// ── title shapes ──────────────────────────────────────────────────────────
+
+/** The words that make a title's shape; everything else is a name. */
+const STRUCTURE = new Set(
+  ("what if could would how does do did why every ranked vs versus survive survived escape escaped stop catch outsmart joined join was were is in had has " +
+    "got get became become reborn with his her their its memories actually fight fights fought work works villain villains charged for crimes you your i id " +
+    "the a an of to isnt even close beat beats defeat defeated strongest weakest explained trapped days day hours stranded against who which into from " +
+    "every one all times full movie lore story")
+    .split(" "),
+);
+
+/**
+ * A title's shape, names taken out: "Every Batman Villain, Ranked" and
+ * "Every Sukuna Villain, Ranked" are both "every * villain ranked".
+ */
+export function titleShape(title: string): string {
+  const out: string[] = [];
+  for (const w of norm(title).split(" ").filter(Boolean)) {
+    const k = STRUCTURE.has(w) ? w : "*";
+    if (k === "*" && out.at(-1) === "*") continue;
+    out.push(k);
+  }
+  return out.join(" ");
+}
+
+/** How the videos of each title shape did, pulled toward "no effect" like the rest. */
+export function shapeStats(videos: LabVideo[]): Map<string, Stat> {
+  const judged = videos.filter((v) => v.multiple !== null && v.multiple > 0);
+  const overall = median(judged.map((v) => v.multiple!)) || 1;
+  const by = new Map<string, number[]>();
+  for (const v of judged) {
+    const k = titleShape(v.title);
+    if (!k.includes("*") || k === "*") continue;
+    by.set(k, [...(by.get(k) ?? []), v.multiple!]);
+  }
+  return new Map([...by].filter(([, xs]) => xs.length >= 2).map(([k, xs]) => {
+    const med = median(xs);
+    return [k, { n: xs.length, median: med, lift: (xs.length * (med / overall) + 3) / (xs.length + 3) }];
+  }));
+}
+
+/**
+ * An idea Claude wrote, read and scored like any other: its lift comes from
+ * how the network's videos with its characters, world, power, format and title
+ * shape did — never from Claude's own opinion of it.
+ */
+export function writtenIdea(
+  row: { id: number; title: string; premise: string; beats: string[]; why: string; modelledOn: string[]; createdAt: Date },
+  channel: string,
+  perf: ReturnType<typeof perfStats>,
+  shapes: Map<string, Stat>,
+  multiples: Map<string, number | null>,
+): LabIdea {
+  const r = readTitle(row.title);
+  const format = formatOfTitle(row.title);
+  const hero = r.heroes[0] ?? null;
+  const target = format === "hunt" || format === "versus" ? r.heroes[1] ?? null : null;
+  const world = r.worlds[0] ?? null;
+  const power = r.powers[0] ?? null;
+  const reasons: LabIdea["reasons"] = [];
+  let score = 1;
+  const use = (stat: Stat | undefined, what: string) => {
+    if (!stat || stat.n < 2) return;
+    score *= stat.lift;
+    reasons.push({ text: `${what}: ${stat.n} uploads at a median ${stat.median.toFixed(1)}× their channel's usual`, lift: stat.lift });
+  };
+  if (hero) use(perf.hero.get(hero.id), hero.name);
+  if (target) use(perf.hero.get(target.id), target.name);
+  if (world) use(perf.world.get(world.id), world.name);
+  if (power) use(perf.power.get(power.id), power.name);
+  const shape = titleShape(row.title);
+  const byShape = shapes.get(shape);
+  if (byShape) use(byShape, `Titles shaped “${shape.replace(/\*/g, "…")}”`);
+  else use(perf.format.get(format), cap(FORMAT_NAME[format]));
+  return {
+    key: `ai:${row.id}`,
+    format,
+    hero,
+    world,
+    power,
+    target,
+    title: row.title,
+    score,
+    reasons: reasons.sort((a, b) => Math.abs(b.lift - 1) - Math.abs(a.lift - 1)),
+    ai: {
+      id: row.id,
+      channel,
+      premise: row.premise,
+      beats: row.beats,
+      why: row.why,
+      modelledOn: row.modelledOn.map((t) => ({ title: t, multiple: multiples.get(norm(t)) ?? null })),
+      createdAt: row.createdAt,
+    },
+  };
 }
 
 export function labIdeas(
@@ -441,12 +551,21 @@ export function contrast(results: ScriptResult[]): Contrast[] | null {
 }
 
 /**
- * Story Lab's ideas for one channel. The ones that share a world, a hero or a
- * format with what the channel already makes come first, each saying why; a
- * channel with too few videos to read gets the overall best. No hero more
- * than twice, so the list isn't one character.
+ * Story Lab's ideas for one channel. Only ideas that belong on it: a channel
+ * with a focus (anime characters, survival tests, FNAF — domain.ts) gets
+ * only ideas that have it, and one without gets ideas that share a character
+ * or a world with what it already makes. Among those, the ones closest to
+ * its own worlds, heroes and formats come first, each saying why. No hero
+ * more than twice, so the list isn't one character.
  */
-export function channelLab(channel: string, titles: string[], ideas: LabIdea[], limit = 8, perHeroCap = 2): Array<{ idea: LabIdea; fit: string[]; fitScore: number }> {
+export function channelLab(
+  channel: string,
+  titles: string[],
+  ideas: LabIdea[],
+  limit = 8,
+  perHeroCap = 2,
+  profile: ChannelProfile = channelProfile(channel, titles),
+): Array<{ idea: LabIdea; fit: string[]; fitScore: number }> {
   // A channel named for a world (Specular FNAF) leans to it before its titles say so.
   const namedFor = new Set(readTitle(channel.replace(/^Specular\s+/i, "")).worlds.map((w) => w.id));
   const n = titles.length;
@@ -461,7 +580,11 @@ export function channelLab(channel: string, titles: string[], ideas: LabIdea[], 
     bump(formats, formatOfTitle(t));
   }
   const share = (m: Map<string, number>, id: string | undefined) => (id && n ? (m.get(id) ?? 0) / n : 0);
-  const ranked = ideas.map((idea) => {
+  // Only what belongs here: a focused channel's ideas all have its focus.
+  const focused = profile.focus.length > 0;
+  const belongs = focused ? ideas.filter((idea) => fitsChannel(profile, idea).ok) : ideas;
+  const focusNote = focused ? `fits the channel: ${profile.focus.map((f) => f.label.toLowerCase()).join(", ")}` : "";
+  const ranked = belongs.map((idea) => {
     const named = Boolean(idea.world && namedFor.has(idea.world.id));
     const w = Math.max(share(worlds, idea.world?.id), named ? 0.5 : 0);
     const who = [idea.hero, idea.target].filter((h): h is Hero => Boolean(h)).sort((a, b) => share(heroes, b.id) - share(heroes, a.id))[0];
@@ -472,11 +595,14 @@ export function channelLab(channel: string, titles: string[], ideas: LabIdea[], 
     else if (named) fit.push(`the channel is named for ${idea.world!.name}`);
     if (h > 0 && who) fit.push(`${who.name} is in ${heroes.get(who.id)} of them`);
     if (f >= 0.25) fit.push(`${FORMAT_BY_ID.get(idea.format)?.name ?? idea.format} is ${Math.round(f * 100)}% of what it makes`);
-    const fitScore = 1.5 * w + h + 0.6 * f;
-    return { idea, fit, fitScore, rank: idea.score * (1 + 3 * fitScore) };
+    if (focusNote) fit.unshift(focusNote);
+    // The focus itself counts as a close fit; the rest is how much it shares with the channel's own videos.
+    const fitScore = (focused ? 0.5 : 0) + 1.5 * w + h + 0.6 * f;
+    return { idea, fit, fitScore, rank: idea.score * (1 + 3 * fitScore), shares: w > 0 || h > 0 };
   });
-  const fitting = ranked.filter((r) => r.fitScore > 0);
-  const pool = ((n >= 5 || namedFor.size) && fitting.length >= 3 ? fitting : ranked).sort((a, b) => b.rank - a.rank);
+  // A channel with no focus: ideas that share a character or a world with it (a format alone isn't enough to belong).
+  const fitting = ranked.filter((r) => r.shares);
+  const pool = (focused ? ranked : (n >= 5 || namedFor.size) && fitting.length >= 3 ? fitting : ranked).sort((a, b) => b.rank - a.rank);
   const out: Array<{ idea: LabIdea; fit: string[]; fitScore: number }> = [];
   const perHero = new Map<string, number>();
   for (const r of pool) {

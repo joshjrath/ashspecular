@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-09-30-channels-story-lab-focus",
+    title: "Rename or add channels in Settings; Story Lab only suggests ideas that fit each channel",
+    changes: [
+      { text: "Settings → Channels: click any channel's name to rename it. The new name is used everywhere on the board at once, past videos included, and the bot still recognises the old name in Discord. It doesn't have to match the YouTube channel's name.", href: "/settings#colours" },
+      { text: "Add a channel to any category, with its colour. A Bits or Reading channel takes how many uploads it posts a day and opens its daily batch like the others. An added channel can be taken off again until something's filed under it.", href: "/settings#addchannel" },
+      { text: "Story Lab gives every Stories channel a focus: from its name (Anime is anime characters, FNAF is FNAF, Survives is survival tests) or from what its videos share. Only ideas that fit it are offered there. Change it, or add a note, with ✎ Focus.", href: "/story-lab#writenext" },
+      { text: "Beside the lore's ideas, Claude now writes ideas for each channel from its own videos and how they did, not limited to Story Lab's heroes, worlds and formats. Each one has a premise, beats and the videos it builds on. It's checked against every public video and scored from the network's results.", href: "/story-lab#writenext" },
+    ],
+  },
+  {
     id: "2026-09-30-bits-idea-feed",
     title: "Idea Feed: Bits ideas from Tumblr, ranked for you to decide",
     changes: [

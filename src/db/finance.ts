@@ -770,7 +770,7 @@ export async function loadFacts(months: string[], tz: string): Promise<Facts> {
 }
 
 /** The finance channels: every catalog channel, in catalog order. */
-export const FINANCE_CHANNELS = CHANNELS.map((c) => ({ name: c.name, category: c.category, colour: c.color }));
+export const financeChannels = () => CHANNELS.map((c) => ({ name: c.name, category: c.category, colour: c.color }));
 
 /** Open records for a channel, newest first — to attribute an expense to a video. */
 export async function recordsForAttribution(q: string, limit = 40): Promise<Array<{ id: number; label: string; channel: string | null }>> {

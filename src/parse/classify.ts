@@ -22,7 +22,8 @@ function anthropic(): Anthropic {
  * that varies per message (today's date, the message itself) goes in the user
  * turn below, after the cache breakpoint.
  */
-const SYSTEM = [
+/** Built each time: channels added or renamed in Settings are in it straight away. */
+export const systemPrompt = () => [
   "You read messages posted into a YouTube studio's Discord and turn each one into a structured record.",
   "",
   "THE FOUR CATEGORIES",
@@ -34,6 +35,8 @@ const SYSTEM = [
     const names = CHANNELS.filter((c) => c.category === cat.id).map((c) => c.name);
     return `- ${cat.label}: ${names.join(", ")}`;
   }),
+  // A renamed channel: a message may still use its old name.
+  ...CHANNELS.filter((c) => c.formerly?.length).map((c) => `- ${c.name} was called ${c.formerly!.join(", then ")} — a message that uses that name means ${c.name}.`),
   "",
   "THE ASSIGNMENT POST",
   "The studio's own format leads with a heading of three parts separated by pipes:",
@@ -122,7 +125,7 @@ async function classifyText(input: ClassifyInput): Promise<ClassifyResult> {
     const response = await anthropic().messages.parse({
       model: MODEL,
       max_tokens: 8192,
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: zodOutputFormat(ExtractionSchema) },
       messages: [
         {

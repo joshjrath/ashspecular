@@ -93,6 +93,12 @@ import { nearestHistory, wordsOf, type HistoryItem } from "../src/ideas/similar.
 import { nextPollMinutes, pacedAllowance } from "../src/ideas/pace.js";
 import { estimateCost, feedHref, ideaCard, renderIdeaFeed, renderIdeaSources } from "../src/web/bitsfeed/pages.js";
 import type { SourceRow } from "../src/db/ideas.js";
+import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
+import { systemPrompt } from "../src/parse/classify.js";
+import { distinctColour } from "../src/jobs/avatars.js";
+import { channelProfile, fitsChannel, focusBaseline, focusChoices, nameFocus, piecesOfTitle } from "../src/web/stories/domain.js";
+import { norm, perfStats, shapeStats, titleShape, writtenIdea, type LabIdea, type LabVideo } from "../src/web/stories/lab.js";
+import { storyRequest, storySystem, vetIdeas } from "../src/web/stories/brainstorm.js";
 
 let pass = 0;
 let fail = 0;
@@ -2098,6 +2104,133 @@ const feedPage = renderIdeaFeed(shellFix, {
   status: { tumblr: true, ai: true, lastRead: new Date(), feeds: 18, failing: 0, aiCapped: false, paused: "" },
 });
 t("the feed: tabs, the card, and scripts that parse", [feedPage.includes("High priority"), feedPage.includes('id="s-41"'), [...feedPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } })], [true, true, true]);
+
+section("Channels — added and renamed in Settings");
+const animeCh = CHANNELS.find((c) => c.id === "anime")!;
+const animeColour = catalogColour("Specular Anime");
+applyChannelSettings([
+  { id: "anime", name: "Specular Anime Stories", added: false, category: null, colour: null, units: null, previous: [] },
+  { id: "u_pets", name: "Specular Pets", added: true, category: "bits", colour: "#12AB34", units: 3, previous: [] },
+]);
+const petsCh = CHANNELS.find((c) => c.id === "u_pets");
+t("a rename keeps the channel's id and colour; the old name still finds it in a message", [animeCh.name, animeCh.id, matchChannel("Specular Anime")?.id, matchChannel("posted on specular anime stories today")?.id, catalogColour("Specular Anime Stories")], ["Specular Anime Stories", "anime", "anime", "anime", animeColour]);
+t("an added channel joins the end of its category, with its colour and daily batch", [CHANNELS[CHANNELS.map((c) => c.category).lastIndexOf("bits")]?.id, petsCh?.category, petsCh?.recurring?.units, catalogColour("Specular Pets"), matchChannel("new video for specular pets")?.id], ["u_pets", "bits", 3, "#12AB34", "u_pets"]);
+t("…the @ tag and the bot's channel list use the new names", [parseAssignment("### 10-03-26 | VIDEO-030 | Something\n\n@ Anime")?.channel, systemPrompt().includes("Specular Anime Stories"), systemPrompt().includes("Specular Pets"), systemPrompt().includes("Specular Anime,"), systemPrompt().includes("- Specular Anime Stories was called Specular Anime — a message that uses that name means Specular Anime Stories."), animeCh.formerly], ["Specular Anime Stories", true, true, false, true, ["Specular Anime"]]);
+t("names: tidied, and never one another channel has", [checkChannelName("  Specular   Goats  ", null), checkChannelName("specular comics", null), checkChannelName("x", null), checkChannelName("Bad|Name", null), checkChannelName("Specular Anime Stories", "anime")],
+  [{ name: "Specular Goats" }, { error: "There's already a channel called Specular Comics." }, { error: "A channel needs a name." }, { error: "“Bad|Name” has characters a channel name can't use." }, { name: "Specular Anime Stories" }]);
+t("an added channel's id never clashes", [newChannelId("Specular Pets"), newChannelId("Specular Goats!")], ["u_pets2", "u_goats"]);
+applyChannelSettings([
+  { id: "anime", name: "Specular Anime Stories", added: false, category: null, colour: null, units: null, previous: [] },
+  { id: "u_x", name: "Specular Anime", added: true, category: "stories", colour: null, units: null, previous: [] },
+]);
+t("…an old name another channel has taken since finds that one", [matchChannel("Specular Anime")?.id, (animeCh.aliases ?? []).includes("specular anime")], ["u_x", false]);
+applyChannelSettings([]);
+t("…and the catalog is back as written once they're gone", [animeCh.name, CHANNELS.some((c) => c.id.startsWith("u_")), animeCh.aliases ?? null, catalogColour("Specular Anime")], ["Specular Anime", false, null, animeColour]);
+const inUse = ["#D21B20", "#360D7B", "#1BC0D2", "#D39B7C"];
+const newCol = distinctColour(inUse);
+t("a new channel's colour stands apart from every one in use", [/^#[0-9A-F]{6}$/.test(newCol), Math.min(...inUse.map((c) => deltaE(newCol, c))) > 25], [true, true]);
+const setPage2 = renderSettings({ ...shellFix, active: "settings" }, {
+  railHide: [], dashHide: [], daysOff: [], shifted: [], saved: false, scripts: false, newColour: "#AABBCC", channelError: "There's already a channel called Specular Comics.",
+  colours: [
+    { id: "anime", name: "Specular Anime Stories", category: "stories", colour: "#360D7B", source: "catalog", sampled: false, linked: true, error: null, previous: ["Specular Anime"] },
+    { id: "u_pets", name: "Specular Pets", category: "bits", colour: "#12AB34", source: "catalog", sampled: true, linked: false, error: null, added: true, removable: true, daily: 3 },
+  ],
+});
+t("Settings: every name can be changed, an added one taken off, a channel added to any category", [
+  setPage2.includes('name="n_anime" value="Specular Anime Stories"'), setPage2.includes("was Specular Anime"), setPage2.includes('formaction="/settings/channels/remove" name="remove" value="u_pets"'),
+  setPage2.includes('action="/settings/channels/add"'), setPage2.includes('<option value="bits">Bits</option>'), setPage2.includes("There&#39;s already") || setPage2.includes("There's already a channel called Specular Comics."),
+  [...setPage2.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }),
+], [true, true, true, true, true, true, true]);
+
+section("Story Lab — each channel's focus");
+t("a channel's name says what it's about", ["Specular Anime", "Specular Manga", "Specular Comics", "Specular FNAF", "Specular Survives", "Specular YOU", "Specular Horror", "Specular Force", "Specular Battles", "Specular Studios"].map((c) => nameFocus(c).map((f) => `${f.kind}:${f.value}`).join(",")),
+  ["lead:anime", "lead:anime", "lead:comics", "franchise:fnaf", "format:survive", "format:you", "genre:horror", "franchise:star wars", "format:versus", ""]);
+const verseTitles = ["What If Spider-Man Was In The Boys?", "Could Spider-Man Survive World War Z?", "Spider-Man vs Homelander", "What If Spider-Man Had The Omnitrix?", "Could Spider-Man Survive Saw?", "What If Batman Was In Invincible?"];
+const netTitles = [...verseTitles, "What If Batman Was In The Boys?", "Could Superman Survive Saw?", "What If Deadpool Was In FNAF?", "What If Homelander Had Mjolnir?", "Could Wolverine Survive The Last of Us?", "What If Thor Was In Invincible?", "What If Hulk Was In The Boys?", "What If Gojo Was In The MCU?"];
+const verseProfile = channelProfile("Specular Verse", verseTitles, null, focusBaseline(netTitles));
+t("…or its videos do: the thing most of them share that sets it apart (Spider-Man, not 'comic book characters')", verseProfile.focus.map((f) => [f.kind, f.value, f.from, f.shared, f.of]), [["hero", "spiderman", "videos", 5, 6]]);
+t("…without the network to compare, the broadest thing they share", channelProfile("Specular Verse", verseTitles).focus.map((f) => f.value), ["comics"]);
+t("…too few videos to read, or nothing most of them share: no focus", [channelProfile("Specular Studios", verseTitles.slice(0, 3)).focus.length, channelProfile("Specular Studios", ["What If Gojo Was In The Boys?", "Could Batman Survive Saw?", "Every FNAF Ending, Ranked", "What If YOU Were In Star Wars?"]).focus.length], [0, 0]);
+t("…and one set by hand wins: a focus, or anything at all", [channelProfile("Specular Anime", [], { kind: "franchise", value: "jujutsu kaisen", note: "JJK only" }).focus.map((f) => [f.label, f.from]), channelProfile("Specular Anime", [], { kind: "any", value: null, note: null }).open, channelProfile("Specular Anime", [], { kind: null, value: null, note: "Shounen leads" }).note],
+  [[["Jujutsu Kaisen", "set"]], true, "Shounen leads"]);
+const animeProfile = channelProfile("Specular Anime", []);
+const piecesOf = (title: string) => piecesOfTitle(title);
+t("an idea goes only where it belongs: Invincible with a Green Lantern ring isn't an anime video", [
+  fitsChannel(animeProfile, piecesOf("What If Invincible Had A Green Lantern Ring?")), fitsChannel(animeProfile, piecesOf("What If Gojo Had A Green Lantern Ring?")).ok,
+  fitsChannel(channelProfile("Specular FNAF", []), piecesOf("What If Deadpool Was In FNAF?")).ok, fitsChannel(channelProfile("Specular Survives", []), piecesOf("What If Gojo Was In The Boys?")).ok,
+  fitsChannel(channelProfile("Specular Horror", []), piecesOf("Could Batman Survive Silent Hill?")).ok, fitsChannel(channelProfile("Specular YOU", []), piecesOf("What If YOU Were In Jujutsu Kaisen?")).ok,
+], [{ ok: false, why: "not anime & manga characters" }, true, true, false, true, true]);
+const allIdeas = labIdeas([], new Date("2026-09-26T12:00:00Z"), 100_000, [], [], false);
+const animeLab = channelLab("Specular Anime", [], allIdeas, 60, 2);
+const mediaOfLead = (i: LabIdea) => (i.hero ? piecesOf(i.title).hero?.from : null);
+t("Story Lab's ideas for Specular Anime all lead with an anime character", [animeLab.length > 10, animeLab.every((r) => fitsChannel(animeProfile, r.idea).ok), animeLab.some((r) => ["mark", "batman", "superman"].includes(r.idea.hero?.id ?? "")), animeLab[0]!.fit[0]], [true, true, false, "fits the channel: anime & manga characters"]);
+void mediaOfLead;
+const wnFocus = writeNext({ channels: ["Specular Studios", "Specular Anime", "Specular Comics", "Specular Survives"].map((channel) => ({ channel, titles: [] as string[], profile: channelProfile(channel, []) })), ideas: allIdeas, marks: [], neighbours: [] });
+t("Write next: every channel's cards fit it", [
+  wnFocus.get("Specular Anime")!.every((c) => fitsChannel(animeProfile, c.idea).ok), wnFocus.get("Specular Comics")!.every((c) => fitsChannel(channelProfile("Specular Comics", []), c.idea).ok),
+  wnFocus.get("Specular Survives")!.every((c) => c.idea.format === "survive"), wnFocus.get("Specular Studios")!.length,
+], [true, true, true, 2]);
+
+section("Story Lab — Claude's ideas");
+t("title shapes: the names taken out", [titleShape("Every Batman Villain, Ranked"), titleShape("Every Sukuna Villain, Ranked"), titleShape("How Does Gojo's Infinity Actually Work?"), titleShape("Could Goku Survive The Hunger Games?")],
+  ["every * villain ranked", "every * villain ranked", "how does * actually work", "could * survive the *"]);
+const shapeVids: LabVideo[] = [
+  { title: "Every Batman Villain, Ranked", multiple: 2.4, publishedAt: new Date("2026-08-01") },
+  { title: "Every Spider-Man Villain, Ranked", multiple: 2.0, publishedAt: new Date("2026-08-05") },
+  { title: "Every Homelander Villain, Ranked", multiple: 2.2, publishedAt: new Date("2026-08-09") },
+  { title: "What If Gojo Joined The Avengers?", multiple: 1.0, publishedAt: new Date("2026-08-10") },
+  { title: "Could Batman Survive Saw?", multiple: 0.8, publishedAt: new Date("2026-08-11") },
+  { title: "What If Deadpool Was In FNAF?", multiple: 1.0, publishedAt: new Date("2026-08-12") },
+];
+const shapesNow = shapeStats(shapeVids);
+t("…and how each shape did, pulled toward no effect", [shapesNow.get("every * villain ranked")?.n, Number(shapesNow.get("every * villain ranked")?.lift.toFixed(2)), shapesNow.has("could * survive *")], [3, 1.23, false]);
+const wIdea = writtenIdea(
+  { id: 7, title: "Every Sukuna Villain, Ranked", premise: "Sukuna ranks everyone who ever crossed him.", beats: ["Mahito", "Jogo", "Gojo"], why: "Its rankings do 2× its usual.", modelledOn: ["Every Batman Villain, Ranked", "Not one of its videos"], createdAt: new Date("2026-09-29") },
+  "Specular Anime", perfStats(shapeVids), shapesNow, new Map(shapeVids.map((v) => [norm(v.title), v.multiple])),
+);
+t("one of Claude's ideas is scored from the network's results, never Claude's say-so", [wIdea.key, wIdea.hero?.id, Number(wIdea.score.toFixed(2)), wIdea.reasons[0]!.text.startsWith("Titles shaped “every … villain ranked”: 3 uploads"), wIdea.ai?.modelledOn],
+  ["ai:7", "sukuna", 1.23, true, [{ title: "Every Batman Villain, Ranked", multiple: 2.4 }, { title: "Not one of its videos", multiple: null }]]);
+const brief = {
+  id: "anime", name: "Specular Anime", profile: animeProfile,
+  videos: [{ title: "What If Gojo Joined The Avengers?", multiple: 2.1 }, { title: "Could Sukuna Survive Saw?", multiple: 0.6 }, { title: "What If Megumi Was In The Boys?", multiple: null }],
+  planned: ["What If Yuji Was In The MCU?"], avoid: ["What If Denji Was In FNAF?"],
+};
+const vetted = vetIdeas([
+  { title: "What If Invincible Had A Green Lantern Ring?", premise: "p", beats: ["a"], why: "w", modelled_on: [] },
+  { title: "Could Gojo Survive Saw?", premise: "p", beats: ["a"], why: "w", modelled_on: [] },
+  { title: "What If Yuji Joined The Avengers?", premise: "p", beats: ["a"], why: "w", modelled_on: [] },
+  { title: "What If Denji Was In FNAF?", premise: "p", beats: ["a"], why: "w", modelled_on: [] },
+  { title: "Every Sukuna Villain, Ranked", premise: " Sukuna ranks them. ", beats: [" Mahito ", ""], why: "Rankings do well.", modelled_on: ["What If Gojo Joined The Avengers?", "Made up"] },
+  { title: "Every Sukuna Villain, Ranked", premise: "again", beats: [], why: "", modelled_on: [] },
+], brief, [{ title: "Could Gojo Survive Saw", url: "u1", channel: "Specular Horror" }], [{ title: "What If Yuji Was In The MCU?", url: "", channel: "Specular Anime" }]);
+t("every idea is checked before it's kept: off the channel's focus, public anywhere, planned, turned down, twice", [vetted.kept.map((k) => [k.title, k.premise, k.beats, k.modelledOn]), vetted.dropped.map((d) => d.why)], [
+  [["Every Sukuna Villain, Ranked", "Sukuna ranks them.", ["Mahito"], ["What If Gojo Joined The Avengers?"]]],
+  ["doesn't fit Specular Anime: not anime & manga characters", "repeats “Could Gojo Survive Saw” (Specular Horror)", "repeats “What If Yuji Was In The MCU?” (Specular Anime)", "already suggested or made", "already suggested or made"],
+]);
+const req = storyRequest(brief, 6, ["Could Batman Survive Saw?"]);
+const sys = storySystem([brief, { ...brief, id: "survives", name: "Specular Survives", profile: channelProfile("Specular Survives", []) }]);
+t("Claude reads the channel's focus, its videos best first, what's planned and what's turned down — and every channel's focus", [
+  req.includes("FOCUS: Anime & manga characters (its name)"), req.indexOf("2.1× What If Gojo") < req.indexOf("0.6× Could Sukuna"), req.includes("TOO NEW TO JUDGE:\n- What If Megumi Was In The Boys?"),
+  req.includes("- What If Yuji Was In The MCU?"), req.includes("- What If Denji Was In FNAF?"), req.endsWith("Write 6 new ideas for Specular Anime."),
+  sys.includes("- Specular Survives: Survival tests"), sys.includes("You are not limited to any list"),
+], [true, true, true, true, true, true, true, true]);
+const aiCardIdea: LabIdea = { ...wIdea, key: "ai:7" };
+const wnWritten = writeNext({
+  channels: ["Specular Anime", "Specular Comics"].map((channel) => ({ channel, titles: [] as string[], profile: channelProfile(channel, []) })),
+  ideas: allIdeas, marks: [], neighbours: [], written: new Map([["Specular Anime", [aiCardIdea]]]),
+});
+t("Write next: Claude's idea beside the lore's, on its own channel only", [wnWritten.get("Specular Anime")!.map((c) => Boolean(c.idea.ai)).sort(), wnWritten.get("Specular Comics")!.some((c) => c.idea.ai)], [[false, true], false]);
+const claudeLabPage = renderStoryLab(shellFix, {
+  scripts: 0, words: 0, matched: 0, ideas: [], blueprint: null, picked: { format: "insert", hero: "", world: "", power: "", target: "" }, check: null, contrast: null, results: [],
+  coverage: { heroes: [], worlds: [], done: new Set() }, formats: [],
+  writeNext: [{ channel: "Specular Anime", id: "anime", cards: wnWritten.get("Specular Anime")!.map((c) => ({ ...c, blueprint: null })), saved: [], skipped: 0, profile: animeProfile, set: null, writtenLeft: 3, lastRun: null }],
+  claude: { on: true, today: 4, cap: 30, kept: 12, want: 4 }, focusChoices: focusChoices(),
+});
+t("the page: each channel's focus (changeable), Claude's idea with its beats and the videos it builds on", [
+  claudeLabPage.includes("📌 Anime &amp; manga characters · its name"), claudeLabPage.includes('action="/story-lab/focus"'), claudeLabPage.includes('<option value="franchise:jujutsu kaisen">Jujutsu Kaisen</option>'),
+  claudeLabPage.includes("✨ Claude's idea"), claudeLabPage.includes("<li>Mahito</li>"), claudeLabPage.includes("builds on “Every Batman Villain, Ranked”"), claudeLabPage.includes("✨ 3 of Claude&#39;s ideas waiting") || claudeLabPage.includes("✨ 3 of Claude's ideas waiting"),
+  claudeLabPage.includes("4 of 30 calls today"), [...claudeLabPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }),
+], [true, true, true, true, true, true, true, true, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

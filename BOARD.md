@@ -387,10 +387,27 @@ apart (lighter or darker first, then a small turn round the colour wheel), so
 every channel stays unique. Gaming and Movies keep colours generated to sit
 apart.
 
-**Settings → Channel colours** shows every channel's colour and where it
-came from, with a picker to set any one by hand (a hand-set colour always
-wins; *Reset* goes back), and *Read the avatars again* to re-sample now.
-The catalog colours live on `color` in `src/catalog.ts`.
+**Settings → Channels** lists every channel by category.
+
+- **Rename one:** click its name, type the new one and press *Save channels*.
+  The new name is used everywhere on the board at once, past videos included:
+  the dashboard, the calendar, Uploads and its YouTube link, Recurring, time
+  estimates, finance, the Idea Feed and Story Lab. The channel keeps its id,
+  so its batches, links and history carry on. A Discord message that still
+  uses the old name still finds the channel, and its row says *was …*. The
+  name doesn't have to match the YouTube channel's own name.
+- **Recolour one** with its picker. A hand-set colour always wins; *Reset*
+  goes back. *Read the avatars again* re-samples them now.
+- **Add a channel:** give it a name, a category and a colour (one no other
+  channel wears is picked for you). A Bits or Reading channel also takes how
+  many uploads it posts a day, and opens that daily batch like the others.
+  It's on every page straight away; link its YouTube channel on its Uploads
+  page. An added channel can be taken off again while nothing's been filed
+  under it; after that, rename it instead.
+
+The catalog colours live on `color` in `src/catalog.ts`. Added and renamed
+channels are kept in the database (`channel_settings`) and applied at
+startup, and every running process picks up a change within a minute.
 
 Every dot shows the exact colour, with a hairline ring so a pale one stays
 visible on white and a dark one on the rail. A channel's *name* is written in
@@ -925,8 +942,8 @@ ever dropped into their own story, and a heroine's blueprint says *her*.
 What's on the page:
 
 - **Write next**, channel by channel: **two cards for every Stories channel**,
-  chosen for that channel. Its own worlds, heroes and formats count for more,
-  and no idea is on the page twice. A channel's two cards share no hero,
+  only ideas that fit it (see *Each channel's focus* below). Its own worlds,
+  heroes and formats count for more, and no idea is on the page twice. A channel's two cards share no hero,
   world or power, and no world, power or lead appears more than twice across
   the page. Each card has:
   - **a score out of 100**, a prediction: 50 is the channel's usual, about
@@ -1015,6 +1032,83 @@ For a batch of .docx files, the old way still works: put them in a folder and
 run `python3 scripts/build-story-corpus.py "<folder>"`, then commit
 `src/web/stories/corpus.json`. New heroes and worlds go in
 `src/web/stories/lore.ts`.
+
+### Each channel's focus, and Claude's ideas
+
+**Every Stories channel has a focus**, shown under its name in *Write next*
+(📌), and an idea is only offered on a channel it fits. "What If Invincible
+Had A Green Lantern Ring?" never goes to Specular Anime.
+
+- **From its name**, when the name says what the channel is: Specular Anime
+  and Manga are anime and manga characters, Comics comic book characters,
+  Animation animated-series characters, FNAF anything FNAF, Force Star Wars,
+  Horror horror settings, YOU second-person stories, Battles versus battles,
+  Survives survival tests.
+- **Otherwise from its videos:** whatever more than half of them share (four
+  at least) that most sets it apart from the network's other channels. That
+  can be one character (Spider-Man), one franchise, one format, a genre, or
+  the kind of character leading them.
+- **By hand:** *✎ Focus* sets it to any of those, to *anything*, or back to
+  reading it from its videos. It also takes a note in your words ("anime
+  characters in other worlds; never western cartoons"), which Claude reads
+  when it writes ideas for the channel.
+
+The header says where the focus came from and how many of the channel's
+videos have it ("its name · 31 of 38 videos"). A channel with a focus picks
+its cards first, so an idea goes to the channel it's made for. Two cards on a
+focused channel can share its focus (FNAF on Specular FNAF), but nothing
+else.
+
+**Claude's ideas.** Story Lab's own ideas are combinations of the lore's
+heroes, worlds, powers and formats. Beside them, Claude writes ideas for each
+channel that aren't limited to those lists: any character, world, matchup or
+title shape the channel's audience would know. It reads:
+
+- the channel's focus and note;
+- every one of its videos, with how each did against its usual, best first;
+- what's planned on the board;
+- what's been turned down or suggested before;
+- what the other channels made lately;
+- every channel's focus, so it knows what belongs where.
+
+Each idea comes with a premise, the beats of how the video goes, why it suits
+the channel, and which of the channel's own videos it builds on (with how
+they did). Before an idea is kept it's checked in code:
+
+- not already public on any channel (the same character with the same world,
+  power or opponent is the same video);
+- not planned on the board, and not suggested before;
+- within the channel's focus, when its title names characters or worlds
+  Story Lab knows.
+
+**Its score** comes from the network's own results, never from Claude: how
+videos with its characters, world and power did, and how videos with the
+same title shape did ("every … villain ranked", "how does … actually work").
+It uses the same scale as every card.
+
+**Each channel shows one of each** when it can: the best idea, then the best
+of the other kind, marked *✨ Claude's idea*. ↻ Reroll and 🔖 Save work the
+same way, and a saved one keeps its premise and beats in the idea bucket.
+When one of its titles is a format the lore builds, it gets that blueprint
+too. Otherwise the beats are the outline.
+
+**Refilling.** Claude keeps about four ideas waiting for each channel. Every
+five minutes the channels running lowest get six more, at most three
+channels at a time. A reroll or a save tops that channel up straight away.
+Calls are capped at 30 a day across all channels (`STORYLAB_AI_DAILY`).
+Timing:
+
+- a channel is asked at most every ten minutes;
+- after a failed try it waits half an hour;
+- after a batch that was all repeats it waits six hours.
+
+**Changing a channel's focus or note** sets aside the ideas written to the old
+one, and Claude writes to the new one. Nothing waits on Claude: the page
+shows what's ready, and the lore's own ideas when nothing is.
+
+It needs `ANTHROPIC_API_KEY`. `STORYLAB_MODEL` picks a different Claude model
+for it. Where the model supports it, a request it declines is answered by
+another model in the same call.
 
 ### Specular compilations — the daily Movie and the Sleep every 4 days
 
