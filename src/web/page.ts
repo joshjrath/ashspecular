@@ -193,7 +193,9 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
   border-bottom: 1px dashed #4A4A55; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 13.5px; }
 .colrow .chname:hover { border-color: var(--line); }
 .colrow .chname:focus { border-color: var(--yellow); background: var(--sunk); outline: none; }
-.setsave .seterr { color: #FF8A80; font-weight: 700; font-size: 13.5px; }
+.setsave .seterr, .pwset .seterr { color: #FF8A80; font-weight: 700; font-size: 13.5px; }
+.pwset .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
+.chaddrow input[type=password] { width: min(220px, 70vw); }
 .chaddrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 12px; }
 .chaddrow label { display: flex; flex-direction: column; gap: 4px; color: var(--ink3); font-size: 12px; font-weight: 600; }
 .chaddrow input:not([type=color]), .chaddrow select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk);
@@ -7007,6 +7009,8 @@ export function renderSettings(
     newColour?: string;
     /** Why a rename or an addition didn't go through. */
     channelError?: string;
+    /** The login password: when it was last changed here, and how the last change went. */
+    password?: { changedAt: Date | null; saved: boolean; error: string };
   },
 ): string {
   const off = new Set(data.railHide);
@@ -7050,8 +7054,32 @@ export function renderSettings(
       ${daysOffStrip(data.daysOff, data.shifted)}
     </section>
     ${estimateSettings(data.estimatesSaved ?? false)}
-    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}`,
+    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}
+    ${data.password ? passwordSettings(data.password) : ""}`,
   );
+}
+
+/**
+ * The login password, changed right here: the current one, then the new one
+ * twice. Everyone else is signed out; DASHBOARD_PASSWORD_RESET on the server
+ * goes back to DASHBOARD_PASSWORD if it's forgotten.
+ */
+function passwordSettings(p: { changedAt: Date | null; saved: boolean; error: string }): string {
+  return `<form class="panel setgroup settings pwset" id="password" method="post" action="/settings/password" style="margin-top:14px">
+    <h2>Login password <span class="sub">— ${
+      p.changedAt ? `last changed here ${esc(usDate(dayOf(p.changedAt)))}` : "still the one set on Railway (DASHBOARD_PASSWORD)"
+    }. Changing it signs out every other browser and phone; this one stays signed in.</span></h2>
+    <div class="chaddrow">
+      <label>Current password<input type="password" name="current" required autocomplete="current-password"></label>
+      <label>New password<input type="password" name="next" required minlength="8" maxlength="200" autocomplete="new-password"></label>
+      <label>New password again<input type="password" name="again" required minlength="8" maxlength="200" autocomplete="new-password"></label>
+      <button class="clear">Change password</button>
+    </div>
+    <p class="hint">At least 8 characters. Forgotten it? On Railway, set <code>DASHBOARD_PASSWORD_RESET</code> to <code>true</code> and redeploy:
+      the password goes back to <code>DASHBOARD_PASSWORD</code>. Then remove that variable.</p>
+    ${p.saved ? `<p class="saved" role="status">Password changed. Every other sign-in has ended.</p>` : ""}
+    ${p.error ? `<p class="seterr" role="alert">${esc(p.error)}</p>` : ""}
+  </form>`;
 }
 
 /**

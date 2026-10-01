@@ -1728,3 +1728,14 @@ on a public URL, so an open one is a link away from anybody.
 
 It is a single shared password, not accounts. That is the right size for now;
 say the word when other people need their own logins.
+
+**Changing it on the board:** in **Settings → Login password**, enter the
+current password, then the new one twice (8 characters at least). The new one
+takes over from `DASHBOARD_PASSWORD` straight away. Only a salted scrypt hash
+of it is kept, in the database. Every other browser and phone is signed out;
+the one you changed it from stays signed in.
+
+**Forgotten it?** On Railway, set `DASHBOARD_PASSWORD_RESET` to `true` and
+redeploy. The changed password is cleared and `DASHBOARD_PASSWORD` works
+again. Remove the variable once you're back in, or it clears the password at
+every restart.

@@ -93,6 +93,7 @@ import { nearestHistory, wordsOf, type HistoryItem } from "../src/ideas/similar.
 import { nextPollMinutes, pacedAllowance } from "../src/ideas/pace.js";
 import { estimateCost, feedHref, ideaCard, renderIdeaFeed, renderIdeaSources } from "../src/web/bitsfeed/pages.js";
 import type { SourceRow } from "../src/db/ideas.js";
+import { checkPassword, hashPassword, issueToken, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
 import { distinctColour } from "../src/jobs/avatars.js";
@@ -2231,6 +2232,16 @@ t("the page: each channel's focus (changeable), Claude's idea with its beats and
   claudeLabPage.includes("✨ Claude's idea"), claudeLabPage.includes("<li>Mahito</li>"), claudeLabPage.includes("builds on “Every Batman Villain, Ranked”"), claudeLabPage.includes("✨ 3 of Claude&#39;s ideas waiting") || claudeLabPage.includes("✨ 3 of Claude's ideas waiting"),
   claudeLabPage.includes("4 of 30 calls today"), [...claudeLabPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].every((m) => { try { new Function(m[1]!); return true; } catch { return false; } }),
 ], [true, true, true, true, true, true, true, true, true]);
+
+section("Login password");
+const tokenBefore = issueToken();
+setStoredPassword({ hash: hashPassword("newpass123", "salt1"), salt: "salt1", generation: "g1", changedAt: new Date() });
+t("a password set in Settings takes over; the old sign-ins end", [checkPassword("newpass123"), checkPassword(config.dashboardPassword || "test"), checkPassword(""), verifyToken(tokenBefore), verifyToken(issueToken())], [true, false, false, false, true]);
+const tokenG1 = issueToken();
+setStoredPassword({ hash: hashPassword("another-one", "salt2"), salt: "salt2", generation: "g2", changedAt: new Date() });
+t("…and changing it again ends those too", [verifyToken(tokenG1), checkPassword("newpass123"), checkPassword("another-one")], [false, false, true]);
+setStoredPassword(null);
+t("…none set: sign-ins from before still hold", verifyToken(tokenBefore), true);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

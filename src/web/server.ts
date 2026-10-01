@@ -130,7 +130,8 @@ import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
-import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, verifyToken } from "./auth.js";
+import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, passwordChangedAt, verifyToken } from "./auth.js";
+import { loadBoardPassword, saveBoardPassword } from "../db/password.js";
 import { renderForgotten, renderMyDay, renderRecording, renderTasks, renderVoQueue, type TimerState } from "./page.js";
 import { DAY_SPAN, RAIL_ITEMS, calendarGrid, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
 import {
@@ -488,6 +489,8 @@ export async function startWeb(): Promise<void> {
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
     // Whatever's been added to Story Lab from its dice.
     applyAdditions(await listLabAdditions().catch(() => []));
+    // A login password changed in Settings takes over from DASHBOARD_PASSWORD.
+    await loadBoardPassword().catch((err) => console.error("[auth] couldn't read the stored password:", err));
     // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
     setBoardScripts(await listScripts().catch(() => []));
     // What's new: each change is announced from the first start that ships it.
@@ -2155,7 +2158,22 @@ export async function startWeb(): Promise<void> {
     return reply.redirect("/settings?estimates=saved#estimates");
   });
 
-  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string } }>("/settings", async (request, reply) => {
+  // The login password: the current one, then the new one twice. Every other sign-in ends; this one carries on.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/password", async (request, reply) => {
+    const b = request.body ?? {};
+    const fail = (why: string) => reply.redirect(`/settings?${new URLSearchParams({ pwerr: why }).toString()}#password`);
+    if (!hasDatabase) return fail("The password can only be changed with the database connected.");
+    if (!checkPassword(b.current ?? "")) return fail("The current password isn't right.");
+    const next = b.next ?? "";
+    if (next.length < 8) return fail("The new password needs at least 8 characters.");
+    if (next.length > 200) return fail("That's too long (200 characters at most).");
+    if (next !== (b.again ?? "")) return fail("The two new passwords don't match.");
+    if (checkPassword(next)) return fail("That's the password already.");
+    await saveBoardPassword(next);
+    return reply.setCookie(COOKIE_NAME, issueToken(), COOKIE_OPTIONS).redirect("/settings?pw=changed#password");
+  });
+
+  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; pw?: string; pwerr?: string } }>("/settings", async (request, reply) => {
     const [s, shifted, sources, settings] = await Promise.all([shell("settings"), listOffShifted(), colourSources(), listChannelSettings().catch(() => [])]);
     const sampled = new Set(sampledChannels());
     // An added channel with nothing filed under it yet can be taken off again.
@@ -2184,6 +2202,7 @@ export async function startWeb(): Promise<void> {
         }),
         newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
         estimatesSaved: request.query.estimates === "saved",
+        password: { changedAt: passwordChangedAt(), saved: request.query.pw === "changed", error: (request.query.pwerr ?? "").slice(0, 200) },
         coloursSaved:
           request.query.chmsg ? request.query.chmsg.slice(0, 300) : request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
         channelError: (request.query.cherr ?? "").slice(0, 300),

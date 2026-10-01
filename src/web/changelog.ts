@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-01-login-password",
+    title: "Change the login password in Settings",
+    changes: [
+      { text: "Settings → Login password: enter the current password and the new one twice. It works straight away, and every other browser and phone is signed out.", href: "/settings#password" },
+      { text: "Forgotten it? Set DASHBOARD_PASSWORD_RESET to true on Railway and redeploy to go back to DASHBOARD_PASSWORD, then remove the variable.", href: "/settings#password" },
+    ],
+  },
+  {
     id: "2026-09-30-channels-story-lab-focus",
     title: "Rename or add channels in Settings; Story Lab only suggests ideas that fit each channel",
     changes: [
