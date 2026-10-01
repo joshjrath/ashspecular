@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-01-competitors",
+    title: "Competitors: outliers, concept gaps and your position, niche by niche",
+    changes: [
+      { text: "A new Competitors section. Make niches (What If, Rankings, FNAF…), paste competitor channel links, and mark your own channels. Each niche is analysed on its own.", href: "/competitors" },
+      { text: "Every video is scored against its own channel's normal, with the same engine as Uploads, so a 300K video on a 30K channel stands out. Hottest outliers, top videos and each competitor's numbers are all there.", href: "/competitors" },
+      { text: "Concept gaps show what's breaking out for competitors that your channels haven't covered, or haven't lately. Each one comes with the videos and numbers behind it, and is marked never covered, stale, recent, planned or saturated.", href: "/competitors" },
+      { text: "What's working, emerging topics and My position use the real numbers. A daily AI read interprets them, and every note cites the facts it rests on.", href: "/competitors" },
+      { text: "Data comes from the YouTube API with YOUTUBE_API_KEY (within a daily quota budget). Without it, each channel's free feed gives only its latest 15 videos.", href: "/competitors/manage" },
+    ],
+  },
+  {
     id: "2026-10-01-login-password",
     title: "Change the login password in Settings",
     changes: [

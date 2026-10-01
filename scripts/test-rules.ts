@@ -93,6 +93,9 @@ import { nearestHistory, wordsOf, type HistoryItem } from "../src/ideas/similar.
 import { nextPollMinutes, pacedAllowance } from "../src/ideas/pace.js";
 import { estimateCost, feedHref, ideaCard, renderIdeaFeed, renderIdeaSources } from "../src/web/bitsfeed/pages.js";
 import type { SourceRow } from "../src/db/ideas.js";
+import { channelStats, conceptGaps, emergingTopics, myPosition, rowsOf, whatsWorking } from "../src/competitors/analysis.js";
+import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
+import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
 import { checkPassword, hashPassword, issueToken, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
@@ -1050,7 +1053,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 14 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 15 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -2242,6 +2245,50 @@ setStoredPassword({ hash: hashPassword("another-one", "salt2"), salt: "salt2", g
 t("…and changing it again ends those too", [verifyToken(tokenG1), checkPassword("newpass123"), checkPassword("another-one")], [false, false, true]);
 setStoredPassword(null);
 t("…none set: sign-ins from before still hold", verifyToken(tokenBefore), true);
+
+section("Competitors");
+const cNow = new Date("2026-10-01T12:00:00Z");
+const cDay = 86_400_000;
+const cCh = (id: number, mine = false): CompChannel => ({ id, groupId: 1, youtubeId: `UC${id}`, input: "", mine, boardChannel: null, title: `Ch${id}`, handle: null, avatar: null, subscribers: null, videoCount: null, backfilledAt: null, refreshedAt: null, error: null });
+const cVid = (id: string, ch: number, daysAgo: number, views: number, title = "x"): NicheVideo => ({ videoId: id, channelId: ch, title, publishedAt: new Date(cNow.getTime() - daysAgo * cDay), durationS: 1300, isShort: false, thumbnail: "", views, url: `https://www.youtube.com/watch?v=${id}`, snapshots: [] });
+const cCon = (ref: string, lead: string | null, other: string | null, trend = "Marvel × Anime crossover", format = "what_if"): Concept => ({ ref, title: ref, lead, other, characters: lead ? [lead] : [], franchises: other ? [other] : [], format, trend, shape: null, source: "ai" });
+const cChannels = [cCh(1), cCh(2), cCh(3), cCh(9, true)];
+const cVideos: NicheVideo[] = [];
+const cConcepts = new Map<string, Concept>();
+for (const ch of [1, 2, 3]) for (let i = 0; i < 5; i++) { const id = `b${ch}${i}`; cVideos.push(cVid(id, ch, 40 + i * 10, 10_000)); cConcepts.set(id, cCon(id, `Hero${ch}${i}`, "Somewhere")); }
+// Spider-Man × JJK breaks out on two channels; Batman × The Boys on one, which I covered 14 months ago; Gojo × The MCU, which I covered last month.
+cVideos.push(cVid("o1", 1, 20, 60_000)); cConcepts.set("o1", cCon("o1", "Spider-Man", "Jujutsu Kaisen"));
+cVideos.push(cVid("o2", 2, 18, 40_000)); cConcepts.set("o2", cCon("o2", "Spider-Man", "Jujutsu Kaisen"));
+cVideos.push(cVid("o3", 3, 25, 30_000)); cConcepts.set("o3", cCon("o3", "Batman", "The Boys", "Superhero crossover"));
+cVideos.push(cVid("o4", 3, 16, 25_000)); cConcepts.set("o4", cCon("o4", "Gojo", "The MCU"));
+cVideos.push(cVid("m1", 9, 425, 5_000)); cConcepts.set("m1", cCon("m1", "Batman", "The Boys", "Superhero crossover"));
+cVideos.push(cVid("m2", 9, 30, 5_000)); cConcepts.set("m2", cCon("m2", "Gojo", "The MCU"));
+cVideos.push(cVid("m3", 9, 200, 5_000)); cConcepts.set("m3", cCon("m3", "Spider-Man", "The Boys"));
+const cRows = rowsOf(cVideos, cChannels, cConcepts, cNow);
+const rowOf = (id: string) => cRows.find((r) => r.video.videoId === id)!;
+t("competitor videos are scored by the board's own engine, against their channel's normal", [rowOf("o1").multiple, rowOf("o1").basis, rowOf("b10").multiple, Math.round(rowOf("o1").perDay!)], [6, "lifetime", 1, 3000]);
+const cGaps = conceptGaps(cRows, [{ ref: "rec:1", title: "Gojo In The MCU", channel: "Specular Anime", date: "2026-10-09", concept: null }], { days: 30, outlier: 2, staleMonths: 9, now: cNow });
+const gapOf = (k: string) => cGaps.find((g) => g.key === k);
+t("concept gaps: never covered, stale, recently covered — matched on lead and other, not title", [
+  cGaps.map((g) => g.key), gapOf("spider man|jujutsu kaisen")?.coverage, gapOf("spider man|jujutsu kaisen")?.channels, gapOf("spider man|jujutsu kaisen")?.strong,
+  gapOf("batman|boys")?.coverage, gapOf("gojo|mcu")?.coverage,
+], [["spider man|jujutsu kaisen", "batman|boys", "gojo|mcu"], "never", 2, true, "stale", "recent"]);
+t("…Spider-Man in The Boys doesn't count as covering Spider-Man in JJK, and the why is all numbers from the videos", [gapOf("spider man|jujutsu kaisen")!.mine.length, gapOf("spider man|jujutsu kaisen")!.why],
+  [0, "2 independent competitors produced 2 2×+ outliers on Spider-Man × Jujutsu Kaisen in the last 30 days (highest 6.0×, the latest 18 days ago). None of the channels marked as yours have covered it."]);
+const plannedGaps = conceptGaps(cRows, [{ ref: "rec:1", title: "Spider-Man Goes To Jujutsu High", channel: "Specular Anime", date: "2026-10-09", concept: cCon("rec:1", "Spider-Man", "Jujutsu Kaisen") }], { days: 30, outlier: 2, staleMonths: 9, now: cNow });
+t("…a planned video on the board counts as planned", plannedGaps.find((g) => g.key === "spider man|jujutsu kaisen")?.coverage, "planned");
+t("…outside the window it isn't surfaced", conceptGaps(cRows, [], { days: 7, outlier: 2, staleMonths: 9, now: cNow }).length, 0);
+t("concepts read by rules when there's no key: lead and other from the lore, format and shape", [ruleConcept("x", "What If Spider-Man Was In Jujutsu Kaisen?").lead, ruleConcept("x", "What If Spider-Man Was In Jujutsu Kaisen?").other, ruleConcept("x", "Every Batman Villain, Ranked").format, conceptKey(cCon("x", "Spider-Man", "The Boys"))], ["Spider-Man", "Jujutsu Kaisen", "ranking", "spider man|boys"]);
+const cStats = cChannels.map((c) => channelStats(c, cRows, 2));
+const s1 = cStats[0]!;
+t("a channel's numbers: medians of settled videos, uploads a week, outlier rate and strength", [s1.medianViews, s1.uploads90, Number(s1.perWeek.toFixed(2)), s1.outliers90, Number(s1.outlierRate!.toFixed(2)), s1.outlierStrength, s1.best?.video.videoId], [10_000, 6, 0.47, 1, 0.33, 6, "o1"]);
+const pos = myPosition(cStats);
+t("my position: every channel's real numbers beside the competitors' median, no made-up rank", [pos.stats.map((x) => x.channel.id), pos.niche.medianViews], [[1, 2, 3, 9], 10_000]);
+const working = whatsWorking(cRows, { days: 90, outlier: 2 });
+t("what's working: what outliers share more than the niche, from 2+ channels", [working.map((p) => `${p.dimension}:${p.value}`).slice(0, 2), working.some((p) => p.dimension === "trend")], [["character:Spider-Man", "franchise:Jujutsu Kaisen"], false]);
+const emerge = emergingTopics([...cRows, ...[1, 2, 3].map((ch) => ({ ...rowOf(`b${ch}0`), ageDays: 5, concept: cCon("e", "Invincible", "Dragon Ball") }))], { outlier: 2 });
+const emergeC = emerge.find((e) => e.kind === "concept");
+t("emerging: three channels on one thing in two weeks, flagged as early", [emergeC?.label, emergeC?.channels, emergeC?.fact.startsWith("3 channels uploaded 3 videos on Invincible × Dragon Ball in the last 14 days")], ["Invincible × Dragon Ball", 3, true]);
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,

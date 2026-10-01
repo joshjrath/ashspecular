@@ -2310,7 +2310,7 @@ export interface Shell {
   /** Channels with production paused, and the day each was paused (YYYY-MM-DD). */
   pausedChannels?: Record<string, string>;
   counts: Record<string, number>;
-  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number; tasks?: number; tasksUrgent?: number; financeAlerts?: number; ideas?: number };
+  nav: { reviews: number; queue: number; recurring: number; calendar: number; behind?: number | null; vo?: number; forgotten?: number; tasks?: number; tasksUrgent?: number; financeAlerts?: number; ideas?: number; competitors?: number };
   lastIntake: Date | null;
   /** How many records are removed; the rail links to them when there are any. */
   removed?: number;
@@ -2398,6 +2398,7 @@ export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "C
   { key: "finance", label: "Finance", group: "Pages" },
   { key: "storylab", label: "Story Lab", group: "Pages" },
   { key: "ideas", label: "Idea Feed", group: "Pages" },
+  { key: "competitors", label: "Competitors", group: "Pages" },
   ...CATEGORIES.map((c) => ({ key: `cat-${c.id}`, label: c.label, group: "Categories" as const })),
   { key: "search", label: "Search box", group: "Also" },
   { key: "live", label: "#intake · last message", group: "Also" },
@@ -2470,6 +2471,7 @@ function sidebar(s: Shell): string {
       ${item("/uploads", "Uploads", s.nav.behind ?? null, "uploads")}
       ${item("/story-lab", "Story Lab", null, "storylab")}
       ${item("/ideas", "Idea Feed", s.nav.ideas ?? null, "ideas")}
+      ${item("/competitors", "Competitors", s.nav.competitors ?? null, "competitors")}
       ${
         off.has("finance")
           ? ""

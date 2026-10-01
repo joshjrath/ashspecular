@@ -1437,6 +1437,146 @@ Linked from the feed:
 - more providers. The provider layer is generic, and Tumblr is only the
   first.
 
+## Competitors — what's working in each niche, and what you haven't made
+
+**Competitors** in the sidebar. Competitor channels are tracked in **niches**
+(What If, Rankings, FNAF…). A video is only ever compared within its niche, and
+picking a niche switches the whole page to that niche's data. **Manage** creates,
+renames and deletes niches, moves channels between them, and marks channels
+**Mine**.
+
+**Adding a channel:** paste its YouTube link (or an @handle) under *Add a
+channel*, tick *Mine* for your own, or pick one of the board's channels. A board
+channel's videos come from Uploads, so nothing is fetched twice. A new channel is
+read straight away.
+
+### Where the data comes from
+
+- **The YouTube Data API**, with `YOUTUBE_API_KEY`; nothing is scraped.
+- **Adding a channel** reads its name, handle, avatar, subscribers (unless
+  hidden) and up to its last 500 uploads, with views, likes, comments and
+  duration. That costs about 20 quota units.
+- **Every 3 hours** after that, it reads the newest uploads and the views of
+  the last 60 days, about 2–4 units.
+- **Quota:** YouTube gives a key 10,000 units a day. The board spends at most
+  6,000 (changeable in Manage → Settings), and the overview shows today's use.
+- **Without a key**, each channel's free feed gives only its latest 15 videos:
+  no durations, no subscribers, no history.
+- **What the API can't give:** views on past dates. The board keeps its own
+  snapshots from the day a channel is added. Impressions, click-through and
+  retention aren't available for anyone else's channel, so they aren't shown.
+- The overview says when the data was last read, and lists any channel that
+  couldn't be read.
+
+### Outliers
+
+**Every video is scored by the same engine as the board's own Uploads:** its
+views against the median of the same channel's previous 20 videos at the same
+age (24 hours, 7 days, or lifetime once two weeks old).
+- A 300K video on a channel that usually gets 30K is 10×; a 1M video on a
+  channel that usually gets 900K is 1.1×.
+- Long-form and Shorts are scored separately (3 minutes or under counts as a
+  Short).
+- Cards show the multiple (relative) and the views (raw) separately.
+- A video too new to compare, on a channel whose snapshots haven't built up
+  yet, shows no multiple rather than a guess.
+
+### Each niche's overview
+
+- **Tiles:** competitors, my channels, videos analysed, major outliers.
+- **Insights:** alerts not seen yet.
+- **Top concept gaps:** the strongest five, with *View all gaps*.
+- **Hottest outliers:** thumbnails, with each video's multiple.
+- **AI read:** Claude's interpretation, once a day. It's marked as
+  interpretation, and every note cites the numbered facts it rests on; a note
+  that cites nothing real is dropped.
+- **What's working:** a character, franchise, format, pattern, title shape,
+  length or upload day is listed when it has 2 or more outliers from 2 or more
+  channels, at 1.5× the niche's outlier rate or more. Each comes with its
+  numbers and example videos.
+- **Emerging topics:** three or more channels picking something up in the last
+  14 days, or two doing above their normal. These are marked as less certain.
+- **Competitor performance:** a card per competitor.
+- **My position:** a table of every channel's real numbers, with yours green
+  at or above the competitors' median and red below. There's no combined
+  score.
+- **Recent uploads.**
+- Switches for long-form, Shorts or both, and for 7 days, 30 days, 90 days or
+  all time.
+
+**Clicking a competitor** shows:
+- its overview and recent performance against the niche;
+- monthly median views;
+- its top outliers;
+- the topics its outliers were about;
+- the concepts it's winning with that you haven't covered;
+- its recent uploads.
+
+### Concept gaps
+
+**What's working for competitors that your channels haven't made.**
+
+1. **Each title is read into a concept**, by Claude when there's a key, or
+   otherwise by Story Lab's lore. A concept has a **lead** (the main character),
+   an **other** (the franchise, world, opponent or topic it's set against), a
+   format and a broader trend, all in canonical names. "Spider-Man joined The
+   Seven" and "Spider-Man was in The Boys" are one concept. "Batman was in The
+   Boys" is a different one.
+2. **A concept with a competitor outlier in the window is a candidate.**
+3. **It's checked against every video from the channels marked Mine, and
+   what's planned on the board.** A video of yours covers it when it has the
+   same lead and the same other side, in any format. Coverage is one of:
+   - **Never covered**;
+   - **Stale coverage** (older than 9 months, changeable);
+   - **Recently covered**;
+   - **Planned** (a video on the board for one of your channels that isn't up
+     yet).
+
+   A concept is also marked **Saturated** when there were 6 or more competitor
+   videos on it from 4 or more channels in 90 days.
+
+**Each gap shows its signals, not a made-up score:** outliers, independent
+competitors, highest multiple, median views a day, outliers in the last 14
+days, and when you last covered it. It also explains itself in a sentence
+built only from those numbers. A **Strong signal** means 2 or more independent
+competitors and not covered, or not lately.
+
+**The gaps page** filters by coverage and by window. Opening a gap shows:
+- every competitor video behind it;
+- your related videos;
+- why it was surfaced;
+- related concepts.
+
+It also lists the broader trends behind this window's outliers.
+
+### Alerts
+
+Alerts are kept rare on purpose:
+- a competitor video at 4× or more (changeable) in its first week;
+- a new strong concept gap;
+- a topic three channels picked up in two weeks, and only if it's doing above
+  their normal.
+
+Each alert is raised once. The sidebar shows how many are unseen, and opening
+the niche marks them seen.
+
+### Settings and cost
+
+In Manage → Settings:
+
+| Setting | Default |
+|---|---|
+| Outlier threshold | 2× |
+| Major outlier (alerts) | 4× |
+| Coverage stale after | 9 months |
+| YouTube quota a day | 6,000 units |
+| Claude calls a day (concepts and the daily read) | 40 |
+
+Claude reads each title once, 50 at a time: competitors' last 120 days, your
+channels' whole history, and what's planned. Past the day's calls, titles are
+read by rules until the next day. `COMPETITORS_MODEL` picks a different Claude
+model.
+
 ## Uploads — is Stories keeping to every four days?
 
 **Uploads** in the rail tracks the fourteen Stories channels against their

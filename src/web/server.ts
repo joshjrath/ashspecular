@@ -98,6 +98,9 @@ import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postchec
 import { forgetHistory, strongUnseen } from "../db/ideas.js";
 import { addChannel, channelUse, listChannelSettings, loadChannelSettings, onChannelsChanged, removeChannel, renameChannel, startChannelSync } from "../db/channelsettings.js";
 import { registerIdeaFeed } from "./bitsfeed/routes.js";
+import { registerCompetitors } from "./competitors/routes.js";
+import { startCompetitorJobs } from "../jobs/competitors.js";
+import { unseenAlerts } from "../db/competitors.js";
 import { startIdeaJobs } from "../jobs/ideas.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
@@ -281,6 +284,8 @@ async function shell(active: string): Promise<Shell> {
       financeAlerts: hasDatabase ? (await financeAlerts().catch(() => [])).length || undefined : undefined,
       // Strong Bits ideas from the last three days nobody has decided on yet.
       ideas: hasDatabase ? (await strongUnseen().catch(() => 0)) || undefined : undefined,
+      // Competitor alerts from the last week not seen yet.
+      competitors: hasDatabase ? (await unseenAlerts().catch(() => 0)) || undefined : undefined,
       tasksUrgent: work ? work.tasks.filter((t) => t.priority === "urgent" || (t.due && t.due.getTime() < Date.now())).length : undefined,
     },
     lastIntake: at,
@@ -522,6 +527,12 @@ export async function startWeb(): Promise<void> {
   if (hasDatabase) {
     registerIdeaFeed(app, shell);
     startIdeaJobs();
+  }
+
+  // Competitors: niches, competitor channels, outliers and concept gaps — read in the background.
+  if (hasDatabase) {
+    registerCompetitors(app, shell);
+    startCompetitorJobs();
   }
 
   // The subscribable calendar. Two months back, a year ahead.

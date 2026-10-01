@@ -36,6 +36,7 @@ const NAME_COLUMNS: Array<[table: string, column: string, unique: boolean]> = [
   ["fin_income", "channel", false],
   ["idea_sources", "channel", false],
   ["ideas", "channel", false],
+  ["comp_channels", "board_channel", false],
 ];
 /** Tables that keep a list of channel names. */
 const NAME_ARRAYS: Array<[table: string, column: string]> = [
