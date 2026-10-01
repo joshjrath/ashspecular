@@ -19,6 +19,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-01-settings-hub",
+    title: "Settings like a phone's, with API keys and spending limits",
+    changes: [
+      { text: "Settings opens on a menu of every section, each with how it stands. Tap one to jump to it.", href: "/settings" },
+      { text: "Connections & API keys: set, replace, test or remove the Claude, YouTube and Tumblr keys right here. They work straight away, with no Railway or redeploy. Keys are stored encrypted and only shown by their first and last characters.", href: "/settings#keys" },
+      { text: "Add several YouTube keys, one per line. When one runs out of its daily quota, the next takes over until midnight Pacific.", href: "/settings#key-youtube" },
+      { text: "Limits & spending: every daily cap on Claude, YouTube and Tumblr in one place, with what each has used today.", href: "/settings#limits" },
+    ],
+  },
+  {
     id: "2026-10-01-competitors",
     title: "Competitors: outliers, concept gaps and your position, niche by niche",
     changes: [

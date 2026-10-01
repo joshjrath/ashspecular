@@ -114,7 +114,7 @@ export function renderNiche(shell: Shell, d: NichePage): string {
       <div class="hot"><b>${majors}</b><span>${s.major}×+ outliers, ${d.q.days === 3650 ? "all time" : `last ${d.q.days} days`}</span></div>
     </section>
     <p class="cfresh">${lastRead ? `Data refreshed ${esc(timeAgo(lastRead))}` : "Not read yet — first reads start within a few minutes"} · ${
-      d.status.key ? `YouTube API · ${d.status.quotaUsed.toLocaleString("en-US")} of ${s.quota.toLocaleString("en-US")} quota units today` : "<b>No YOUTUBE_API_KEY</b>: only each channel's latest 15 videos (free feed), no durations or subscribers"
+      d.status.key ? `YouTube API · ${d.status.quotaUsed.toLocaleString("en-US")} of ${s.quota.toLocaleString("en-US")} quota units today` : `<b>No YouTube key</b> (<a href="/settings#key-youtube">add one in Settings</a>): only each channel's latest 15 videos (free feed), no durations or subscribers`
     }${failing.length ? ` · <span class="cerr">${failing.length} channel${failing.length === 1 ? "" : "s"} couldn't be read</span>` : ""}</p>`;
   const alerts = d.alerts.filter((a) => !a.seenAt).slice(0, 5);
   const insight = alerts.length ? `<section class="cinsights">${alerts.map((a) => `<a href="${esc(a.href ?? "#")}"${a.href?.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}><i class="k-${esc(a.kind)}"></i>${esc(a.text)}</a>`).join("")}</section>` : "";
@@ -345,7 +345,7 @@ export function renderManage(shell: Shell, d: { groups: Group[]; channels: CompC
         <label>Claude calls a day<input type="number" name="aiCalls" min="0" max="500" value="${s.aiCalls}"></label>
         <button class="clear">Save</button>
       </form>
-      <p class="hint">${d.status.key ? "YOUTUBE_API_KEY is set." : "<b>YOUTUBE_API_KEY isn't set</b>: channels are read from their free feeds (latest 15 videos only)."} ${d.status.ai ? "Claude reads concepts and writes the daily read." : "No ANTHROPIC_API_KEY: concepts are read by rules only, and there's no AI read."}</p></section>`,
+      <p class="hint">${d.status.key ? "A YouTube key is set (Settings → Connections &amp; API keys; several keys share the quota)." : `<b>No YouTube key</b> — add one in <a href="/settings#key-youtube">Settings → Connections &amp; API keys</a>: channels are read from their free feeds (latest 15 videos only).`} ${d.status.ai ? "Claude reads concepts and writes the daily read." : "No Claude key (Settings → Connections &amp; API keys): concepts are read by rules only, and there's no AI read."}</p></section>`,
   );
 }
 

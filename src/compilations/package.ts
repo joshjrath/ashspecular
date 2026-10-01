@@ -8,6 +8,7 @@
  * Never from titles alone: every source needs its text first.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -41,7 +42,6 @@ const PackageSchema = z.object({
 });
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
-let client: Anthropic | null = null;
 
 /** Stable so it caches: the sources, the title and the voice samples go in the user turn. */
 const SYSTEM = `You put together the editor package for a "Full Movie" compilation on Specular, a YouTube channel of narrated what-if stories about anime, comic and game characters. A Movie joins four or five of the channel's own videos, back to back, under one umbrella title.
@@ -70,8 +70,7 @@ export const canWritePackages = () => Boolean(process.env.ANTHROPIC_API_KEY?.tri
 
 export async function writePackage(title: string, sources: PackageSource[], voice: string[]): Promise<EditorPackage> {
   if (!canWritePackages()) throw new Error("Writing the intro and transitions needs ANTHROPIC_API_KEY set on the server.");
-  client ??= new Anthropic();
-  const response = await client.messages.parse({
+  const response = await anthropic().messages.parse({
     model: MODEL,
     max_tokens: 8192,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],

@@ -102,6 +102,9 @@ import { registerCompetitors } from "./competitors/routes.js";
 import { startCompetitorJobs } from "../jobs/competitors.js";
 import { unseenAlerts } from "../db/competitors.js";
 import { startIdeaJobs } from "../jobs/ideas.js";
+import { KEY_DEFS, keyStates, keysInEffect, limitValue, loadKeys, mask, setKey, setLimit, startKeySync, testKey, youtubeStatus } from "../db/keys.js";
+import { getSettings as getIdeaSettings, saveSettings as saveIdeaSettings, usageOn as ideaUsageOn } from "../db/ideas.js";
+import { getCompSettings, saveCompSettings, usageToday as compUsageToday } from "../db/competitors.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { REPEAT, type Repeat } from "../tasks/repeat.js";
@@ -482,6 +485,9 @@ export async function startWeb(): Promise<void> {
 
   if (hasDatabase) {
     await migrate();
+    // API keys and limits set in Settings take over from Railway's variables, before anything calls out.
+    await loadKeys().catch((err) => console.error("[keys] load failed:", err));
+    startKeySync();
     // Channels added or renamed in Settings; when they change, colours and caches follow.
     onChannelsChanged(async () => {
       ownPaces = null;
@@ -2169,6 +2175,89 @@ export async function startWeb(): Promise<void> {
     return reply.redirect("/settings?estimates=saved#estimates");
   });
 
+  const keysView = (q: { key?: string; keymsg?: string; keyerr?: string }) => {
+    const resting = new Map(youtubeStatus().map((y) => [y.masked, y.resting]));
+    return {
+      services: keyStates().map((st) => {
+        const t = keyTests.get(st.def.id);
+        const tests = t && Date.now() - t.at < 15 * 60_000 ? new Map(t.results.map((r) => [r.masked, r])) : null;
+        return {
+          id: st.def.id, label: st.def.label, what: st.def.what, where: st.def.where, many: Boolean(st.def.many), source: st.source, unreadable: st.unreadable,
+          keys: st.masked.map((m) => ({ masked: m, resting: st.def.id === "youtube" ? resting.get(m) : false, test: tests?.get(m) })),
+        };
+      }),
+      flash: q.key && q.keymsg ? { id: q.key, text: q.keymsg.slice(0, 200), error: q.keyerr === "1" } : undefined,
+    };
+  };
+  const limitsView = async (saved: boolean) => {
+    const [story, idea, ideaUse, comp, compUse] = await Promise.all([aiRunSummary(), getIdeaSettings(), ideaUsageOn(), getCompSettings(), compUsageToday()]);
+    return {
+      saved,
+      rows: [
+        { group: "Story Lab", name: "story", label: "Claude calls a day", note: "Writing new ideas for each Stories channel", value: dailyCap(), max: 500, today: story.calls },
+        { group: "Idea Feed", name: "triageCap", label: "Quick looks a day", note: "Claude's first read of each Tumblr post", value: idea.triageCap, max: 20000, today: ideaUse.get("ai-triage")?.items ?? 0 },
+        { group: "Idea Feed", name: "fullCap", label: "Full reads a day", note: "Claude's full analysis of the promising ones", value: idea.fullCap, max: 2000, today: ideaUse.get("ai-full")?.items ?? 0 },
+        { group: "Idea Feed", name: "tumblrDailyCap", label: "Tumblr calls a day", note: "Tumblr allows 5,000", value: idea.tumblrDailyCap, max: 4900, today: ideaUse.get("tumblr")?.calls ?? 0 },
+        { group: "Competitors", name: "aiCalls", label: "Claude calls a day", note: "Reading concepts and the daily read", value: comp.aiCalls, max: 1000, today: compUse.ai },
+        { group: "Competitors", name: "quota", label: "YouTube quota units a day", note: "10,000 per key from Google", value: comp.quota, max: 100000, today: compUse.youtube },
+      ],
+    };
+  };
+
+  // API keys: save (replace), test, or remove one service's key. Takes effect straight away.
+  const keyTests = new Map<string, { at: number; results: Array<{ masked: string; ok: boolean; note: string }> }>();
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/keys", async (request, reply) => {
+    const b = request.body ?? {};
+    const id = b.id ?? "";
+    const def = KEY_DEFS.find((d) => d.id === id);
+    const back = (text: string, error = false) =>
+      reply.redirect(`/settings?${new URLSearchParams({ key: id, keymsg: text, ...(error ? { keyerr: "1" } : {}) }).toString()}#key-${id}`);
+    if (!def) return reply.redirect("/settings#keys");
+    if (!hasDatabase) return back("Keys can only be set here with the database connected — use Railway's variables.", true);
+    const action = b.do ?? "save";
+    if (action === "clear") {
+      await setKey(id, null);
+      keyTests.delete(id);
+      const left = keysInEffect(id).length;
+      return back(left ? "Removed. Railway's key is in use again." : "Removed. No key is set now.");
+    }
+    if (action === "test") {
+      const keys = keysInEffect(id);
+      if (!keys.length) return back("There's no key to test.", true);
+      const results = await Promise.all(keys.slice(0, 10).map(async (k) => ({ masked: mask(k), ...(await testKey(id, k)) })));
+      keyTests.set(id, { at: Date.now(), results });
+      const bad = results.filter((r) => !r.ok).length;
+      return back(bad ? `${bad} of ${results.length} didn't work.` : results.length > 1 ? `All ${results.length} work.` : "It works.", bad > 0);
+    }
+    const value = (b.value ?? "").trim();
+    if (!value) return back("Paste a key first.", true);
+    if (value.length > 4000 || /[^\x21-\x7e\s,]/.test(value)) return back("That doesn't look like a key.", true);
+    await setKey(id, value);
+    // Check it straight away, so a typo shows now rather than when a feature fails.
+    const keys = keysInEffect(id);
+    const results = await Promise.all(keys.slice(0, 10).map(async (k) => ({ masked: mask(k), ...(await testKey(id, k)) })));
+    keyTests.set(id, { at: Date.now(), results });
+    const bad = results.filter((r) => !r.ok).length;
+    return back(bad ? `Saved, but ${bad === results.length && results.length === 1 ? "it" : `${bad} of ${results.length}`} didn't work — see below.` : "Saved and working. In use now.", bad > 0);
+  });
+
+  // Limits & spending: every daily cap, saved to wherever its feature reads it.
+  app.post<{ Body: Record<string, string | undefined> }>("/settings/limits", async (request, reply) => {
+    const b = request.body ?? {};
+    const num = (k: string, lo: number, hi: number, dflt: number) => {
+      const raw = (b[k] ?? "").trim();
+      const v = Number(raw);
+      return raw !== "" && Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v))) : dflt;
+    };
+    if (!hasDatabase) return reply.redirect("/settings#limits");
+    await setLimit("storylab", num("story", 0, 500, limitValue("storylab")));
+    const idea = await getIdeaSettings();
+    await saveIdeaSettings({ ...idea, triageCap: num("triageCap", 0, 20000, idea.triageCap), fullCap: num("fullCap", 0, 2000, idea.fullCap), tumblrDailyCap: num("tumblrDailyCap", 0, 4900, idea.tumblrDailyCap) });
+    const comp = await getCompSettings();
+    await saveCompSettings({ ...comp, aiCalls: num("aiCalls", 0, 1000, comp.aiCalls), quota: num("quota", 0, 100000, comp.quota) });
+    return reply.redirect("/settings?limits=saved#limits");
+  });
+
   // The login password: the current one, then the new one twice. Every other sign-in ends; this one carries on.
   app.post<{ Body: Record<string, string | undefined> }>("/settings/password", async (request, reply) => {
     const b = request.body ?? {};
@@ -2184,7 +2273,9 @@ export async function startWeb(): Promise<void> {
     return reply.setCookie(COOKIE_NAME, issueToken(), COOKIE_OPTIONS).redirect("/settings?pw=changed#password");
   });
 
-  app.get<{ Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; pw?: string; pwerr?: string } }>("/settings", async (request, reply) => {
+  app.get<{
+    Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; pw?: string; pwerr?: string; key?: string; keymsg?: string; keyerr?: string; limits?: string };
+  }>("/settings", async (request, reply) => {
     const [s, shifted, sources, settings] = await Promise.all([shell("settings"), listOffShifted(), colourSources(), listChannelSettings().catch(() => [])]);
     const sampled = new Set(sampledChannels());
     // An added channel with nothing filed under it yet can be taken off again.
@@ -2214,6 +2305,8 @@ export async function startWeb(): Promise<void> {
         newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
         estimatesSaved: request.query.estimates === "saved",
         password: { changedAt: passwordChangedAt(), saved: request.query.pw === "changed", error: (request.query.pwerr ?? "").slice(0, 200) },
+        keys: hasDatabase ? keysView(request.query) : undefined,
+        limits: hasDatabase ? await limitsView(request.query.limits === "saved").catch(() => undefined) : undefined,
         coloursSaved:
           request.query.chmsg ? request.query.chmsg.slice(0, 300) : request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
         channelError: (request.query.cherr ?? "").slice(0, 300),

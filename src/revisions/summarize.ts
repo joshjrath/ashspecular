@@ -5,6 +5,7 @@
  * is worked out in score.ts, so it's the same sum every time.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { THEMES, ruleSummary, scoreRevision, type PastVideo, type RevComment, type ScoreBreakdown } from "./score.js";
@@ -42,7 +43,7 @@ export async function summarize(opts: {
   let by: Summary["by"] = "rules";
   if (process.env.ANTHROPIC_API_KEY?.trim() && comments.length) {
     try {
-      const res = await new Anthropic().messages.parse({
+      const res = await anthropic().messages.parse({
         model: MODEL,
         max_tokens: 4096,
         output_config: { effort: "low", format: zodOutputFormat(Output) },

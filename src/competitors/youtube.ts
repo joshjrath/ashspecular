@@ -18,6 +18,7 @@
  * and nothing else.
  */
 import { isoDuration, parseFeed, resolveChannel } from "../jobs/youtube.js";
+import { youtubeQuotaHit } from "../db/keys.js";
 
 type Fetcher = typeof fetch;
 /** YOUTUBE_API_BASE points it at a stand-in, for testing. */
@@ -50,14 +51,30 @@ export interface VideoInfo {
 export interface Spend { units: number }
 
 async function get(path: string, params: Record<string, string>, key: string, fetcher: Fetcher, spend: Spend): Promise<Record<string, unknown>> {
-  const u = new URL(`${api()}/${path}`);
-  u.search = new URLSearchParams({ ...params, key }).toString();
-  spend.units += 1;
-  const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
-  if (res.status === 403) {
-    const body = await res.text().catch(() => "");
-    throw new Error(/quota/i.test(body) ? "YouTube's daily API quota is used up — it resets at midnight Pacific." : "YouTube didn't accept YOUTUBE_API_KEY.");
+  // The key in effect now: if an earlier call ran one out of quota, the next has taken over.
+  let useKey = process.env.YOUTUBE_API_KEY?.trim() || key;
+  for (let attempt = 0; ; attempt++) {
+    const u = new URL(`${api()}/${path}`);
+    u.search = new URLSearchParams({ ...params, key: useKey }).toString();
+    spend.units += 1;
+    const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
+    if (res.status === 403) {
+      const body = await res.text().catch(() => "");
+      if (/quota/i.test(body)) {
+        // Out of quota: the next key in Settings takes over until midnight Pacific.
+        if (attempt < 5 && youtubeQuotaHit(useKey)) {
+          useKey = process.env.YOUTUBE_API_KEY!.trim();
+          continue;
+        }
+        throw new Error("YouTube's daily API quota is used up on every key — it resets at midnight Pacific.");
+      }
+      throw new Error("YouTube didn't accept the API key.");
+    }
+    return await finish(res);
   }
+}
+
+async function finish(res: Response): Promise<Record<string, unknown>> {
   if (res.status === 404) throw new Error("YouTube has no channel there.");
   if (!res.ok) throw new Error(`YouTube's API answered ${res.status}.`);
   return (await res.json()) as Record<string, unknown>;

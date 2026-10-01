@@ -1860,6 +1860,54 @@ To split them later — a worker for the bot, a web service for the board —
 set `SERVICE=bot` on one and `SERVICE=web` on the other. Nothing else
 changes.
 
+## Settings — like a phone's
+
+**Settings** opens on a menu of every section, each with how it stands:
+Connections & API keys, Limits & spending, Login password, Channels, Time
+estimates, Days off, and Sidebar & dashboard. Tap one to jump to it.
+
+### Connections & API keys
+
+The board's API keys can be set, replaced, tested or removed right here. A
+change applies straight away, with no redeploy.
+
+| Service | What it's for | Where to get one |
+|---|---|---|
+| Claude (Anthropic) | Reading Discord messages, Story Lab ideas, the Idea Feed, Competitors, revision summaries, compilations, finance voice notes | console.anthropic.com → API keys |
+| YouTube Data API | Uploads' full history and views, runtimes, avatars, Competitors | console.cloud.google.com → Credentials (enable YouTube Data API v3) |
+| Tumblr | The Idea Feed | tumblr.com/oauth/apps → the OAuth **consumer key** (never the secret) |
+
+- **Save** stores the key and tests it at once, so a typo shows straight away.
+  **Test** checks the key in use. **Remove** deletes the one set here.
+- Each card says where its key comes from: **Set here**, **From Railway** or
+  **Not set**. A key set here takes over from the Railway variable of the same
+  name (`ANTHROPIC_API_KEY`, `YOUTUBE_API_KEY`, `TUMBLR_API_KEY`). Remove it and
+  Railway's applies again, so Railway's variables still work as a fallback.
+- **Several YouTube keys:** paste one per line. Keys from different Google
+  Cloud projects each have their own 10,000-unit daily quota. When one runs
+  out, the next takes over until midnight Pacific, and the card marks the
+  resting key. `YOUTUBE_API_KEY` on Railway may also hold several,
+  comma-separated.
+- **Stored safely:** keys are encrypted in the database (AES-256-GCM, keyed
+  from `SESSION_SECRET`) and only ever shown by their first and last
+  characters. If `SESSION_SECRET` changes, the card says so; paste the key
+  again.
+- The Discord bot token, `DATABASE_URL`, `SESSION_SECRET` and
+  `DASHBOARD_PASSWORD` stay on Railway, because the board needs them to start.
+
+### Limits & spending
+
+Every daily cap in one place:
+
+- Story Lab: Claude calls a day.
+- Idea Feed: quick looks, full reads and Tumblr calls a day.
+- Competitors: Claude calls and YouTube quota units a day.
+
+Each shows how much it has used today, and 0 turns that use off. These are
+the same settings as on the Idea Feed's and Competitors' own pages; change
+them in either place. For a hard ceiling on all Claude spending, set a monthly
+spend limit at console.anthropic.com → Settings → Limits as well.
+
 ## The password
 
 `DASHBOARD_PASSWORD` is required and the board refuses to start without one.

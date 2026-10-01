@@ -15,6 +15,7 @@
 import { CHANNELS } from "../catalog.js";
 import { pool } from "../db/pool.js";
 import { formatFor } from "../web/targets.js";
+import { youtubeQuotaHit } from "../db/keys.js";
 
 type Fetcher = typeof fetch;
 
@@ -166,7 +167,14 @@ export async function readFullHistory(
       part: "contentDetails,snippet", playlistId: `${format === "long" ? "UULF" : "UUSH"}${id.slice(2)}`, maxResults: "50", key, ...(page ? { pageToken: page } : {}),
     }).toString();
     const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) throw new Error(`YouTube API answered ${res.status} — check YOUTUBE_API_KEY.`);
+    if (!res.ok) {
+      // Out of quota: the next key (Settings → Connections & API keys) takes over from the next read.
+      if (res.status === 403 && /quota/i.test(await res.text().catch(() => ""))) {
+        youtubeQuotaHit(key);
+        throw new Error("YouTube's daily quota is used up on this key — the next key takes over, or it resets at midnight Pacific.");
+      }
+      throw new Error(`YouTube API answered ${res.status} — check the YouTube key in Settings → Connections & API keys.`);
+    }
     const data = (await res.json()) as {
       nextPageToken?: string;
       items?: Array<{ contentDetails?: { videoId?: string; videoPublishedAt?: string }; snippet?: { title?: string; publishedAt?: string } }>;

@@ -15,6 +15,17 @@ export const canUseClaude = () => Boolean(process.env.ANTHROPIC_API_KEY?.trim())
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
 
 let client: Anthropic | null = null;
+let clientKey = "";
+
+/** The Anthropic client for the key in effect now: a key changed in Settings gets a fresh one. */
+export function anthropic(): Anthropic {
+  const key = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  if (!client || key !== clientKey) {
+    client = new Anthropic({ apiKey: key });
+    clientKey = key;
+  }
+  return client;
+}
 
 export interface Usage { input: number; output: number; cacheRead: number }
 
@@ -36,11 +47,10 @@ export async function askClaude<T>(opts: {
   what?: string;
 }): Promise<{ parsed: T; model: string; usage: Usage }> {
   if (!canUseClaude()) throw new ClaudeError("ANTHROPIC_API_KEY isn't set.", false);
-  client ??= new Anthropic();
   const model = opts.model;
   let response;
   try {
-    response = await client.beta.messages.parse({
+    response = await anthropic().beta.messages.parse({
       model,
       max_tokens: opts.maxTokens,
       ...(FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),

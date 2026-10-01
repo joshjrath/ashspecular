@@ -335,8 +335,8 @@ export function renderIdeaFeed(shell: Shell, d: FeedPageData): string {
     .map((c) => `<a class="ifchip${q.channel === c ? " on" : ""}" style="--ch:${c ? channelColour(c) : "var(--ink3)"}" href="${esc(feedHref(q, { channel: c }))}"><i></i>${esc(c ? shortChannel(c) : "All channels")}</a>`)
     .join("");
   const warnings = [
-    !d.status.tumblr ? `Not reading Tumblr yet: set <code>TUMBLR_API_KEY</code> (an app's OAuth consumer key from tumblr.com/oauth/apps). Pasting posts in works meanwhile.` : "",
-    !d.status.ai ? `Not analysing yet: set <code>ANTHROPIC_API_KEY</code>. Posts are stored and wait.` : "",
+    !d.status.tumblr ? `Not reading Tumblr yet: add the Tumblr key in <a href="/settings#key-tumblr">Settings → Connections &amp; API keys</a> (an app's OAuth consumer key from tumblr.com/oauth/apps). Pasting posts in works meanwhile.` : "",
+    !d.status.ai ? `Not analysing yet: add the Claude key in <a href="/settings#key-anthropic">Settings → Connections &amp; API keys</a>. Posts are stored and wait.` : "",
     d.status.paused ? `Reading paused: ${esc(d.status.paused)}.` : "",
     d.status.failing ? `${plural(d.status.failing, "tag")} failed on the last read — see <a href="/ideas/sources">Sources</a>.` : "",
     d.status.aiCapped ? `Today's analysis cap is reached; the rest wait for tomorrow (<a href="/ideas/sources#settings">raise it</a>).` : "",
@@ -447,13 +447,13 @@ export function renderIdeaSources(shell: Shell, d: SourcesPageData): string {
              <p class="hint">Spread across the day: up to ${pacedAllowance(d.settings.tumblrDailyCap, minutesIntoDay(ORG_TZ)).toLocaleString("en-US")} by this hour, so busy tags can't use the day up early.</p>${
               d.reader.pausedUntil ? `<p class="ierr">Paused until ${esc(d.reader.pausedUntil.toLocaleTimeString("en-US", { timeZone: ORG_TZ, hour: "numeric", minute: "2-digit" }))} ET — ${esc(d.reader.reason)}</p>` : ""
             }`
-          : `<p>Not connected. Register an app at <a href="https://www.tumblr.com/oauth/apps" target="_blank" rel="noreferrer">tumblr.com/oauth/apps</a>, then set its <b>OAuth consumer key</b> as <code>TUMBLR_API_KEY</code> on Railway. No login or secret is needed — the feed only reads public posts.</p>`
+          : `<p>Not connected. Register an app at <a href="https://www.tumblr.com/oauth/apps" target="_blank" rel="noreferrer">tumblr.com/oauth/apps</a>, then paste its <b>OAuth consumer key</b> in <a href="/settings#key-tumblr">Settings → Connections &amp; API keys</a>. No login or secret is needed — the feed only reads public posts.</p>`
       }</div>
       <div class="istat ${d.ai ? "ok" : "off"}"><h3>Analysis</h3>${
         d.ai
           ? `<p><code>${esc(d.model)}</code> · quick look <b>${tri?.items ?? 0}</b>/${d.settings.triageCap} posts today (${plural(tri?.calls ?? 0, "batch", "batches")}) · full read <b>${full?.items ?? 0}</b>/${d.settings.fullCap}</p>
              <p class="hint">${(tokens.input + tokens.cacheRead).toLocaleString("en-US")} tokens in (${tokens.cacheRead.toLocaleString("en-US")} from cache), ${tokens.output.toLocaleString("en-US")} out today${cost !== null ? ` · about $${cost.toFixed(2)} at list prices` : ""}</p>`
-          : `<p>Waiting for <code>ANTHROPIC_API_KEY</code>. Posts are stored meanwhile and analysed once it's set.</p>`
+          : `<p>Waiting for a Claude key (<a href="/settings#key-anthropic">Settings → Connections &amp; API keys</a>). Posts are stored meanwhile and analysed once it's set.</p>`
       }</div>
     </section>`;
   const s = d.settings;

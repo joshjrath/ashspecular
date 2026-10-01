@@ -193,6 +193,50 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
   border-bottom: 1px dashed #4A4A55; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 13.5px; }
 .colrow .chname:hover { border-color: var(--line); }
 .colrow .chname:focus { border-color: var(--yellow); background: var(--sunk); outline: none; }
+.setmenu { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 8px; margin: 0 0 4px; }
+.setmenu-i { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: var(--r); background: var(--card);
+  color: var(--ink); text-decoration: none; border: 1px solid transparent; min-width: 0; }
+.setmenu-i:hover { border-color: var(--line); background: var(--sunk); }
+.setmenu-i .ic { font-size: 20px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--sunk); flex: none; }
+.setmenu-i b { display: block; font-size: 14px; }
+.setmenu-i em { display: block; font-style: normal; color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setmenu-i > span:last-child { min-width: 0; }
+.keygrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; margin-top: 12px; }
+.keycard { background: var(--sunk); border-radius: var(--r); padding: 14px; min-width: 0; }
+.keyhead { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.keyhead h3 { margin: 0; font-size: 15px; }
+.keysrc { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.keysrc.here { background: rgba(126,226,184,.15); color: #7EE2B8; }
+.keysrc.rail { background: rgba(159,221,244,.13); color: #9FDDF4; }
+.keysrc.none { background: rgba(255,138,128,.13); color: #FF8A80; }
+.keywhat { color: var(--ink2); font-size: 13px; margin: 6px 0 8px; }
+.keylist { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
+.keylist li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12.5px; }
+.keylist code { font-size: 12.5px; }
+.keylist .n { color: var(--ink3); }
+.keylist .rest { color: var(--yellow); }
+.keylist .ok, .keyres { color: #7EE2B8; font-weight: 700; }
+.keylist .bad, .keyres.bad { color: #FF8A80; font-weight: 700; }
+.keyres { font-size: 13px; margin: 4px 0 8px; }
+.keyform { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.keyform input, .keyform textarea { flex: 1 1 200px; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font-size: 13px; font-family: ui-monospace, monospace; }
+.keyform textarea { resize: vertical; }
+.keybtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.keybtns .ghost { background: transparent; border: 1px solid var(--line); color: var(--ink2); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.keybtns .ghost:hover { color: var(--ink); border-color: var(--ink3); }
+.keybtns .ghost.danger:hover { color: #FF8A80; border-color: #FF8A80; }
+.limgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-top: 10px; align-items: start; }
+.limbox { padding: 12px; background: var(--sunk); border-radius: var(--r); min-width: 0; }
+.limbox h3 { margin: 0 0 6px; font-size: 13px; color: var(--ink2); }
+.limrow { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 2px 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.limrow .nm { font-size: 13px; font-weight: 600; color: var(--ink); }
+.limrow .nm em { display: block; font-style: normal; color: var(--ink3); font-size: 11.5px; font-weight: 500; }
+.limrow input { width: 92px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; }
+.limrow .src { grid-column: 1 / -1; color: var(--ink3); font-size: 12px; }
+.limrow .src:empty { display: none; }
+.limset, #keys { grid-template-columns: minmax(0, 1fr); }
+.limset .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
 .setsave .seterr, .pwset .seterr { color: #FF8A80; font-weight: 700; font-size: 13.5px; }
 .pwset .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
 .chaddrow input[type=password] { width: min(220px, 70vw); }
@@ -5824,7 +5868,7 @@ export function renderUploads(
     }. ${
       data.hasKey
         ? "A YouTube API key is set, so each channel's full history comes in on its first read."
-        : "Without a YouTube API key, each channel starts from its latest 15 uploads — and builds from there. Set YOUTUBE_API_KEY to pull full history."
+        : "Without a YouTube API key, each channel starts from its latest 15 uploads — and builds from there. Add a YouTube key in Settings → Connections & API keys to pull full history."
     }</p>
     <form method="post" action="/uploads/links" class="linkform">
       <input type="hidden" name="_cat" value="${category}">${focus ? `<input type="hidden" name="_ch" value="${esc(focus.channel)}">` : ""}
@@ -6638,7 +6682,7 @@ function writeNextPanel(
       ${
         w.cards.length
           ? `<ul class="isugg">${w.cards.map((c) => card(w.channel, c)).join("")}</ul>`
-          : `<p class="hint">Nothing left that fits ${esc(w.channel)} — ${claude?.on ? "Claude is writing more for it" : "add ANTHROPIC_API_KEY for Claude's own ideas, or add something from the dice"}.</p>`
+          : `<p class="hint">Nothing left that fits ${esc(w.channel)} — ${claude?.on ? "Claude is writing more for it" : "add a Claude key in Settings for Claude's own ideas, or add something from the dice"}.</p>`
       }
     </section>`;
   };
@@ -6648,7 +6692,7 @@ function writeNextPanel(
     <p class="wnclaude">${
       claude?.on
         ? `✨ Beside the lore's ideas, Claude writes ideas for each channel from its own videos and how they did — any character, world or format that fits it, not just the lore's. Each is checked against every public video and scored from the network's results. ${claude.today} of ${claude.cap} calls today.`
-        : "✨ Add <code>ANTHROPIC_API_KEY</code> on Railway and Claude writes ideas for each channel from its own videos, beyond the lore's heroes, worlds and formats."
+        : "✨ Add a Claude key in <a href='/settings#key-anthropic'>Settings → Connections &amp; API keys</a> and Claude writes ideas for each channel from its own videos, beyond the lore's heroes, worlds and formats."
     }</p>
     <div class="wnlist">${list.map(section).join("")}</div>
     <script>
@@ -7013,6 +7057,9 @@ export function renderSettings(
     channelError?: string;
     /** The login password: when it was last changed here, and how the last change went. */
     password?: { changedAt: Date | null; saved: boolean; error: string };
+    /** API keys and daily limits set here instead of on Railway. */
+    keys?: KeysView;
+    limits?: LimitsView;
   },
 ): string {
   const off = new Set(data.railHide);
@@ -7033,7 +7080,11 @@ export function renderSettings(
     "Settings",
     shell,
     `${pageHeader("Settings")}
-    <form class="settings" method="post" action="/settings">
+    ${settingsMenu(data)}
+    ${data.keys ? keysSettings(data.keys) : ""}
+    ${data.limits ? limitsSettings(data.limits) : ""}
+    ${data.password ? passwordSettings(data.password) : ""}
+    <form class="settings" id="layout" method="post" action="/settings" style="margin-top:14px">
       <input type="hidden" name="form" value="1">
       <section class="panel setgroup">
         <h2>Sidebar <span class="sub">— untick anything you don't use. Settings always stays at the bottom.</span></h2>
@@ -7051,14 +7102,119 @@ export function renderSettings(
       </section>
       <div class="setsave"><button class="clear">Save</button>${data.saved ? `<span class="saved" role="status">Saved.</span>` : ""}</div>
     </form>
-    <section class="panel setgroup settings" style="margin-top:14px">
+    <section class="panel setgroup settings" id="daysoff" style="margin-top:14px">
       <h2>Days off <span class="sub">— no work that day: anything due on it is due the working day before</span></h2>
       ${daysOffStrip(data.daysOff, data.shifted)}
     </section>
     ${estimateSettings(data.estimatesSaved ?? false)}
-    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}
-    ${data.password ? passwordSettings(data.password) : ""}`,
+    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}`,
   );
+}
+
+export interface KeysView {
+  services: Array<{
+    id: string; label: string; what: string; where: string; many: boolean;
+    source: "settings" | "railway" | "none";
+    /** Masked: the start and end of each key, never the whole thing. */
+    keys: Array<{ masked: string; resting?: boolean; test?: { ok: boolean; note: string } }>;
+    unreadable: boolean;
+  }>;
+  /** What the last save, test or removal did, and to which service. */
+  flash?: { id: string; text: string; error?: boolean };
+}
+
+export interface LimitsView {
+  rows: Array<{ group: string; name: string; label: string; value: number; max: number; today: number | null; note?: string }>;
+  saved: boolean;
+}
+
+/** The top of Settings, like a phone's: every section, with how it stands, one tap away. */
+function settingsMenu(data: { keys?: KeysView; limits?: LimitsView; password?: { changedAt: Date | null }; colours?: ColourRow[]; daysOff: string[] }): string {
+  const keysSet = data.keys ? data.keys.services.filter((s) => s.source !== "none").length : 0;
+  const tile = (href: string, icon: string, label: string, sub: string) =>
+    `<a class="setmenu-i" href="#${href}"><span class="ic" aria-hidden="true">${icon}</span><span><b>${esc(label)}</b><em>${esc(sub)}</em></span></a>`;
+  return `<nav class="setmenu" aria-label="Settings sections">
+    ${data.keys ? tile("keys", "🔑", "Connections & API keys", `${keysSet} of ${data.keys.services.length} connected`) : ""}
+    ${data.limits ? tile("limits", "💸", "Limits & spending", "Daily caps on Claude, YouTube and Tumblr") : ""}
+    ${data.password ? tile("password", "🔒", "Login password", data.password.changedAt ? `Changed ${usDate(dayOf(data.password.changedAt))}` : "Set on Railway") : ""}
+    ${data.colours ? tile("colours", "📺", "Channels", `${data.colours.length} channels · names, colours, add`) : ""}
+    ${tile("estimates", "⏱", "Time estimates", "How long each kind of work takes")}
+    ${tile("daysoff", "🌴", "Days off", data.daysOff.length ? `${data.daysOff.length} set` : "None set")}
+    ${tile("layout", "🧭", "Sidebar & dashboard", "What shows, and where")}
+  </nav>`;
+}
+
+/**
+ * Connections & API keys: each service's key set, replaced, tested or removed
+ * right here, taking effect straight away. Keys are stored encrypted and only
+ * ever shown masked; a key set here wins over Railway's, and removing it goes
+ * back to Railway's.
+ */
+function keysSettings(k: KeysView): string {
+  const badge = (s: KeysView["services"][number]) =>
+    s.source === "settings" ? `<span class="keysrc here">Set here</span>` : s.source === "railway" ? `<span class="keysrc rail">From Railway</span>` : `<span class="keysrc none">Not set</span>`;
+  const cards = k.services
+    .map((s) => {
+      const flash = k.flash?.id === s.id ? `<p class="keyres${k.flash.error ? " bad" : ""}" role="status">${esc(k.flash.text)}</p>` : "";
+      const list = s.keys.length
+        ? `<ul class="keylist">${s.keys
+            .map(
+              (x, i) => `<li><code>${esc(x.masked)}</code>${s.many && s.keys.length > 1 ? `<span class="n">${i === 0 ? "first" : `#${i + 1}`}</span>` : ""}${
+                x.resting ? `<span class="rest">out of quota until midnight Pacific</span>` : ""
+              }${x.test ? `<span class="${x.test.ok ? "ok" : "bad"}">${x.test.ok ? "✓" : "✗"} ${esc(x.test.note)}</span>` : ""}</li>`,
+            )
+            .join("")}</ul>`
+        : "";
+      const input = s.many
+        ? `<textarea name="value" rows="3" spellcheck="false" autocomplete="off" placeholder="One key per line (or comma-separated). Saving replaces the list." aria-label="${esc(s.label)} keys"></textarea>`
+        : `<input type="password" name="value" autocomplete="off" spellcheck="false" placeholder="${s.source === "none" ? "Paste the key" : "Paste a new key to replace it"}" aria-label="${esc(s.label)} key">`;
+      return `<form class="keycard" id="key-${esc(s.id)}" method="post" action="/settings/keys">
+        <input type="hidden" name="id" value="${esc(s.id)}">
+        <div class="keyhead"><h3>${esc(s.label)}</h3>${badge(s)}</div>
+        <p class="keywhat">${esc(s.what)}</p>
+        ${s.unreadable ? `<p class="keyres bad">The key saved here can't be read any more (SESSION_SECRET changed) — paste it again.</p>` : ""}
+        ${list}${flash}
+        <div class="keyform">${input}
+          <div class="keybtns">
+            <button class="clear" name="do" value="save">Save</button>
+            ${s.keys.length ? `<button class="ghost" name="do" value="test" formnovalidate>Test</button>` : ""}
+            ${s.source === "settings" ? `<button class="ghost danger" name="do" value="clear" formnovalidate>Remove</button>` : ""}
+          </div>
+        </div>
+        ${s.many ? `<p class="hint">Several keys (from different Google Cloud projects) multiply the daily quota: when one runs out, the next takes over until midnight Pacific.</p>` : ""}
+        <p class="hint">Get one: ${esc(s.where)}</p>
+      </form>`;
+    })
+    .join("");
+  return `<section class="panel setgroup settings" id="keys" style="margin-top:14px">
+    <h2>Connections &amp; API keys <span class="sub">— set or change a key here and it works straight away, no redeploy.
+      Keys are stored encrypted and only shown by their first and last characters. One set here wins over Railway's; Remove goes back to Railway's.</span></h2>
+    <div class="keygrid">${cards}</div>
+    <p class="hint">The Discord bot token and the database stay on Railway: the board needs them to start.</p>
+  </section>`;
+}
+
+/** Limits & spending: every daily cap on paid or quota'd calls, in one place. */
+function limitsSettings(l: LimitsView): string {
+  const groups = [...new Set(l.rows.map((r) => r.group))];
+  return `<form class="panel setgroup settings limset" id="limits" method="post" action="/settings/limits" style="margin-top:14px">
+    <h2>Limits &amp; spending <span class="sub">— the most each feature may use a day. Claude is billed per call, so these cap the spend;
+      0 turns that use off. Counts reset at midnight.</span></h2>
+    <div class="limgrid">${groups
+      .map(
+        (g) => `<div class="limbox" role="group" aria-label="${esc(g)}"><h3>${esc(g)}</h3>${l.rows
+          .filter((r) => r.group === g)
+          .map(
+            (r) => `<label class="limrow"><span class="nm">${esc(r.label)}${r.note ? `<em>${esc(r.note)}</em>` : ""}</span>
+              <input type="number" name="${esc(r.name)}" min="0" max="${r.max}" inputmode="numeric" value="${r.value}" aria-label="${esc(`${g}: ${r.label}`)}">
+              <span class="src">${r.today === null ? "" : `${r.today.toLocaleString("en-US")} today`}</span></label>`,
+          )
+          .join("")}</div>`,
+      )
+      .join("")}</div>
+    <p class="hint">For a hard monthly ceiling on Claude across everything, also set a spend limit at console.anthropic.com → Settings → Limits.</p>
+    <div class="setsave"><button class="clear">Save limits</button>${l.saved ? `<span class="saved" role="status">Saved.</span>` : ""}</div>
+  </form>`;
 }
 
 /**

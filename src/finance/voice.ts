@@ -10,6 +10,7 @@
  * said is left empty, and the board shows it as missing.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { CHANNELS } from "../catalog.js";
@@ -70,7 +71,6 @@ export interface VoiceContext {
 }
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
-let client: Anthropic | null = null;
 
 /** Stable so it caches: everything that varies (lists, today, the note) goes in the user turn. */
 const SYSTEM = `You turn a voice note from the owner of a YouTube studio into bookkeeping entries for their finance board.
@@ -92,9 +92,8 @@ export async function readVoiceNote(text: string, ctx: VoiceContext): Promise<{ 
   if (!clean) return { entries: [], parsedBy: "rules" };
   if (!process.env.ANTHROPIC_API_KEY?.trim()) return { entries: readByRules(clean, ctx), parsedBy: "rules" };
   try {
-    client ??= new Anthropic();
     const today = dateIn(ORG_TZ, ctx.now ?? new Date());
-    const response = await client.messages.parse({
+    const response = await anthropic().messages.parse({
       model: MODEL,
       max_tokens: 8192,
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],

@@ -20,6 +20,10 @@ async function main(): Promise<void> {
   if (hasDatabase && only !== "web") {
     const { migrate } = await import("./db/migrate.js");
     await migrate();
+    // API keys and limits set in Settings, before the bot or a job calls out.
+    const { loadKeys, startKeySync } = await import("./db/keys.js");
+    await loadKeys().catch((err) => console.error("[keys] load failed:", err));
+    startKeySync();
     // Channels added or renamed in Settings, before anything files or opens a batch.
     const { loadChannelSettings, startChannelSync } = await import("./db/channelsettings.js");
     await loadChannelSettings().catch((err) => console.error("[channels] load failed:", err));

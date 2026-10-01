@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { CATEGORIES, CHANNELS } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, dateIn } from "./derive.js";
@@ -11,11 +12,6 @@ import { enrichWithFrame } from "./frameio.js";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
 
 /**
  * Stable system prefix — byte-identical across calls so it caches. Anything

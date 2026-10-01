@@ -55,6 +55,7 @@ import { cascadeText, planCascade } from "../src/web/cascade.js";
 import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels } from "../src/jobs/avatars.js";
 import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
+import { liveKey, mask, quotaResetAfter, seal, splitKeys, testKey, unseal } from "../src/db/keys.js";
 import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, nextToAssign, uploadGaps } from "../src/web/gaps.js";
@@ -2098,7 +2099,7 @@ const reader = { pausedUntil: null, reason: "", callsThisHour: 4 };
 const srcOff = renderIdeaSources(shellFix, { feeds: [ifFeed], settings: ifSettings, usage: new Map(), tumblr: false, ai: false, model: "x", reader });
 const srcOn = renderIdeaSources(shellFix, { feeds: [ifFeed], settings: ifSettings, usage: new Map([["ai-triage", { kind: "ai-triage", calls: 1, items: 20, input: 0, output: 0, cacheRead: 0 }]]), tumblr: true, ai: true, model: "x", reader });
 t("Sources: how to connect when there's no key; caps, pace and the watched tags when there is", [
-  srcOff.includes("tumblr.com/oauth/apps") && srcOff.includes("TUMBLR_API_KEY"), srcOff.includes("Waiting for <code>ANTHROPIC_API_KEY</code>"),
+  srcOff.includes("tumblr.com/oauth/apps") && srcOff.includes('href="/settings#key-tumblr"'), srcOff.includes("Waiting for a Claude key"),
   srcOn.includes("(1 batch)"), srcOn.includes("Spread across the day: up to"), srcOn.includes("<b>#undertale</b>"), srcOn.includes('value="nsfw"'), estimateCost("not-a-model", { input: 1, output: 1, cacheRead: 1 }),
 ], [true, true, true, true, true, true, null]);
 const feedPage = renderIdeaFeed(shellFix, {
@@ -2289,6 +2290,42 @@ t("what's working: what outliers share more than the niche, from 2+ channels", [
 const emerge = emergingTopics([...cRows, ...[1, 2, 3].map((ch) => ({ ...rowOf(`b${ch}0`), ageDays: 5, concept: cCon("e", "Invincible", "Dragon Ball") }))], { outlier: 2 });
 const emergeC = emerge.find((e) => e.kind === "concept");
 t("emerging: three channels on one thing in two weeks, flagged as early", [emergeC?.label, emergeC?.channels, emergeC?.fact.startsWith("3 channels uploaded 3 videos on Invincible × Dragon Ball in the last 14 days")], ["Invincible × Dragon Ball", 3, true]);
+
+// ── Settings: API keys and limits ───────────────────────────────────────────
+{
+  const sealed = seal("sk-ant-api03-SECRETSECRETSECRET-abcd");
+  t("keys are stored encrypted and come back whole; a tampered one doesn't", [sealed.includes("SECRET"), unseal(sealed), unseal(sealed.slice(0, -4) + "AAAA")], [false, "sk-ant-api03-SECRETSECRETSECRET-abcd", null]);
+  t("keys are only ever shown masked", [mask("AIzaSyB1234567890abcdQFk3"), mask("short")], ["AIzaSy…QFk3", "••••"]);
+  t("several YouTube keys: one per line or comma-separated, repeats dropped", splitKeys(" AIzaA1, AIzaB2\nAIzaA1\n\n AIzaC3 "), ["AIzaA1", "AIzaB2", "AIzaC3"]);
+  const rest = new Map([["k1", Date.now() + 60_000]]);
+  t("a key out of quota rests; the next takes over, and when all are out the first is tried", [liveKey(["k1", "k2"], rest), liveKey(["k1"], rest), liveKey(["k1", "k2"], new Map()), liveKey([], rest)], ["k2", "k1", "k1", undefined]);
+  t("quotas reset at midnight Pacific", new Date(quotaResetAfter(new Date("2026-10-01T20:00:00Z"))).toISOString(), "2026-10-02T07:00:00.000Z");
+  const fake = (status: number, body = "") => (async () => new Response(body, { status })) as unknown as typeof fetch;
+  t("testing a key: works, wrong key, quota, API not enabled, Tumblr secret by mistake, no network", [
+    (await testKey("anthropic", "k", fake(200))).ok, (await testKey("anthropic", "k", fake(401))).note, (await testKey("youtube", "k", fake(403, '{"error":{"errors":[{"reason":"quotaExceeded"}],"message":"quota"}}'))).note,
+    (await testKey("youtube", "k", fake(403, "YouTube Data API v3 has not been used in project"))).note, (await testKey("tumblr", "k", fake(401))).note,
+    (await testKey("tumblr", "k", (async () => { throw new Error("offline"); }) as unknown as typeof fetch)).note,
+  ], [true, "not accepted", "out of quota today", "YouTube Data API v3 isn't enabled for it", "not accepted — use the OAuth consumer key, not the secret", "couldn't reach the service"]);
+  const setPage = renderSettings(shellFix, {
+    railHide: [], dashHide: [], daysOff: [], shifted: [], saved: false, scripts: false,
+    password: { changedAt: null, saved: false, error: "" },
+    keys: {
+      services: [
+        { id: "anthropic", label: "Claude (Anthropic)", what: "w", where: "console.anthropic.com", many: false, source: "settings", unreadable: false, keys: [{ masked: "sk-ant…abcd", test: { ok: true, note: "works" } }] },
+        { id: "youtube", label: "YouTube Data API", what: "w", where: "g", many: true, source: "railway", unreadable: false, keys: [{ masked: "AIzaSy…AAAA" }, { masked: "AIzaSy…BBBB", resting: true }] },
+        { id: "tumblr", label: "Tumblr", what: "w", where: "t", many: false, source: "none", unreadable: false, keys: [] },
+      ],
+      flash: { id: "anthropic", text: "Saved and working. In use now." },
+    },
+    limits: { saved: true, rows: [{ group: "Story Lab", name: "story", label: "Claude calls a day", value: 30, max: 500, today: 4 }] },
+  });
+  t("Settings opens on a menu of every section, like a phone's", ["#keys", "#limits", "#password", "#estimates", "#daysoff", "#layout"].every((h) => setPage.includes(`href="${h}"`)) && setPage.includes("2 of 3 connected"), true);
+  t("…each key card: where it comes from, masked keys, tests, quota rest; Remove only for one set here", [
+    setPage.includes("Set here") && setPage.includes("From Railway") && setPage.includes("Not set"), setPage.includes("✓ works"), setPage.includes("out of quota until midnight Pacific"),
+    (setPage.match(/value="clear"/g) ?? []).length, setPage.includes("<textarea name=\"value\""), setPage.includes('type="password" name="value"'), setPage.includes("Saved and working"),
+  ], [true, true, true, 1, true, true, true]);
+  t("…limits: each cap with today's count", [setPage.includes('name="story"') && setPage.includes('value="30"'), setPage.includes("4 today"), setPage.indexOf('id="keys"') < setPage.indexOf('id="layout"')], [true, true, true]);
+}
 
 console.log(
   `\n${pass} passed, ${fail} failed\n`,
