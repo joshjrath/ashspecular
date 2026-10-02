@@ -9,7 +9,7 @@ Features are described for the studio in [BOARD.md](BOARD.md).
 - Read the code you're about to change, and search for an existing
   implementation before adding one (`grep -rn` the concept, not just the name).
   There is usually a helper already: `esc`/`safeUrl` (web/html.ts),
-  `localPath`/`refererPath`/`safeDate` (web/http.ts), `inTransaction`
+  `localPath`/`refererPath`/`safeDate`/`formText`/`formId`/`toCsv` (web/http.ts), `inTransaction`
   (db/pool.ts), `modelFor`/`askClaude` (ai/claude.ts), `shell()` (web/shell.ts),
   `layout`/`pageHeader`/`rows` (web/page.ts), the date helpers in parse/derive.ts.
 - Keep changes scoped to the task. Preserve existing behaviour and appearance
@@ -39,7 +39,8 @@ Features are described for the studio in [BOARD.md](BOARD.md).
 - Everything outside the code — messages, titles, URLs, headers, query
   strings — goes into HTML through `esc()`. Links from outside go through
   `safeUrl()`/`safeHref()`. Values inside inline `<script>` go through
-  `jsonForScript()`.
+  `jsonForScript()`. CSV downloads go through `toCsv()` (it stops a typed cell
+  from running as a spreadsheet formula).
 - Every route is behind the session cookie (the global hook in `server.ts`).
   Don't add to the public list without a reason written beside it. The test
   `Every route is behind the sign-in` must keep passing.
@@ -52,7 +53,8 @@ Features are described for the studio in [BOARD.md](BOARD.md).
 - Don't swallow errors in background work or writes: log them with the area in
   brackets (`console.error("[area] what failed:", err)`). Page-render fallbacks
   that show an empty section are fine.
-- Validate input at the route: `safeDate`, allow-lists, the bounds tables,
+- Validate input at the route: `safeDate` (never a bare `\d{4}-\d{2}-\d{2}` regex:
+  2/31 and year 0 pass it), allow-lists, the bounds tables,
   `.slice()` on free text.
 
 ## Product conventions

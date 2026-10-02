@@ -477,7 +477,7 @@ Every tab is a view of the same tables, so nothing is entered twice.
 | Subscriptions | Subscriptions and other recurring costs, each with its monthly equivalent (annual ÷ 12, quarterly ÷ 3), next bill and total monthly running cost. Each bill is posted as an expense on its date automatically. |
 | Contractors | Each person's pay model, what was paid this month, lifetime cash paid, what's outstanding and any advance left. A person's page shows work → earned → paid → outstanding, and lets you log work (calculated from their pay model, with an override), record an advance, pay all outstanding, and change their model. |
 | Channels | Every channel over 1, 3, 6 or 12 months: revenue, expenses, profit, margin, views, AdSense RPM, uploads, revenue / cost / profit per upload, your hours, profit per owner hour, and status. |
-| Reports | P&L by month, profit by channel, revenue by stream, expenses by category and type. CSV exports are available. |
+| Reports | P&L by month, profit by channel, revenue by stream, expenses by category and type. CSV exports are available. A payee or note that starts with =, +, - or @ is exported with a leading apostrophe so a spreadsheet keeps it as text instead of running it as a formula. |
 | Settings | Sustainability thresholds, companies and which channels belong to each, expense categories, revenue streams (and which count toward RPM), and payment methods. |
 
 **Pay models:**

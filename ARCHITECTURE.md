@@ -44,7 +44,7 @@ src/
     page.ts           the frame every page shares: layout(), sidebar, bell, record rows, widgets, icons
     styles.ts         the stylesheet
     shell.ts          what every page needs before rendering: sidebar counts, the work, gaps, notices
-    http.ts           request/response helpers: safe redirects, safeDate, wantsJson, originIsThisBoard
+    http.ts           request/response helpers: safe redirects, safeDate, formText/formId, toCsv, wantsJson, originIsThisBoard
     html.ts           esc, safeUrl, safeHref, jsonForScript — the only ways outside text enters HTML
     auth.ts           the password check, session tokens, sign-in throttling
     moves.ts          moving a record with the rest of its channel's schedule, and undo
@@ -75,10 +75,14 @@ Rule of thumb for each layer:
    reads them); anything but `/login`, `/healthz` and `/calendar.ics` without
    a valid session cookie is redirected to `/login`.
 2. The route (in `routes/<area>.ts`) validates its input (`safeDate`,
-   allow-lists, range tables like `COMP_BOUNDS`), calls `db/` and logic, then
+   allow-lists, range tables like `COMP_BOUNDS`; a date is only ever a real
+   day in 1970–2199, `isRealDate` in parse/derive.ts), calls `db/` and logic, then
    either renders a page — `renderX(await shell("area"), data)` — or
    redirects (only ever to `localPath()`/`refererPath()`).
-3. Errors thrown anywhere reach the one error handler: logged with the route,
+3. On the way out every answer gets `nosniff`, `X-Frame-Options: SAMEORIGIN`
+   and `Referrer-Policy: same-origin`, and text over 1 KB is gzipped when the
+   browser accepts it (pages carry their CSS inline, so this is most of their size).
+4. Errors thrown anywhere reach the one error handler: logged with the route,
    answered with a plain page (or JSON for `Accept: application/json` /
    `x-fetch: 1`). Unknown routes get a 404 page.
 

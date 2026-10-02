@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-02-lighter",
+    title: "Pages load lighter, and a few rough edges filed down",
+    changes: [
+      { text: "Pages are sent compressed, about a tenth of the size they were. Story Lab, the biggest, goes from 1.4 MB to about 100 KB, which helps most on a phone.", href: "/story-lab" },
+      { text: "Finance's CSV exports keep a payee or note that starts with =, +, - or @ as plain text, so a spreadsheet can't run it as a formula. Amounts are unchanged.", href: "/finance/reports" },
+      { text: "A date that doesn't exist in the address, like 2/31, or year 0, now says \"That is not a date\". Before, it could error, or stall the board for everyone." },
+    ],
+  },
+  {
     id: "2026-10-02-steadier",
     title: "Steadier and safer behind the scenes",
     changes: [
