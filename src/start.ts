@@ -7,10 +7,19 @@
  * `SERVICE=web` splits them later without touching the code.
  */
 import { config, hasDatabase } from "./config.js";
+import { guardProcess } from "./process.js";
 
 const only = (process.env.SERVICE ?? "").trim().toLowerCase();
 
 async function main(): Promise<void> {
+  guardProcess();
+  // The schema, the keys and the channels first, so the bot files under the
+  // right names from its first message (startWeb finds this already done).
+  if (hasDatabase) {
+    const { prepareDatabase } = await import("./db/prepare.js");
+    await prepareDatabase();
+  }
+
   if (only !== "web") {
     // Importing boots the bot — it logs in as a side effect.
     await import("./bot/index.js");
@@ -18,16 +27,6 @@ async function main(): Promise<void> {
 
   // The batch opener belongs with whichever half is running, but only once.
   if (hasDatabase && only !== "web") {
-    const { migrate } = await import("./db/migrate.js");
-    await migrate();
-    // API keys and limits set in Settings, before the bot or a job calls out.
-    const { loadKeys, startKeySync } = await import("./db/keys.js");
-    await loadKeys().catch((err) => console.error("[keys] load failed:", err));
-    startKeySync();
-    // Channels added or renamed in Settings, before anything files or opens a batch.
-    const { loadChannelSettings, startChannelSync } = await import("./db/channelsettings.js");
-    await loadChannelSettings().catch((err) => console.error("[channels] load failed:", err));
-    startChannelSync();
     const { startSchedule } = await import("./jobs/schedule.js");
     startSchedule({ withDigest: only !== "web" });
   }

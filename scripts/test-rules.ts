@@ -22,7 +22,7 @@ import { parseAssignment, parseReview } from "../src/parse/structured.js";
 import { calendarGrid, renderCalendar, renderDashboard, renderDay, renderList, renderRecurring, renderScriptBoard, renderUploads, renderWeek, shiftMonth, sortRecords, weekStart } from "../src/web/page.js";
 import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
@@ -100,6 +100,9 @@ import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
 import { checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { contentDisposition, localPath, refererPath } from "../src/web/http.js";
+import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
+import { IDEA_BOUNDS, ideaSetting } from "../src/db/ideas.js";
+import { NAME_ARRAYS, NAME_COLUMNS } from "../src/db/channelsettings.js";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
 import { distinctColour } from "../src/jobs/avatars.js";
@@ -2266,6 +2269,28 @@ t("a forged or expired sign-in is refused", [verifyToken(undefined), verifyToken
 }
 t("cookies are Secure over https, and only left off for plain http", [cookieOptions(true).secure, cookieOptions(false).secure === config.publicUrl.startsWith("https://"), cookieOptions(true).httpOnly, cookieOptions(true).sameSite], [true, true, true, "lax"]);
 
+section("Database: channel names");
+{
+  // Every column that stores a channel's name, read from the migrations themselves.
+  const dir = new URL("../src/db/migrations/", import.meta.url);
+  const found = new Set<string>();
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    const sql = readFileSync(new URL(file, dir), "utf8").replace(/--.*$/gm, "");
+    for (const m of sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)\s*\(([\s\S]*?)\n\);/g)) {
+      for (const c of m[2]!.matchAll(/^\s*(channel|board_channel|channels)\s+TEXT/gim)) found.add(`${m[1]}.${c[1]!.toLowerCase()}`);
+    }
+    for (const m of sql.matchAll(/ALTER TABLE (\w+) ADD COLUMN IF NOT EXISTS (channel|board_channel|channels) TEXT/gi)) found.add(`${m[1]}.${m[2]!.toLowerCase()}`);
+  }
+  const listed = new Set([...NAME_COLUMNS.map(([t, c]) => `${t}.${c}`), ...NAME_ARRAYS.map(([t, c]) => `${t}.${c}`)]);
+  t("every table that stores a channel's name moves with a rename (add a new one to NAME_COLUMNS)", [[...found].filter((x) => !listed.has(x)).sort(), [...listed].filter((x) => !found.has(x)).sort(), found.size > 15], [[], [], true]);
+}
+
+section("Limits: one range for each setting, wherever it's set");
+t("Competitors: kept in range, whole where it counts, empty or junk keeps what's there", [
+  compSetting("quota", "50000", 6000), compSetting("quota", "50", 6000), compSetting("aiCalls", "12.6", 40), compSetting("outlier", "2.25", 2), compSetting("aiCalls", "", 40), compSetting("aiCalls", "lots", 40),
+], [COMP_BOUNDS.quota.max, COMP_BOUNDS.quota.min, 13, 2.25, 40, 40]);
+t("Idea Feed: the same, from its own table", [ideaSetting("tumblrDailyCap", "9999", 4000), ideaSetting("fullThreshold", "1.5", 0.55), ideaSetting("triageCap", " ", 600), ideaSetting("fullCap", "-3", 60)], [IDEA_BOUNDS.tumblrDailyCap.max, 1, 600, 0]);
+
 section("HTML safety");
 t("text is escaped for elements and either quote", esc(`<b a="1" b='2'>&`), "&lt;b a=&quot;1&quot; b=&#39;2&#39;&gt;&amp;");
 t("links from outside: http(s) only — never javascript: or data:", [
@@ -2357,7 +2382,7 @@ t("emerging: three channels on one thing in two weeks, flagged as early", [emerg
       ],
       flash: { id: "anthropic", text: "Saved and working. In use now." },
     },
-    limits: { saved: true, rows: [{ group: "Story Lab", name: "story", label: "Claude calls a day", value: 30, max: 500, today: 4 }] },
+    limits: { saved: true, rows: [{ group: "Story Lab", name: "story", label: "Claude calls a day", value: 30, min: 0, max: 500, today: 4 }] },
   });
   t("Settings opens on a menu of every section, like a phone's", ["#keys", "#limits", "#password", "#estimates", "#daysoff", "#layout"].every((h) => setPage.includes(`href="${h}"`)) && setPage.includes("2 of 3 connected"), true);
   t("…each key card: where it comes from, masked keys, tests, quota rest; Remove only for one set here", [

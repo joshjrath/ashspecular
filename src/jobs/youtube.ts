@@ -430,7 +430,8 @@ export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels:
       ]);
     }
   }
-  if (key) await refreshViews(key, fetcher).catch(() => {});
-  if (key) await fillDurations(key, fetcher).catch(() => {});
+  // Views and runtimes are extras: a failure (quota, mostly) is logged and the read still counts.
+  if (key) await refreshViews(key, fetcher).catch((err) => console.error("[uploads] views refresh failed:", err instanceof Error ? err.message : err));
+  if (key) await fillDurations(key, fetcher).catch((err) => console.error("[uploads] runtimes failed:", err instanceof Error ? err.message : err));
   return { channels: rows.length, added, errors };
 }

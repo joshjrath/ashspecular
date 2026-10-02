@@ -18,11 +18,20 @@ type Msg = OmitPartialGroupDMChannel<Message<boolean>>;
 
 const PENDING_DIR = join(process.cwd(), "evals", "cases", "pending");
 
-/** Everything the bot has parsed this run, so the controls can find it again. */
-const seen = new Map<
-  string,
-  { input: ClassifyInput; record: DerivedRecord; savedId: number | null; paused?: boolean; noScript?: boolean }
->();
+type Seen = { input: ClassifyInput; record: DerivedRecord; savedId: number | null; paused?: boolean; noScript?: boolean };
+
+/**
+ * What the bot has parsed lately, so a card's buttons and dropdowns can find
+ * it again: the last 500 messages, oldest forgotten first, so a bot that runs
+ * for months doesn't keep every message it ever read.
+ */
+const seen = new Map<string, Seen>();
+const SEEN_MAX = 500;
+function remember(messageId: string, entry: Seen): void {
+  seen.delete(messageId);
+  seen.set(messageId, entry);
+  if (seen.size > SEEN_MAX) seen.delete(seen.keys().next().value!);
+}
 
 export function registerIntake(): void {
   client.on(Events.MessageCreate, (message) => {
@@ -57,7 +66,7 @@ async function handle(message: Msg): Promise<void> {
 
   const result = await classify(input);
   const record = derive(result.extraction, result.raw);
-  seen.set(message.id, { input, record, savedId: null });
+  remember(message.id, { input, record, savedId: null });
 
   // Storage is optional: without DATABASE_URL the bot still parses and
   // replies, it just forgets. A write failure must never lose the reply that
@@ -79,7 +88,7 @@ async function handle(message: Msg): Promise<void> {
       console.error("[intake] could not save:", err);
     }
   }
-  seen.set(message.id, { input, record, savedId: saved });
+  remember(message.id, { input, record, savedId: saved });
 
   await message.reactions.cache.get("⏳")?.users.remove(client.user!.id).catch(() => {});
   await message.react(record.category === "unknown" ? "❓" : "✅").catch(() => {});
@@ -179,7 +188,7 @@ async function correct(
   const entry = seen.get(messageId);
   if (!entry) {
     await interaction.reply({
-      content: "That was parsed before the last restart, so I no longer have it in memory.",
+      content: "That was parsed a while ago or before the last restart, so I no longer have it in memory. Change it on the board instead.",
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -238,7 +247,7 @@ async function feedback(interaction: import("discord.js").ButtonInteraction): Pr
   const entry = seen.get(messageId);
   if (!entry) {
     await interaction.reply({
-      content: "That was parsed before the last restart, so I no longer have it in memory.",
+      content: "That was parsed a while ago or before the last restart, so I no longer have it in memory. Change it on the board instead.",
       flags: MessageFlags.Ephemeral,
     });
     return;

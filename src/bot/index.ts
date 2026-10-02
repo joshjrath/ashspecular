@@ -1,6 +1,9 @@
 import { Events } from "discord.js";
 import { client, isIntakeChannel } from "./client.js";
 import { registerIntake } from "./intake.js";
+import { guardProcess } from "../process.js";
+
+guardProcess();
 
 function required(name: string): string {
   const v = process.env[name]?.trim();

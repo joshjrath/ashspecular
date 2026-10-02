@@ -2,7 +2,7 @@ import type { CategoryId } from "../catalog.js";
 import type { DerivedRecord } from "../parse/derive.js";
 import { ORG_TZ, SHORTS_DAY_STARTS_HOUR } from "../parse/derive.js";
 import type { Extraction } from "../parse/schema.js";
-import { pool } from "./pool.js";
+import { inTransaction, pool, type Db } from "./pool.js";
 
 /** Where a record came from, so the board can link back to the message. */
 export interface Source {
@@ -130,8 +130,8 @@ export async function refile(id: number, r: DerivedRecord, parsedBy: string): Pr
  * again from the new one; one that someone stated is theirs and is left alone.
  * Recurring batches never get a VO. Null clears the air date.
  */
-export async function moveAir(id: number, airDate: string | null, calculatedVo: Date | null): Promise<void> {
-  await pool.query(
+export async function moveAir(id: number, airDate: string | null, calculatedVo: Date | null, db: Db = pool): Promise<void> {
+  await db.query(
     `UPDATE records SET
        air_date = $2::date,
        vo_due = CASE
@@ -148,7 +148,7 @@ export async function moveAir(id: number, airDate: string | null, calculatedVo: 
   );
   // Moved means it may no longer be late — and if it goes late again, it
   // deserves a fresh nudge rather than silence.
-  await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+  await db.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
 }
 
 /**
@@ -160,10 +160,11 @@ export async function moveDue(
   id: number,
   field: "vo_due" | "deadline" | "script_due",
   at: Date,
+  db: Db = pool,
 ): Promise<void> {
   const extra = field === "vo_due" ? ", vo_source = 'stated'" : "";
-  await pool.query(`UPDATE records SET ${field} = $2${extra}, updated_at = now() WHERE id = $1`, [id, at]);
-  await pool.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
+  await db.query(`UPDATE records SET ${field} = $2${extra}, updated_at = now() WHERE id = $1`, [id, at]);
+  await db.query(`DELETE FROM nudges WHERE record_id = $1`, [id]);
 }
 
 /**
@@ -213,9 +214,7 @@ export async function snapshotMoves(ids: number[]): Promise<MoveSnapshot[]> {
 
 /** Undo a move: every record back to its dates, in one transaction. */
 export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  await inTransaction(async (client) => {
     for (const s of snaps) {
       await client.query(
         `UPDATE records SET air_date = $2::date, vo_due = $3, vo_source = $4, deadline = $5, script_due = $6,
@@ -227,13 +226,7 @@ export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
         await client.query(`INSERT INTO nudges (record_id) VALUES ($1) ON CONFLICT (record_id) DO NOTHING`, [s.id]);
       }
     }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 // ── days off ──────────────────────────────────────────────────────────────
@@ -582,6 +575,8 @@ export async function listByCategory(category: string, limit = 100): Promise<Sto
 }
 
 export async function getRecord(id: number): Promise<StoredRecord | null> {
+  // An address like /r/abc is simply not a record, not a database error.
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const { rows } = await pool.query<Row>(`${SELECT} WHERE id = $1`, [id]);
   return rows[0] ? hydrate(rows[0]) : null;
 }

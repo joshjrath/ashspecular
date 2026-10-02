@@ -11,13 +11,17 @@
  * The YouTube channel's own title is left alone: it can differ from what the
  * board calls the channel.
  */
-import { pool } from "./pool.js";
+import { inTransaction, pool } from "./pool.js";
 import {
   CATEGORIES, CATEGORY_IDS, CHANNELS, applyChannelSettings, checkChannelName, isCatalogChannel, newChannelId, type CategoryId, type ChannelSetting,
 } from "../catalog.js";
 
-/** Every table that stores a channel's name, and its column. */
-const NAME_COLUMNS: Array<[table: string, column: string, unique: boolean]> = [
+/**
+ * Every table that stores a channel's name, and its column. A new table that
+ * stores one must be added here (or a rename leaves its rows under the old
+ * name); a test reads the migrations and fails until it is.
+ */
+export const NAME_COLUMNS: ReadonlyArray<[table: string, column: string, unique: boolean]> = [
   ["records", "channel", false],
   ["uploads", "channel", false],
   ["youtube_channels", "channel", true],
@@ -39,7 +43,7 @@ const NAME_COLUMNS: Array<[table: string, column: string, unique: boolean]> = [
   ["comp_channels", "board_channel", false],
 ];
 /** Tables that keep a list of channel names. */
-const NAME_ARRAYS: Array<[table: string, column: string]> = [
+export const NAME_ARRAYS: ReadonlyArray<[table: string, column: string]> = [
   ["idea_feeds", "channels"],
   ["idea_sources", "channels"],
 ];
@@ -139,25 +143,21 @@ export async function renameChannel(id: string, raw: string): Promise<{ ok: true
   const from = channel.name;
   const to = checked.name;
   if (from === to) return { ok: true, name: to, from };
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    await moveName(client, from, to);
-    const { rows } = await client.query("SELECT previous FROM channel_settings WHERE id = $1", [id]);
-    // The names it had, newest last; one it's going back to leaves the list.
-    const previous = [...new Set([...((rows[0]?.previous as string[]) ?? []), from])].filter((n) => n.toLowerCase() !== to.toLowerCase());
-    if (!rows.length) {
-      await client.query("INSERT INTO channel_settings (id, name, added, previous, renamed_at) VALUES ($1, $2, false, $3, now())", [id, to, previous]);
-    } else {
-      await client.query("UPDATE channel_settings SET name = $2, previous = $3, renamed_at = now(), updated_at = now() WHERE id = $1", [id, to, previous]);
-    }
-    await client.query("COMMIT");
+    await inTransaction(async (client) => {
+      await moveName(client, from, to);
+      const { rows } = await client.query("SELECT previous FROM channel_settings WHERE id = $1", [id]);
+      // The names it had, newest last; one it's going back to leaves the list.
+      const previous = [...new Set([...((rows[0]?.previous as string[]) ?? []), from])].filter((n) => n.toLowerCase() !== to.toLowerCase());
+      if (!rows.length) {
+        await client.query("INSERT INTO channel_settings (id, name, added, previous, renamed_at) VALUES ($1, $2, false, $3, now())", [id, to, previous]);
+      } else {
+        await client.query("UPDATE channel_settings SET name = $2, previous = $3, renamed_at = now(), updated_at = now() WHERE id = $1", [id, to, previous]);
+      }
+    });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
     const msg = err instanceof Error ? err.message : String(err);
     return { error: /channel_settings_name/.test(msg) ? `There's already a channel called ${to}.` : `Couldn't rename it: ${msg}` };
-  } finally {
-    client.release();
   }
   await loadChannelSettings();
   return { ok: true, name: to, from };

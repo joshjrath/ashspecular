@@ -662,21 +662,34 @@ export interface IdeaSettings {
   tumblrDailyCap: number;
 }
 export const DEFAULT_SETTINGS: IdeaSettings = { polling: true, ai: true, triageCap: 600, fullCap: 60, fullThreshold: 0.55, tumblrDailyCap: 4000 };
+type NumericSetting = "triageCap" | "fullCap" | "fullThreshold" | "tumblrDailyCap";
+/** The range each number may take, wherever it's set: Idea Feed → Sources, or Settings → Limits. */
+export const IDEA_BOUNDS: Record<NumericSetting, { min: number; max: number }> = {
+  triageCap: { min: 0, max: 20000 },
+  fullCap: { min: 0, max: 2000 },
+  fullThreshold: { min: 0, max: 1 },
+  // Tumblr allows 5,000 calls a day; a little is left over for reading a pasted link.
+  tumblrDailyCap: { min: 0, max: 4900 },
+};
+/** A number as typed into a form, kept in its range; the current value when it's empty or not a number. */
+export function ideaSetting(k: NumericSetting, raw: unknown, current: number): number {
+  const text = String(raw ?? "").trim();
+  const v = Number(text);
+  if (!text || !Number.isFinite(v)) return current;
+  return Math.max(IDEA_BOUNDS[k].min, Math.min(IDEA_BOUNDS[k].max, v));
+}
 
 export async function getSettings(): Promise<IdeaSettings> {
   const { rows } = await pool.query("SELECT key, value FROM idea_settings");
   const m = new Map(rows.map((r) => [r.key as string, r.value as string]));
-  const n = (k: keyof IdeaSettings, lo: number, hi: number) => {
-    const v = Number(m.get(k));
-    return Number.isFinite(v) && m.has(k) ? Math.max(lo, Math.min(hi, v)) : (DEFAULT_SETTINGS[k] as number);
-  };
+  const n = (k: NumericSetting) => ideaSetting(k, m.get(k), DEFAULT_SETTINGS[k]);
   return {
     polling: m.has("polling") ? m.get("polling") === "on" : DEFAULT_SETTINGS.polling,
     ai: m.has("ai") ? m.get("ai") === "on" : DEFAULT_SETTINGS.ai,
-    triageCap: n("triageCap", 0, 20000),
-    fullCap: n("fullCap", 0, 2000),
-    fullThreshold: n("fullThreshold", 0, 1),
-    tumblrDailyCap: n("tumblrDailyCap", 0, 4900),
+    triageCap: n("triageCap"),
+    fullCap: n("fullCap"),
+    fullThreshold: n("fullThreshold"),
+    tumblrDailyCap: n("tumblrDailyCap"),
   };
 }
 export async function saveSettings(s: IdeaSettings): Promise<void> {

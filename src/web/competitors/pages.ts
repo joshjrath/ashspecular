@@ -10,7 +10,7 @@ import { compactViews } from "../performance.js";
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
 import { layout, pageHeader, timeAgo, type Shell } from "../page.js";
 import { esc, safeHref, safeUrl } from "../html.js";
-import type { Alert, CompChannel, CompSettings, Group, Read } from "../../db/competitors.js";
+import { COMP_BOUNDS, type Alert, type CompChannel, type CompSettings, type Group, type Read } from "../../db/competitors.js";
 import type { ChannelStats, Emerging, Gap, Pattern, Position, Row, SortKey, FormatPick } from "../../competitors/analysis.js";
 import { FORMAT_LABEL } from "../../competitors/concepts.js";
 
@@ -310,6 +310,7 @@ export function renderChannel(shell: Shell, d: { groups: Group[]; group: Group; 
 
 export function renderManage(shell: Shell, d: { groups: Group[]; channels: CompChannel[]; settings: CompSettings; flash?: string; error?: string; status: { key: boolean; ai: boolean } }): string {
   const s = d.settings;
+  const range = (k: keyof CompSettings) => `min="${COMP_BOUNDS[k].min}" max="${COMP_BOUNDS[k].max}"`;
   const groupOpts = (sel: number) => d.groups.map((g) => `<option value="${g.id}"${g.id === sel ? " selected" : ""}>${esc(g.name)}</option>`).join("");
   return layout(
     "Competitors · Manage",
@@ -339,11 +340,11 @@ export function renderManage(shell: Shell, d: { groups: Group[]; channels: CompC
         .join("")}</section>
     <section class="panel"><h2>Settings</h2>
       <form method="post" action="/competitors/settings" class="caddf">
-        <label>Outlier at<input type="number" name="outlier" min="1.2" max="10" step="0.1" value="${s.outlier}"></label>
-        <label>Major outlier (alerts) at<input type="number" name="major" min="1.5" max="50" step="0.5" value="${s.major}"></label>
-        <label>Coverage stale after (months)<input type="number" name="staleMonths" min="1" max="60" value="${s.staleMonths}"></label>
-        <label>YouTube quota units a day<input type="number" name="quota" min="100" max="10000" step="100" value="${s.quota}"></label>
-        <label>Claude calls a day<input type="number" name="aiCalls" min="0" max="500" value="${s.aiCalls}"></label>
+        <label>Outlier at<input type="number" name="outlier" ${range("outlier")} step="0.1" value="${s.outlier}"></label>
+        <label>Major outlier (alerts) at<input type="number" name="major" ${range("major")} step="0.5" value="${s.major}"></label>
+        <label>Coverage stale after (months)<input type="number" name="staleMonths" ${range("staleMonths")} value="${s.staleMonths}"></label>
+        <label>YouTube quota units a day<input type="number" name="quota" ${range("quota")} step="100" value="${s.quota}"></label>
+        <label>Claude calls a day<input type="number" name="aiCalls" ${range("aiCalls")} value="${s.aiCalls}"></label>
         <button class="clear">Save</button>
       </form>
       <p class="hint">${d.status.key ? "A YouTube key is set (Settings → Connections &amp; API keys; several keys share the quota)." : `<b>No YouTube key</b> — add one in <a href="/settings#key-youtube">Settings → Connections &amp; API keys</a>: channels are read from their free feeds (latest 15 videos only).`} ${d.status.ai ? "Claude reads concepts and writes the daily read." : "No Claude key (Settings → Connections &amp; API keys): concepts are read by rules only, and there's no AI read."}</p></section>`,

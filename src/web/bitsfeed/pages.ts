@@ -4,7 +4,7 @@
  * re-scoring). Every card links to its original post.
  */
 import { ORG_TZ, dateIn, usDate } from "../../parse/derive.js";
-import type { Feed, FeedTab, IdeaRow, IdeaSettings, SourceRow, UsageRow } from "../../db/ideas.js";
+import { IDEA_BOUNDS, type Feed, type FeedTab, type IdeaRow, type IdeaSettings, type SourceRow, type UsageRow } from "../../db/ideas.js";
 import type { ScoreBreakdown, SimilarMatch } from "../../ideas/score.js";
 import {
   CLASSIFICATIONS, CLASSIFICATION_BY_ID, IDEA_STATUSES, REJECT_BY_ID, REJECT_REASONS, bitsChannels, engineLabel, shortChannel,
@@ -457,14 +457,15 @@ export function renderIdeaSources(shell: Shell, d: SourcesPageData): string {
       }</div>
     </section>`;
   const s = d.settings;
+  const range = (k: keyof typeof IDEA_BOUNDS) => `min="${IDEA_BOUNDS[k].min}" max="${IDEA_BOUNDS[k].max}"`;
   const settings = `<section class="panel" id="settings"><h2>Settings <span class="sub">— caps keep the spend predictable; anything over waits for tomorrow</span></h2>
       <form method="post" action="/ideas/sources/settings" class="isetf">
         <label class="ifcheck"><input type="checkbox" name="polling" value="on"${s.polling ? " checked" : ""}> Read Tumblr</label>
         <label class="ifcheck"><input type="checkbox" name="ai" value="on"${s.ai ? " checked" : ""}> Analyse posts</label>
-        <label>Quick looks a day<input type="number" name="triageCap" min="0" max="20000" value="${s.triageCap}"></label>
-        <label>Full reads a day<input type="number" name="fullCap" min="0" max="2000" value="${s.fullCap}"></label>
-        <label>Full read from quick-look score<input type="number" name="fullThreshold" min="0" max="1" step="0.05" value="${s.fullThreshold}"></label>
-        <label>Tumblr calls a day<input type="number" name="tumblrDailyCap" min="0" max="4900" value="${s.tumblrDailyCap}"></label>
+        <label>Quick looks a day<input type="number" name="triageCap" ${range("triageCap")} value="${s.triageCap}"></label>
+        <label>Full reads a day<input type="number" name="fullCap" ${range("fullCap")} value="${s.fullCap}"></label>
+        <label>Full read from quick-look score<input type="number" name="fullThreshold" ${range("fullThreshold")} step="0.05" value="${s.fullThreshold}"></label>
+        <label>Tumblr calls a day<input type="number" name="tumblrDailyCap" ${range("tumblrDailyCap")} value="${s.tumblrDailyCap}"></label>
         <button class="ibtn go">Save settings</button>
       </form></section>`;
   const byChannel = new Map<string, Feed[]>();

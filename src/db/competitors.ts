@@ -373,6 +373,23 @@ export interface CompSettings {
   aiCalls: number;
 }
 export const DEFAULT_COMP: CompSettings = { staleMonths: 9, outlier: 2, major: 4, quota: 6000, aiCalls: 40 };
+/** The range each setting may take, wherever it's set: Competitors → Manage, or Settings → Limits. */
+export const COMP_BOUNDS: Record<keyof CompSettings, { min: number; max: number; whole: boolean }> = {
+  staleMonths: { min: 1, max: 60, whole: true },
+  outlier: { min: 1.2, max: 10, whole: false },
+  major: { min: 1.5, max: 50, whole: false },
+  quota: { min: 100, max: 10000, whole: true },
+  aiCalls: { min: 0, max: 500, whole: true },
+};
+/** A setting as typed into a form, kept in its range; the current value when it isn't a number. */
+export function compSetting(k: keyof CompSettings, raw: unknown, current: number): number {
+  const text = String(raw ?? "").trim();
+  const v = Number(text);
+  if (!text || !Number.isFinite(v)) return current;
+  const b = COMP_BOUNDS[k];
+  const kept = Math.max(b.min, Math.min(b.max, v));
+  return b.whole ? Math.round(kept) : kept;
+}
 
 export async function getCompSettings(): Promise<CompSettings> {
   const { rows } = await pool.query("SELECT key, value FROM comp_settings");

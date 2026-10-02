@@ -4,7 +4,7 @@
  * compilations planned and posted, exclusions, and picks rerolled away.
  * See compilations/engine.ts for how picks are made.
  */
-import { pool } from "./pool.js";
+import { inTransaction, pool } from "./pool.js";
 import { CHANNELS } from "../catalog.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
 import { inferMovieConcept, inferMovieSources, inferSleepConcept, oneEach, type Kind, type PastCompilation, type Pick, type Source } from "../compilations/engine.js";
@@ -216,25 +216,17 @@ export async function takenDays(kind: Kind): Promise<{ taken: Set<string>; last:
  * isn't yet), a Sleep as a Specular Sleep video on its day.
  */
 export async function planCompilation(pick: Pick, slot: string): Promise<number> {
-  const client = await pool.connect();
-  let id: number;
-  try {
-    await client.query("BEGIN");
+  const id = await inTransaction(async (client) => {
     const { rows } = await client.query(
       "INSERT INTO compilations (kind, title, concept, slot_date, status) VALUES ($1, $2, $3, $4, 'planned') RETURNING id",
       [pick.kind, pick.title, pick.concept, slot],
     );
-    id = Number(rows[0].id);
+    const id = Number(rows[0].id);
     for (const [i, s] of pick.sources.entries()) {
       await client.query("INSERT INTO compilation_sources (compilation_id, video_id, position) VALUES ($1, $2, $3)", [id, s.id, i]);
     }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+    return id;
+  });
   let recordId: number | null = null;
   if (pick.kind === "movie") {
     await openBatchesFor(slot, (c) => c.id === COMPILATION_CHANNEL_ID.movie).catch(() => null);

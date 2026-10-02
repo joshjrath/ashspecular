@@ -65,6 +65,7 @@ export async function listTasks(): Promise<{ todo: Task[]; snoozed: Task[]; done
 }
 
 export async function getTask(id: number): Promise<Task | null> {
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
   return rows[0] ? row(rows[0]) : null;
 }

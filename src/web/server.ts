@@ -56,7 +56,8 @@ import {
   type CalendarMode,
   type StoredRecord,
 } from "../db/records.js";
-import { migrate } from "../db/migrate.js";
+import { prepareDatabase } from "../db/prepare.js";
+import { inTransaction, type Db } from "../db/pool.js";
 import { classify } from "../parse/classify.js";
 import {
   DEADLINE_TIME,
@@ -96,15 +97,15 @@ import { financeAlerts, registerFinance } from "./finance/routes.js";
 import { registerSpecular, specularPanel, specularState } from "./specular.js";
 import { checkPosts, listMissed, missedLine, undoMissed } from "../jobs/postcheck.js";
 import { forgetHistory, strongUnseen } from "../db/ideas.js";
-import { addChannel, channelUse, listChannelSettings, loadChannelSettings, onChannelsChanged, removeChannel, renameChannel, startChannelSync } from "../db/channelsettings.js";
+import { addChannel, channelUse, listChannelSettings, onChannelsChanged, removeChannel, renameChannel } from "../db/channelsettings.js";
 import { registerIdeaFeed } from "./bitsfeed/routes.js";
 import { registerCompetitors } from "./competitors/routes.js";
 import { startCompetitorJobs } from "../jobs/competitors.js";
 import { unseenAlerts } from "../db/competitors.js";
 import { startIdeaJobs } from "../jobs/ideas.js";
-import { KEY_DEFS, keyStates, keysInEffect, limitValue, loadKeys, mask, setKey, setLimit, startKeySync, testKey, youtubeStatus } from "../db/keys.js";
-import { getSettings as getIdeaSettings, saveSettings as saveIdeaSettings, usageOn as ideaUsageOn } from "../db/ideas.js";
-import { getCompSettings, saveCompSettings, usageToday as compUsageToday } from "../db/competitors.js";
+import { KEY_DEFS, LIMIT_DEFS, keyStates, keysInEffect, mask, setKey, setLimit, testKey, youtubeStatus } from "../db/keys.js";
+import { IDEA_BOUNDS, getSettings as getIdeaSettings, ideaSetting, saveSettings as saveIdeaSettings, usageOn as ideaUsageOn } from "../db/ideas.js";
+import { COMP_BOUNDS, compSetting, getCompSettings, saveCompSettings, usageToday as compUsageToday } from "../db/competitors.js";
 import { dashboardAlerts } from "./finance/ui.js";
 import { readEstimates, resetEstimates, saveEstimates } from "../db/estimates.js";
 import { REPEAT, type Repeat } from "../tasks/repeat.js";
@@ -257,7 +258,7 @@ async function loadWork(now = new Date()) {
 
 async function shell(active: string): Promise<Shell> {
   await refreshScriptIndex().catch((err) => console.error("[scripts] index failed:", err));
-  const work = hasDatabase ? await loadWork().catch(() => null) : null;
+  const work = hasDatabase ? await loadWork().catch((err) => (console.error("[my day] couldn't load the work for the sidebar:", err), null)) : null;
   const [counts, reviews, grouped, at, month, removed, batchesOpen, behind, paused, daysOff, gaps, chPaused] = await Promise.all([
     categoryCounts(),
     listReviews(200),
@@ -507,28 +508,24 @@ export async function startWeb(): Promise<void> {
   }
 
   if (hasDatabase) {
-    await migrate();
-    // API keys and limits set in Settings take over from Railway's variables, before anything calls out.
-    await loadKeys().catch((err) => console.error("[keys] load failed:", err));
-    startKeySync();
-    // Channels added or renamed in Settings; when they change, colours and caches follow.
+    // The schema, the API keys set in Settings and the channels added or renamed there.
+    await prepareDatabase();
+    // When the channels change, colours and caches follow.
     onChannelsChanged(async () => {
       ownPaces = null;
       forgetHistory();
       await loadChannelColours();
     });
-    await loadChannelSettings().catch((err) => console.error("[channels] load failed:", err));
-    startChannelSync();
     // The Shorts channels' avatar colours and any set by hand, before the first page.
     await loadChannelColours().catch((err) => console.error("[colours] load failed:", err));
     // Whatever's been added to Story Lab from its dice.
-    applyAdditions(await listLabAdditions().catch(() => []));
+    applyAdditions(await listLabAdditions().catch((err) => (console.error("[lab] couldn't read the dice additions:", err), [])));
     // A login password changed in Settings takes over from DASHBOARD_PASSWORD.
     await loadBoardPassword().catch((err) => console.error("[auth] couldn't read the stored password:", err));
     // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
-    setBoardScripts(await listScripts().catch(() => []));
+    setBoardScripts(await listScripts().catch((err) => (console.error("[scripts] couldn't read them:", err), [])));
     // What's new: each change is announced from the first start that ships it.
-    releaseTimes = await markReleases(RELEASES).catch(() => new Map());
+    releaseTimes = await markReleases(RELEASES).catch((err) => (console.error("[whats-new] couldn't mark the releases:", err), new Map()));
   }
 
   const app = Fastify({ logger: false, trustProxy: true });
@@ -2057,15 +2054,15 @@ export async function startWeb(): Promise<void> {
   };
 
   /** Put a record on another day, the way the calendar in that mode means it. */
-  async function placeOn(r: StoredRecord, date: string, mode: CalendarMode): Promise<boolean> {
+  async function placeOn(r: StoredRecord, date: string, mode: CalendarMode, db: Db): Promise<boolean> {
     if (mode === "posting") {
-      await moveAir(r.id, date, voFor(date));
+      await moveAir(r.id, date, voFor(date), db);
       return true;
     }
     const due = dueOf(r);
     const at = due ? instantIn(date, timeOf(due.at), ORG_TZ) : null;
     if (!due || !at) return false;
-    await moveDue(r.id, due.field, at);
+    await moveDue(r.id, due.field, at, db);
     return true;
   }
 
@@ -2108,9 +2105,14 @@ export async function startWeb(): Promise<void> {
         )
       : none;
     const snaps = plan.moves.length ? await snapshotMoves([record.id, ...plan.moves.map((m) => m.id)]) : [];
-    if (!(await placeOn(record, date, mode))) return { ok: false, plan: none, undo: null, text: "" };
     const byId = new Map(schedule.map((r) => [r.id, r]));
-    for (const m of plan.moves) await placeOn(byId.get(m.id)!, m.to, mode);
+    // The video and the rest of its channel move together, or not at all.
+    const placed = await inTransaction(async (db) => {
+      if (!(await placeOn(record, date, mode, db))) return false;
+      for (const m of plan.moves) await placeOn(byId.get(m.id)!, m.to, mode, db);
+      return true;
+    });
+    if (!placed) return { ok: false, plan: none, undo: null, text: "" };
     const text = plan.moves.length ? cascadeText(record.channel!, plan) : "";
     return { ok: true, plan, undo: plan.moves.length ? keepUndo(snaps, text) : null, text };
   }
@@ -2230,17 +2232,18 @@ export async function startWeb(): Promise<void> {
       flash: q.key && q.keymsg ? { id: q.key, text: q.keymsg.slice(0, 200), error: q.keyerr === "1" } : undefined,
     };
   };
+  const minMax = (b: { min: number; max: number }) => ({ min: b.min, max: b.max });
   const limitsView = async (saved: boolean) => {
     const [story, idea, ideaUse, comp, compUse] = await Promise.all([aiRunSummary(), getIdeaSettings(), ideaUsageOn(), getCompSettings(), compUsageToday()]);
     return {
       saved,
       rows: [
-        { group: "Story Lab", name: "story", label: "Claude calls a day", note: "Writing new ideas for each Stories channel", value: dailyCap(), max: 500, today: story.calls },
-        { group: "Idea Feed", name: "triageCap", label: "Quick looks a day", note: "Claude's first read of each Tumblr post", value: idea.triageCap, max: 20000, today: ideaUse.get("ai-triage")?.items ?? 0 },
-        { group: "Idea Feed", name: "fullCap", label: "Full reads a day", note: "Claude's full analysis of the promising ones", value: idea.fullCap, max: 2000, today: ideaUse.get("ai-full")?.items ?? 0 },
-        { group: "Idea Feed", name: "tumblrDailyCap", label: "Tumblr calls a day", note: "Tumblr allows 5,000", value: idea.tumblrDailyCap, max: 4900, today: ideaUse.get("tumblr")?.calls ?? 0 },
-        { group: "Competitors", name: "aiCalls", label: "Claude calls a day", note: "Reading concepts and the daily read", value: comp.aiCalls, max: 1000, today: compUse.ai },
-        { group: "Competitors", name: "quota", label: "YouTube quota units a day", note: "10,000 per key from Google", value: comp.quota, max: 100000, today: compUse.youtube },
+        { group: "Story Lab", name: "story", label: "Claude calls a day", note: "Writing new ideas for each Stories channel", value: dailyCap(), ...minMax(LIMIT_DEFS.find((l) => l.id === "storylab")!), today: story.calls },
+        { group: "Idea Feed", name: "triageCap", label: "Quick looks a day", note: "Claude's first read of each Tumblr post", value: idea.triageCap, ...minMax(IDEA_BOUNDS.triageCap), today: ideaUse.get("ai-triage")?.items ?? 0 },
+        { group: "Idea Feed", name: "fullCap", label: "Full reads a day", note: "Claude's full analysis of the promising ones", value: idea.fullCap, ...minMax(IDEA_BOUNDS.fullCap), today: ideaUse.get("ai-full")?.items ?? 0 },
+        { group: "Idea Feed", name: "tumblrDailyCap", label: "Tumblr calls a day", note: "Tumblr allows 5,000", value: idea.tumblrDailyCap, ...minMax(IDEA_BOUNDS.tumblrDailyCap), today: ideaUse.get("tumblr")?.calls ?? 0 },
+        { group: "Competitors", name: "aiCalls", label: "Claude calls a day", note: "Reading concepts and the daily read", value: comp.aiCalls, ...minMax(COMP_BOUNDS.aiCalls), today: compUse.ai },
+        { group: "Competitors", name: "quota", label: "YouTube quota units a day", note: "10,000 per key from Google", value: comp.quota, ...minMax(COMP_BOUNDS.quota), today: compUse.youtube },
       ],
     };
   };
@@ -2282,20 +2285,22 @@ export async function startWeb(): Promise<void> {
     return back(bad ? `Saved, but ${bad === results.length && results.length === 1 ? "it" : `${bad} of ${results.length}`} didn't work — see below.` : "Saved and working. In use now.", bad > 0);
   });
 
-  // Limits & spending: every daily cap, saved to wherever its feature reads it.
+  // Limits & spending: every daily cap, saved to wherever its feature reads it,
+  // in the ranges each feature's own page allows (one table each).
   app.post<{ Body: Record<string, string | undefined> }>("/settings/limits", async (request, reply) => {
     const b = request.body ?? {};
-    const num = (k: string, lo: number, hi: number, dflt: number) => {
-      const raw = (b[k] ?? "").trim();
-      const v = Number(raw);
-      return raw !== "" && Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v))) : dflt;
-    };
     if (!hasDatabase) return reply.redirect("/settings#limits");
-    await setLimit("storylab", num("story", 0, 500, limitValue("storylab")));
+    const story = Number((b.story ?? "").trim());
+    if ((b.story ?? "").trim() && Number.isFinite(story)) await setLimit("storylab", story);
     const idea = await getIdeaSettings();
-    await saveIdeaSettings({ ...idea, triageCap: num("triageCap", 0, 20000, idea.triageCap), fullCap: num("fullCap", 0, 2000, idea.fullCap), tumblrDailyCap: num("tumblrDailyCap", 0, 4900, idea.tumblrDailyCap) });
+    await saveIdeaSettings({
+      ...idea,
+      triageCap: Math.round(ideaSetting("triageCap", b.triageCap, idea.triageCap)),
+      fullCap: Math.round(ideaSetting("fullCap", b.fullCap, idea.fullCap)),
+      tumblrDailyCap: Math.round(ideaSetting("tumblrDailyCap", b.tumblrDailyCap, idea.tumblrDailyCap)),
+    });
     const comp = await getCompSettings();
-    await saveCompSettings({ ...comp, aiCalls: num("aiCalls", 0, 1000, comp.aiCalls), quota: num("quota", 0, 100000, comp.quota) });
+    await saveCompSettings({ ...comp, aiCalls: compSetting("aiCalls", b.aiCalls, comp.aiCalls), quota: compSetting("quota", b.quota, comp.quota) });
     return reply.redirect("/settings?limits=saved#limits");
   });
 

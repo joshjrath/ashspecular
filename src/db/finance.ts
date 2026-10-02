@@ -6,7 +6,7 @@
  * Dates come back as "YYYY-MM-DD" text (to_char), never Date objects, so no
  * time zone can move a day.
  */
-import { pool } from "./pool.js";
+import { inTransaction, pool } from "./pool.js";
 import { CHANNELS } from "../catalog.js";
 import type { ExpenseFact, ExpenseType, Facts, IncomeFact, RecurringFact, Thresholds, ChannelMonth } from "../finance/metrics.js";
 import { DEFAULT_THRESHOLDS } from "../finance/metrics.js";
@@ -316,9 +316,7 @@ export interface ExpenseInput {
 }
 
 export async function saveExpense(e: ExpenseInput, id?: number): Promise<number> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  return inTransaction(async (client) => {
     const vals = [
       e.amount, e.date, e.payee, e.personId, e.type, e.categoryId, e.companyId, e.methodId, e.recordId, e.recurringId ?? null,
       e.status, e.status === "paid" ? (e.paidOn ?? e.date) : null, e.isAdvance, e.unitsVideos, e.unitsMinutes, e.calculated,
@@ -347,14 +345,8 @@ export async function saveExpense(e: ExpenseInput, id?: number): Promise<number>
     for (const s of e.splits) {
       await client.query("INSERT INTO fin_expense_splits (expense_id, channel, weight) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [expenseId, s.channel, s.weight]);
     }
-    await client.query("COMMIT");
     return expenseId!;
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function deleteExpense(id: number): Promise<void> {
@@ -596,9 +588,7 @@ export async function saveMonthGrid(
   rows: Array<{ channel: string | null; amount: number | null; views?: number | null; companyId: number | null }>,
 ): Promise<void> {
   const ps = monthStart(month), pe = monthEnd(month);
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  await inTransaction(async (client) => {
     for (const r of rows) {
       await client.query(
         "DELETE FROM fin_income WHERE stream_id = $1 AND granularity = 'month' AND period_start = $2 AND period_end = $3 AND source = '' AND channel IS NOT DISTINCT FROM $4",
@@ -620,13 +610,7 @@ export async function saveMonthGrid(
           );
       }
     }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 // ── the facts every page is a view of ──────────────────────────────────────

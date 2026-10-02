@@ -2,7 +2,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   addChannel, addGroup, deleteGroup, getChannel, getCompSettings, latestRead, listAlerts, listChannels, listGroups, markAlertsSeen, refreshNow, removeChannel,
-  renameGroup, saveCompSettings, updateChannel, usageToday, DEFAULT_COMP,
+  renameGroup, saveCompSettings, updateChannel, usageToday, compSetting, DEFAULT_COMP,
 } from "../../db/competitors.js";
 import { CHANNELS } from "../../catalog.js";
 import type { Shell } from "../page.js";
@@ -156,7 +156,8 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
     if ("error" in r) return back(reply, `/competitors/${gid}`, { msg: r.error });
     // Read it straight away so the page fills in (a backfill takes a few seconds).
     const c = await getChannel(r.id);
-    if (c && !c.boardChannel) await readChannel(c).catch(() => undefined);
+    // A failure is kept on the channel (its error shows below); the log says why too.
+    if (c && !c.boardChannel) await readChannel(c).catch((err) => console.error("[competitors] first read failed:", err));
     const after = await getChannel(r.id);
     return back(reply, `/competitors/${gid}`, { msg: after?.error ? `Added, but: ${after.error}` : `Added ${after?.title ?? board ?? "the channel"}.` });
   });
@@ -174,16 +175,14 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
     const id = idOf(request.params.id) ?? 0;
     await refreshNow(id);
     const c = await getChannel(id);
-    if (c) await readChannel(c).catch(() => undefined);
+    if (c) await readChannel(c).catch((err) => console.error("[competitors] refresh failed:", err));
     return reply.redirect(`/competitors/c/${id}`);
   });
   app.post<{ Body: Q }>("/competitors/settings", async (request, reply) => {
     const b = request.body ?? {};
-    const n = (k: keyof typeof DEFAULT_COMP, lo: number, hi: number) => {
-      const v = Number(b[k]);
-      return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : DEFAULT_COMP[k];
-    };
-    await saveCompSettings({ outlier: n("outlier", 1.2, 10), major: n("major", 1.5, 50), staleMonths: Math.round(n("staleMonths", 1, 60)), quota: Math.round(n("quota", 100, 10000)), aiCalls: Math.round(n("aiCalls", 0, 500)) });
+    // A field left empty or not a number goes back to its default.
+    const n = (k: keyof typeof DEFAULT_COMP) => compSetting(k, b[k], DEFAULT_COMP[k]);
+    await saveCompSettings({ outlier: n("outlier"), major: n("major"), staleMonths: n("staleMonths"), quota: n("quota"), aiCalls: n("aiCalls") });
     return back(reply, "/competitors/manage", { msg: "Settings saved." });
   });
 }

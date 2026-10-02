@@ -6,7 +6,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
-  FEED_TABS, addFeed, approveSource, decide, deleteFeed, feedPulse, feedSources, getSettings, getSource, listFeeds, listIdeas, pollFeedNow,
+  FEED_TABS, ideaSetting, addFeed, approveSource, decide, deleteFeed, feedPulse, feedSources, getSettings, getSource, listFeeds, listIdeas, pollFeedNow,
   queueSources, reclassify, saveSettings, setIdeaStatus, sourcesInScope, tabCounts, updateFeed, usageOn, verifyCanon, forgetHistory,
   retryErrors, getIdea, type FeedTab, type IdeaSettings,
 } from "../../db/ideas.js";
@@ -200,18 +200,14 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
 
   app.post<{ Body: Body }>("/ideas/sources/settings", async (request, reply) => {
     const b = request.body ?? {};
-    const n = (k: string, lo: number, hi: number, dflt: number) => {
-      const v = Number(str(b[k]));
-      return Number.isFinite(v) && str(b[k]) !== "" ? Math.max(lo, Math.min(hi, v)) : dflt;
-    };
     const cur = await getSettings();
     const next: IdeaSettings = {
       polling: str(b.polling) === "on",
       ai: str(b.ai) === "on",
-      triageCap: Math.round(n("triageCap", 0, 20000, cur.triageCap)),
-      fullCap: Math.round(n("fullCap", 0, 2000, cur.fullCap)),
-      fullThreshold: Math.round(n("fullThreshold", 0, 1, cur.fullThreshold) * 100) / 100,
-      tumblrDailyCap: Math.round(n("tumblrDailyCap", 0, 4900, cur.tumblrDailyCap)),
+      triageCap: Math.round(ideaSetting("triageCap", str(b.triageCap), cur.triageCap)),
+      fullCap: Math.round(ideaSetting("fullCap", str(b.fullCap), cur.fullCap)),
+      fullThreshold: Math.round(ideaSetting("fullThreshold", str(b.fullThreshold), cur.fullThreshold) * 100) / 100,
+      tumblrDailyCap: Math.round(ideaSetting("tumblrDailyCap", str(b.tumblrDailyCap), cur.tumblrDailyCap)),
     };
     await saveSettings(next);
     return toSources(reply, "Settings saved.", "#settings");

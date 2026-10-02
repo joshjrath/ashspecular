@@ -7131,7 +7131,7 @@ export interface KeysView {
 }
 
 export interface LimitsView {
-  rows: Array<{ group: string; name: string; label: string; value: number; max: number; today: number | null; note?: string }>;
+  rows: Array<{ group: string; name: string; label: string; value: number; min: number; max: number; today: number | null; note?: string }>;
   saved: boolean;
 }
 
@@ -7213,7 +7213,7 @@ function limitsSettings(l: LimitsView): string {
           .filter((r) => r.group === g)
           .map(
             (r) => `<label class="limrow"><span class="nm">${esc(r.label)}${r.note ? `<em>${esc(r.note)}</em>` : ""}</span>
-              <input type="number" name="${esc(r.name)}" min="0" max="${r.max}" inputmode="numeric" value="${r.value}" aria-label="${esc(`${g}: ${r.label}`)}">
+              <input type="number" name="${esc(r.name)}" min="${r.min}" max="${r.max}" inputmode="numeric" value="${r.value}" aria-label="${esc(`${g}: ${r.label}`)}">
               <span class="src">${r.today === null ? "" : `${r.today.toLocaleString("en-US")} today`}</span></label>`,
           )
           .join("")}</div>`,

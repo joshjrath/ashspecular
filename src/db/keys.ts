@@ -173,7 +173,7 @@ let syncing = false;
 export function startKeySync(): void {
   if (syncing) return;
   syncing = true;
-  setInterval(() => void loadKeys().catch(() => undefined), 60_000).unref();
+  setInterval(() => void loadKeys().catch((err) => console.error("[keys] sync failed:", err instanceof Error ? err.message : err)), 60_000).unref();
 }
 
 // ── checking a key ──────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { pool } from "./pool.js";
+import { inTransaction, pool } from "./pool.js";
 
 /** The timer running now, if any — on a record or a task. */
 export async function runningTimer(): Promise<{ id: number; recordId: number | null; taskId: number | null; startedAt: Date } | null> {
@@ -11,16 +11,28 @@ export async function runningTimer(): Promise<{ id: number; recordId: number | n
     : null;
 }
 
+/**
+ * One timer runs at a time: starting one stops whatever was running, in one
+ * step. Two starts at once (a double click) take turns on a lock, so the
+ * second stops the first rather than running beside it; the database refuses
+ * two running anyway (047_one_running_timer).
+ */
+async function startRunning(column: "record_id" | "task_id", id: number): Promise<void> {
+  await inTransaction(async (db) => {
+    await db.query("SELECT pg_advisory_xact_lock(hashtext('time_entries:running'))");
+    await db.query("UPDATE time_entries SET ended_at = now() WHERE ended_at IS NULL");
+    await db.query(`INSERT INTO time_entries (${column}) VALUES ($1)`, [id]);
+  });
+}
+
 /** Start timing a piece of work. Whatever was running stops first. */
 export async function startTimer(recordId: number): Promise<void> {
-  await pool.query("UPDATE time_entries SET ended_at = now() WHERE ended_at IS NULL");
-  await pool.query("INSERT INTO time_entries (record_id) VALUES ($1)", [recordId]);
+  await startRunning("record_id", recordId);
 }
 
 /** Start timing a task. */
 export async function startTaskTimer(taskId: number): Promise<void> {
-  await pool.query("UPDATE time_entries SET ended_at = now() WHERE ended_at IS NULL");
-  await pool.query("INSERT INTO time_entries (task_id) VALUES ($1)", [taskId]);
+  await startRunning("task_id", taskId);
 }
 
 /** Minutes tracked on each of these tasks, the running timer included. */

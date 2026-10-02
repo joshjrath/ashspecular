@@ -45,6 +45,7 @@ export async function scriptsFor(recordId: number): Promise<StoredScript[]> {
 }
 
 export async function getScript(id: number): Promise<StoredScript | null> {
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   const { rows } = await pool.query(`${SELECT} WHERE s.id = $1`, [id]);
   return rows[0] ? row(rows[0]) : null;
 }

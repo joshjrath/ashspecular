@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool } from "./pool.js";
+import { inTransaction, pool } from "./pool.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -24,20 +24,14 @@ export async function migrate(): Promise<void> {
     if (rowCount) continue;
 
     const sql = await readFile(join(dir, file), "utf8");
-    const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [
-        file,
-      ]);
-      await client.query("COMMIT");
+      await inTransaction(async (client) => {
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
+      });
       console.log(`[migrate] applied ${file}`);
     } catch (err) {
-      await client.query("ROLLBACK");
       throw new Error(`Migration ${file} failed: ${String(err)}`);
-    } finally {
-      client.release();
     }
   }
 }
