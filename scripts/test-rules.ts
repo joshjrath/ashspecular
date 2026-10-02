@@ -109,7 +109,8 @@ import type { SourceRow } from "../src/db/ideas.js";
 import { channelStats, conceptGaps, emergingTopics, myPosition, rowsOf, whatsWorking } from "../src/competitors/analysis.js";
 import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
-import { checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
+import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
+import { buildApp } from "../src/web/server.js";
 import { contentDisposition, localPath, refererPath } from "../src/web/http.js";
 import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
 import { IDEA_BOUNDS, ideaSetting } from "../src/db/ideas.js";
@@ -2444,6 +2445,57 @@ t("emerging: three channels on one thing in two weeks, flagged as early", [emerg
     (setPage.match(/value="clear"/g) ?? []).length, setPage.includes("<textarea name=\"value\""), setPage.includes('type="password" name="value"'), setPage.includes("Saved and working"),
   ], [true, true, true, 1, true, true, true]);
   t("…limits: each cap with today's count", [setPage.includes('name="story"') && setPage.includes('value="30"'), setPage.includes("4 today"), setPage.indexOf('id="keys"') < setPage.indexOf('id="layout"')], [true, true, true]);
+}
+
+section("Hostile text never reaches a page raw");
+{
+  // A message can say anything: every field of a record carries markup, quotes and a javascript: link.
+  const evil = `<img src=x onerror=alert(1)>"'><svg onload=alert(2)>`;
+  const bad = { ...plainRec, id: 66, title: evil, code: `VIDEO-${evil}`, channel: `Specular ${evil}`, brief: evil, note: evil, raw: evil, assignee: evil, tag: evil, stage: evil,
+    sourceAuthor: evil, sourceUrl: "javascript:alert(3)", links: [{ url: "javascript:alert(4)", kind: "other", label: evil }, { url: `https://x.example/"><b class=pwn>${evil}`, kind: "other", label: "ok" }],
+    airDate: "2026-09-28", voDue: new Date("2026-09-27T03:59:00Z") } as unknown as typeof plainRec;
+  const rendered: Record<string, string> = {
+    list: renderList(shellFix, evil, evil, [bad]),
+    record: renderRecord(shellFix, bad, { later: 0, scriptError: evil, summaryError: evil }),
+    day: renderDay(shellFix, "2026-09-28", "posting", [{ date: "2026-09-28", list: [bad] }]),
+    week: renderWeek(shellFix, "2026-09-27", "posting", [{ date: "2026-09-28", list: [bad] }]),
+    calendar: renderCalendar(shellFix, "2026-09", "posting", [{ day: "2026-09-28", record: bad }] as never, [], []),
+    dashboard: renderDashboard({ ...shellFix, active: "dashboard" }, {
+      stats: { late: 0, dueToday: 0, voToRecord: 0, shippedThisWeek: 0 } as never, byDay: [], grouped: new Map([["stories", [bad]]]), channels: { [bad.channel!]: 1 },
+      notices: [{ kind: "revision", at: new Date(), record: bad }], seen: 0,
+    }),
+    search: renderList({ ...shellFix, query: evil } as never, `“${evil}”`, evil, [bad]),
+  };
+  // Raw markup from the data, or a javascript: link anywhere a browser would follow it.
+  const leaks = Object.entries(rendered).filter(([, html]) => html.includes("<img src=x") || html.includes("<svg onload") || html.includes("<b class=pwn") || /(href|src|action)="\s*javascript:/i.test(html)).map(([name]) => name);
+  t("records full of markup and javascript: links render escaped on every page", leaks, []);
+}
+
+section("Every route is behind the sign-in");
+{
+  // Built the way startWeb() builds it, with the database's areas too; each route is asked as a stranger would.
+  const routes: Array<[string, string]> = [];
+  const app = await buildApp({ everyRoute: true, onRoute: (m, u) => routes.push([m, u]) });
+  await app.ready();
+  const fill = (url: string) => url.replace(/:(\w+)\?/g, "2026-10-02").replace(/:(\w+)/g, (_, p: string) => (p === "date" ? "2026-10-02" : p === "ym" ? "2026-10" : "1"));
+  const open = new Set(["GET /login", "POST /login", "GET /healthz", "GET /calendar.ics"]);
+  const leaks: string[] = [];
+  for (const [method, url] of routes) {
+    if (method === "HEAD" || open.has(`${method} ${url}`)) continue;
+    const res = await app.inject({ method: method as "GET" | "POST", url: fill(url), ...(method === "POST" ? { payload: "x=1", headers: { "content-type": "application/x-www-form-urlencoded" } } : {}) });
+    if (!(res.statusCode === 302 && res.headers.location === "/login")) leaks.push(`${method} ${url} → ${res.statusCode}`);
+  }
+  t("every route but sign-in, health and the keyed calendar feed sends a stranger to sign in", [leaks, routes.filter(([m]) => m !== "HEAD").length > 150], [[], true]);
+  const cookie = `${COOKIE_NAME}=${issueToken()}`;
+  const cross = await app.inject({ method: "POST", url: "/timer/stop", headers: { cookie, origin: "https://evil.example", "content-type": "application/x-www-form-urlencoded" }, payload: "back=/" });
+  const same = await app.inject({ method: "POST", url: "/my-day/explode", headers: { cookie, origin: "http://localhost:80", host: "localhost:80", "content-type": "application/x-www-form-urlencoded" }, payload: "on=1" });
+  t("a POST from another site is refused even signed in; one from the board itself goes through", [cross.statusCode, same.statusCode, same.headers.location], [403, 302, "/my-day"]);
+  const unknown = await app.inject({ method: "GET", url: "/no-such-page", headers: { cookie } });
+  const unknownJson = await app.inject({ method: "GET", url: "/no-such-page", headers: { cookie, accept: "application/json" } });
+  t("an unknown page is a 404 page (JSON for the board's own fetches)", [unknown.statusCode, unknown.body.includes("That page isn't here"), unknownJson.json()], [404, true, { ok: false, error: "Not found" }]);
+  const wrong = await app.inject({ method: "POST", url: "/login", headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": "192.0.2.77" }, payload: "password=definitely-wrong" });
+  t("a wrong password is refused with the sign-in page again", [wrong.statusCode, wrong.body.includes("Wrong password.")], [401, true]);
+  await app.close();
 }
 
 console.log(

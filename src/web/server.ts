@@ -8,7 +8,7 @@
  * already were — starts the background work that belongs with the board,
  * and listens.
  */
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
@@ -77,7 +77,34 @@ export async function startWeb(): Promise<void> {
     setReleaseTimes(await markReleases(RELEASES).catch((err) => (console.error("[whats-new] couldn't mark the releases:", err), new Map())));
   }
 
+  const app = await buildApp();
+
+  // The background work that belongs with the board.
+  if (hasDatabase) {
+    // The Idea Feed reading Tumblr and analysing posts.
+    startIdeaJobs();
+    // Competitors: channels read and concepts worked out.
+    startCompetitorJobs();
+    // Claude's ideas for each Stories channel, kept topped up.
+    startStoryIdeas(storyContext);
+    // YouTube read hourly, then the posting check, breakouts and avatars.
+    startHourlyRead();
+  }
+
+  await app.listen({ port: config.port, host: "0.0.0.0" });
+  console.log(`[web] listening on :${config.port}`);
+  console.log(`[web] storage: ${hasDatabase ? "connected" : "none — set DATABASE_URL"}`);
+}
+
+/**
+ * The board as a Fastify app with every route registered, not listening yet.
+ * startWeb() runs it; the tests build one to check every route's guards.
+ * `everyRoute` registers the areas that otherwise need the database too, and
+ * `onRoute` hears each route as it's added.
+ */
+export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: string, url: string) => void } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
+  if (opts.onRoute) app.addHook("onRoute", (r) => { for (const m of [r.method].flat()) opts.onRoute!(String(m), r.url); });
   await app.register(cookie);
   await app.register(formbody);
 
@@ -122,20 +149,13 @@ export async function startWeb(): Promise<void> {
 
   app.get("/healthz", async () => ({ ok: true }));
 
-  // Finance: its own section, its own tabs, the same shell.
-  if (hasDatabase) registerFinance(app, shell);
-
-  // The Bits Idea Feed: its pages, and the reading and analysis in the background.
-  if (hasDatabase) {
+  // Finance, the Bits Idea Feed and Competitors: their own sections, the same shell.
+  if (hasDatabase || opts.everyRoute) {
+    registerFinance(app, shell);
     registerIdeaFeed(app, shell);
-    startIdeaJobs();
+    registerCompetitors(app, shell);
   }
 
-  // Competitors: niches, competitor channels, outliers and concept gaps — read in the background.
-  if (hasDatabase) {
-    registerCompetitors(app, shell);
-    startCompetitorJobs();
-  }
   app.get("/login", async (_req, reply) => reply.type("text/html").send(renderLogin()));
 
   app.post<{ Body: { password?: string } }>("/login", async (request, reply) => {
@@ -164,16 +184,5 @@ export async function startWeb(): Promise<void> {
   registerMyWork(app);
   registerTasks(app);
   registerSettings(app);
-
-  // The background work that belongs with the board.
-  if (hasDatabase) {
-    // Claude's ideas for each Stories channel, kept topped up.
-    startStoryIdeas(storyContext);
-    // YouTube read hourly, then the posting check, breakouts and avatars.
-    startHourlyRead();
-  }
-
-  await app.listen({ port: config.port, host: "0.0.0.0" });
-  console.log(`[web] listening on :${config.port}`);
-  console.log(`[web] storage: ${hasDatabase ? "connected" : "none — set DATABASE_URL"}`);
+  return app;
 }

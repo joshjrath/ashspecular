@@ -48,17 +48,22 @@ export function wantsJson(request: FastifyRequest): boolean {
   return (request.headers.accept ?? "").includes("application/json") || request.headers["x-fetch"] === "1";
 }
 
-/** Whether an Origin header names this board: the host the request came in on, or PUBLIC_URL's. */
+/**
+ * Whether an Origin header names this board: the host the request came in
+ * on, or PUBLIC_URL's. A default port (:80, :443) is the same host either way —
+ * a browser leaves it out of Origin, a proxy may leave it in Host.
+ */
 export function originIsThisBoard(origin: string, request: FastifyRequest): boolean {
+  const bare = (h: string) => h.trim().toLowerCase().replace(/:(80|443)$/, "");
   let host: string;
   try {
-    host = new URL(origin).host.toLowerCase();
+    host = bare(new URL(origin).host);
   } catch {
     return false;
   }
   const own = [request.headers.host, request.headers["x-forwarded-host"], config.publicUrl ? new URL(config.publicUrl).host : ""]
     .flatMap((h) => String(h ?? "").split(","))
-    .map((h) => h.trim().toLowerCase())
+    .map(bare)
     .filter(Boolean);
   return own.includes(host);
 }
