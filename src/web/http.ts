@@ -1,6 +1,10 @@
+import type { FastifyRequest } from "fastify";
+import type { CalendarMode } from "../db/records.js";
+import { config } from "../config.js";
+
 /**
  * What every route shares about requests and responses: where a redirect
- * may send someone, and how a failure is answered.
+ * may send someone, what a request asked for, and checking what it sent.
  *
  * Redirect targets come from the request (a form's `back` field, the Referer
  * header), so they are never trusted as they are: only a path on this site
@@ -37,4 +41,44 @@ export function refererPath(referer: string | undefined, fallback: string): stri
 export function contentDisposition(kind: "inline" | "attachment", filename: string): string {
   const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "").trim() || "file";
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+/** Whether a request asked for JSON back (the board's own fetches) rather than a page. */
+export function wantsJson(request: FastifyRequest): boolean {
+  return (request.headers.accept ?? "").includes("application/json") || request.headers["x-fetch"] === "1";
+}
+
+/** Whether an Origin header names this board: the host the request came in on, or PUBLIC_URL's. */
+export function originIsThisBoard(origin: string, request: FastifyRequest): boolean {
+  let host: string;
+  try {
+    host = new URL(origin).host.toLowerCase();
+  } catch {
+    return false;
+  }
+  const own = [request.headers.host, request.headers["x-forwarded-host"], config.publicUrl ? new URL(config.publicUrl).host : ""]
+    .flatMap((h) => String(h ?? "").split(","))
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return own.includes(host);
+}
+
+/** This board's own address: PUBLIC_URL, or what the request came in on. */
+export function baseUrlOf(request: FastifyRequest): string {
+  if (config.publicUrl) return config.publicUrl;
+  const proto = String(request.headers["x-forwarded-proto"] ?? "http").split(",")[0]!.trim();
+  const host = String(request.headers["x-forwarded-host"] ?? request.headers.host ?? "").split(",")[0]!.trim();
+  return host ? `${proto}://${host}` : "";
+}
+
+/** A real YYYY-MM-DD from the address or a form, or null — so a bad URL can't 500. */
+export function safeDate(value: string | undefined): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(`${value}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : value;
+}
+
+/** The calendar's mode from the address: deadlines, or posting (air dates) for anything else. */
+export function safeMode(value: unknown): CalendarMode {
+  return value === "deadlines" ? "deadlines" : "posting";
 }
