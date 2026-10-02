@@ -140,31 +140,23 @@ import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, open
 import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, issueToken, loginWait, noteLoginFailure, passwordChangedAt, verifyToken } from "./auth.js";
 import { loadBoardPassword, saveBoardPassword } from "../db/password.js";
 import { localPath, refererPath } from "./http.js";
-import { renderForgotten, renderMyDay, renderRecording, renderTasks, renderVoQueue, type TimerState } from "./page.js";
-import { DAY_SPAN, RAIL_ITEMS, calendarGrid, SORTS, channelPauseButton, channelPausedTag, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { renderForgotten, renderMyDay, renderRecording, renderVoQueue, type TimerState } from "./pages/mywork.js";
+import { renderTasks } from "./pages/tasks.js";
+import { DAY_SPAN, calendarGrid, weekStart, type StatusHide } from "./pages/calendar.js";
+import { RAIL_ITEMS, channelPauseButton, channelPausedTag, displayTitle, noticeTitle, type Shell } from "./page.js";
+import { SORTS, type SortDir, type SortKey, type SortState } from "./pages/lists.js";
 import { esc, safeUrl } from "./html.js";
-import {
-  monthOf,
-  renderCalendar,
-  renderCategory,
-  renderDashboard,
-  renderDay,
-  renderEmptyState,
-  renderList,
-  renderPaused,
-  renderRevisions,
-  renderWhatsNew,
-  renderSettings,
-  renderLogin,
-  renderError,
-  renderRecurring,
-  renderScripts,
-  renderScriptBoard,
-  renderUploads,
-  renderStoryLab,
-  renderWeek,
-  renderRecord,
-} from "./page.js";
+import { monthOf, renderCalendar, renderDay, renderWeek } from "./pages/calendar.js";
+import { renderCategory, renderList, renderPaused } from "./pages/lists.js";
+import { renderDashboard } from "./pages/dashboard.js";
+import { renderEmptyState, renderWhatsNew, renderLogin, renderError } from "./page.js";
+import { renderRevisions } from "./pages/revisions.js";
+import { renderSettings } from "./pages/settings.js";
+import { renderRecurring } from "./pages/recurring.js";
+import { renderScripts, renderScriptBoard } from "./pages/scripts.js";
+import { renderUploads } from "./pages/uploads.js";
+import { renderStoryLab } from "./pages/storylab.js";
+import { renderRecord } from "./pages/record.js";
 
 const PUBLIC = new Set(["/login", "/healthz"]);
 
