@@ -20,6 +20,7 @@
  *   between  normal
  */
 import { viewsAtAge, type VideoViews } from "./performance.js";
+import { ORG_TZ } from "../parse/derive.js";
 
 export const CHECKPOINTS: Array<{ hours: number; label: string }> = [
   { hours: 1, label: "at 1 hour" },
@@ -186,7 +187,7 @@ export interface SlotStat {
 }
 
 /** How Shorts do by the three-hour slot they went up in (ET), best first. */
-export function postingSlots(videos: VideoViews[], scores: Map<string, ShortScore>, zone = "America/New_York"): SlotStat[] {
+export function postingSlots(videos: VideoViews[], scores: Map<string, ShortScore>, zone = ORG_TZ): SlotStat[] {
   const hourOf = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", hourCycle: "h23" });
   const slots = new Map<number, number[]>();
   for (const v of videos) {

@@ -14,27 +14,24 @@ import { pool } from "../../db/pool.js";
 import { DEFAULT_THRESHOLDS, EXPENSE_TYPE, FLAG, pnl, reportingMonth, type ExpenseType, type FlagId, type Thresholds } from "../../finance/metrics.js";
 import { FREQUENCY, addMonths, fmtMoney, isMonth, monthEnd, monthStart, monthsEnding, parseMoney } from "../../finance/money.js";
 import { PAY_MODEL, computePay, describePay, modelOn, parseTiers, payChannels, type PayModelId, type PayParams } from "../../finance/pay.js";
-import { ORG_TZ, dateIn } from "../../parse/derive.js";
+import { ORG_TZ, dateIn, isRealDate } from "../../parse/derive.js";
 import type { Shell } from "../page.js";
 import { renderExpenseForm, renderExpenses, renderFinanceSettings, renderContractors, renderIncome, renderIncomeEntry, renderPerson, renderSubscriptions } from "./forms.js";
 import { channelAlerts, renderFinanceChannel, renderFinanceChannels, renderFinanceOverview, renderFinanceReports, reportsCsv } from "./pages.js";
 import { readSplits } from "./ui.js";
 import { logWork, retryEntry, takeVoiceNote } from "./voice.js";
 import { VOICE_TABS, type VoiceEntry, type VoiceTab } from "../../finance/voice.js";
-import { contentDisposition, refererPath } from "../http.js";
+import { contentDisposition, formId, formText, refererPath, toCsv } from "../http.js";
 
 type Body = Record<string, string | string[] | undefined> & { __files?: UploadedFile[] };
 interface UploadedFile { field: string; filename: string; mime: string; data: Buffer }
 
-const str = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : typeof v === "string" ? v : "").trim();
-const idOf = (v: unknown) => { const n = Number(str(v)); return Number.isInteger(n) && n > 0 ? n : null; };
-const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-const num = (v: unknown) => { const s = str(v).replace(/,/g, ""); if (!s) return null; const n = Number(s); return Number.isFinite(n) ? n : null; };
+const num = (v: unknown) => { const s = formText(v).replace(/,/g, ""); if (!s) return null; const n = Number(s); return Number.isFinite(n) ? n : null; };
 /** Ticked channels from a multi-select, catalog names only. */
 const channelsOf = (v: unknown) => [...new Set((Array.isArray(v) ? v : v ? [v] : []).map(String).filter((c) => CHANNELS.some((ch) => ch.name === c)))];
-const channelOf = (v: unknown) => { const s = str(v); return CHANNELS.some((c) => c.name === s) ? s : null; };
+const channelOf = (v: unknown) => { const s = formText(v); return CHANNELS.some((c) => c.name === s) ? s : null; };
 /** "#123 · Title" from the video picker → 123. */
-const recordOf = (v: unknown) => { const m = /^#(\d+)/.exec(str(v)); return m ? Number(m[1]) : null; };
+const recordOf = (v: unknown) => { const m = /^#(\d+)/.exec(formText(v)); return m ? Number(m[1]) : null; };
 const back = (reply: FastifyReply, url: string, msg?: string) => reply.redirect(msg ? `${url}${url.includes("?") ? "&" : "?"}msg=${encodeURIComponent(msg)}` : url);
 
 /**
@@ -76,7 +73,7 @@ const cents = (d: number | null) => (d === null ? null : Math.round(d * 100));
 
 /** A draft being finished: "noteId:index" from the Fill in link, with what to mark. */
 async function draftFrom(ref: unknown): Promise<{ e: VoiceEntry; prefill: { transcript: string; ref: string; flags: { missing: string[]; unsure: string[] } } } | null> {
-  const m = /^(\d+):(\d+)$/.exec(str(ref));
+  const m = /^(\d+):(\d+)$/.exec(formText(ref));
   if (!m) return null;
   const note = await getVoiceNote(Number(m[1]));
   const item = note?.entries[Number(m[2])];
@@ -87,7 +84,7 @@ async function draftFrom(ref: unknown): Promise<{ e: VoiceEntry; prefill: { tran
 
 /** A draft's form was saved: the note shows it logged and checked. */
 async function finishDraft(ref: unknown, logged: NonNullable<StoredVoiceEntry["logged"]>): Promise<void> {
-  const m = /^(\d+):(\d+)$/.exec(str(ref));
+  const m = /^(\d+):(\d+)$/.exec(formText(ref));
   if (!m) return;
   const note = await getVoiceNote(Number(m[1]));
   const item = note?.entries[Number(m[2])];
@@ -139,7 +136,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
 
   /** The month a page opens on: the one asked for, else the latest with revenue in, else last month. */
   async function monthFor(q: unknown): Promise<string> {
-    const m = str(q);
+    const m = formText(q);
     if (isMonth(m)) return m;
     const facts = await loadFacts(monthsEnding(thisMonth(), 3), ORG_TZ);
     return reportingMonth(facts, thisMonth());
@@ -172,7 +169,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   });
   app.post<{ Params: { name: string }; Body: Body }>("/finance/channels/:name/company", async (request, reply) => {
     const channel = channelOf(request.params.name);
-    if (channel) await setChannelCompany(channel, idOf(request.body?.company));
+    if (channel) await setChannelCompany(channel, formId(request.body?.company));
     return reply.redirect(`/finance/channels/${encodeURIComponent(request.params.name)}`);
   });
 
@@ -188,7 +185,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   });
   app.get<{ Querystring: Record<string, string> }>("/finance/reports.csv", async (request, reply) => {
     const args = await reportArgs(request.query);
-    const kind = request.query.kind ?? "pnl";
+    const kind = (["pnl", "channels", "expenses", "income"] as const).find((k) => k === request.query.kind) ?? "pnl";
     let csv: string;
     if (kind === "expenses" || kind === "income") csv = await rawCsv(kind, monthStart(monthsEnding(args.to, args.n)[0]!), monthEnd(args.to), args.lists);
     else csv = reportsCsv(kind, args);
@@ -219,12 +216,12 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   });
 
   const incomeFrom = (b: Body, lists: Lists) => {
-    const amount = parseMoney(str(b.amount));
-    const stream = lists.streams.some((s) => s.id === str(b.stream)) ? str(b.stream) : "other";
+    const amount = parseMoney(formText(b.amount));
+    const stream = lists.streams.some((s) => s.id === formText(b.stream)) ? formText(b.stream) : "other";
     const channel = channelOf(b.channel);
-    const from = str(b.from), to = str(b.to);
-    const custom = isDate(from) && isDate(to) && to >= from;
-    const month = isMonth(str(b.month)) ? str(b.month) : thisMonth();
+    const from = formText(b.from), to = formText(b.to);
+    const custom = isRealDate(from) && isRealDate(to) && to >= from;
+    const month = isMonth(formText(b.month)) ? formText(b.month) : thisMonth();
     const days = custom ? (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 : 0;
     return amount === null
       ? null
@@ -233,12 +230,12 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
           periodStart: custom ? from : monthStart(month),
           periodEnd: custom ? to : monthEnd(month),
           granularity: (custom ? (days === 7 ? "week" : days === 1 ? "day" : "custom") : "month") as "month" | "week" | "day" | "custom",
-          receivedOn: isDate(str(b.received)) ? str(b.received) : null,
+          receivedOn: isRealDate(formText(b.received)) ? formText(b.received) : null,
           streamId: stream,
-          source: str(b.source).slice(0, 120),
+          source: formText(b.source).slice(0, 120),
           channel,
-          companyId: idOf(b.company) ?? (channel ? lists.channelCompany.get(channel) ?? null : null),
-          notes: str(b.notes).slice(0, 500),
+          companyId: formId(b.company) ?? (channel ? lists.channelCompany.get(channel) ?? null : null),
+          notes: formText(b.notes).slice(0, 500),
         };
   };
   app.post<{ Body: Body }>("/finance/income", async (request, reply) => {
@@ -249,13 +246,13 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, `/finance/income?m=${i.periodStart.slice(0, 7)}`, "Income added.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/income/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const i = incomeFrom(request.body ?? {}, await loadLists());
     if (id && i) await saveIncome(i, id);
     return back(reply, `/finance/income?m=${i?.periodStart.slice(0, 7) ?? ""}`, "Saved.");
   });
   app.post<{ Params: { id: string } }>("/finance/income/:id/delete", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await deleteIncome(id);
     return back(reply, "/finance/income", "Deleted.");
   });
@@ -271,15 +268,15 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   });
   app.post<{ Body: Body }>("/finance/income/entry", async (request, reply) => {
     const b = request.body ?? {};
-    const month = str(b.m);
+    const month = formText(b.m);
     const lists = await loadLists();
-    const stream = str(b.stream);
+    const stream = formText(b.stream);
     if (!isMonth(month) || !lists.streams.some((s) => s.id === stream)) return reply.redirect("/finance/income/entry");
     const rows = CHANNELS.map((c) => {
       const v = num(b[`v:${c.name}`]);
-      return { channel: c.name as string | null, amount: parseMoney(str(b[`a:${c.name}`])), views: v === null ? null : Math.max(0, Math.round(v)), companyId: lists.channelCompany.get(c.name) ?? null };
+      return { channel: c.name as string | null, amount: parseMoney(formText(b[`a:${c.name}`])), views: v === null ? null : Math.max(0, Math.round(v)), companyId: lists.channelCompany.get(c.name) ?? null };
     });
-    rows.push({ channel: null, amount: parseMoney(str(b["a:__general"])), views: null, companyId: null });
+    rows.push({ channel: null, amount: parseMoney(formText(b["a:__general"])), views: null, companyId: null });
     // Views belong to the channel, not the stream: only the grid for the platform stream writes them.
     const platform = lists.streams.find((s) => s.id === stream)?.platform;
     await saveMonthGrid(month, stream, rows.map((r) => (platform ? r : { ...r, views: undefined })));
@@ -299,7 +296,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
       listVoiceNotes("expense"),
       listExpenses({
         from: month ? monthStart(month) : undefined, to: month ? monthEnd(month) : undefined, type: filter.type, category: filter.category, channel: filter.channel,
-        person: idOf(filter.person) ?? undefined, status: filter.status, company: idOf(filter.company) ?? undefined, q: filter.q,
+        person: formId(filter.person) ?? undefined, status: filter.status, company: formId(filter.company) ?? undefined, q: filter.q,
       }),
     ]);
     return html(reply, renderExpenses(s, { month, list, lists, filter, msg: q.msg ?? "", voice }));
@@ -311,7 +308,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   };
   app.get<{ Querystring: Record<string, string> }>("/finance/expenses/new", async (request, reply) => {
     const [s, lists, records, { models }] = await Promise.all([fshell(), loadLists(), recordsForAttribution(""), modelsByPerson()]);
-    const person = idOf(request.query.person);
+    const person = formId(request.query.person);
     const draft = await draftFrom(request.query.voice);
     if (draft) {
       const e = draft.e;
@@ -329,7 +326,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return html(reply, renderExpenseForm(s, { e: { personId: person, type: person ? "contractor" : "one_off" }, lists, records, models, msg: request.query.msg ?? "" }));
   });
   app.get<{ Params: { id: string }; Querystring: Record<string, string> }>("/finance/expenses/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const e = id ? await getExpense(id) : null;
     if (!e) return reply.redirect("/finance/expenses");
     const [s, lists, records, { models }] = await Promise.all([fshell(), loadLists(), recordsForAttribution(""), modelsByPerson()]);
@@ -338,10 +335,10 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
 
   /** An expense from its form: a person's pay model works the amount out when it's left blank. */
   async function expenseFrom(b: Body, lists: Lists, existing?: Expense): Promise<ExpenseInput | string> {
-    const date = isDate(str(b.date)) ? str(b.date) : today();
-    const personId = idOf(b.person);
+    const date = isRealDate(formText(b.date)) ? formText(b.date) : today();
+    const personId = formId(b.person);
     const videos = num(b.videos), minutes = num(b.minutes);
-    let amount = parseMoney(str(b.amount));
+    let amount = parseMoney(formText(b.amount));
     let calculated: number | null = existing?.calculated ?? null;
     let snapshot: unknown = existing?.paySnapshot ?? null;
     if (personId) {
@@ -357,17 +354,17 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     if (amount === null) amount = calculated;
     if (amount === null) return "Enter an amount — nothing to work it out from.";
     const splits = readSplits(b);
-    const type = (EXPENSE_TYPE.has(str(b.type) as ExpenseType) ? str(b.type) : "one_off") as ExpenseType;
-    const status = (["paid", "unpaid", "covered"].includes(str(b.status)) ? str(b.status) : "paid") as ExpenseInput["status"];
-    const url = str(b.receipt_url);
+    const type = (EXPENSE_TYPE.has(formText(b.type) as ExpenseType) ? formText(b.type) : "one_off") as ExpenseType;
+    const status = (["paid", "unpaid", "covered"].includes(formText(b.status)) ? formText(b.status) : "paid") as ExpenseInput["status"];
+    const url = formText(b.receipt_url);
     return {
-      amount, date, payee: str(b.payee).slice(0, 160) || (personId ? lists.people.find((p) => p.id === personId)?.name ?? "" : ""),
-      personId, type, categoryId: lists.categories.some((c) => c.id === str(b.category)) ? str(b.category) : null,
-      companyId: idOf(b.company) ?? (splits.length === 1 ? lists.channelCompany.get(splits[0]!.channel) ?? null : null),
-      methodId: idOf(b.method), recordId: recordOf(b.record), recurringId: existing?.recurringId ?? null,
-      status, paidOn: isDate(str(b.paid_on)) ? str(b.paid_on) : null, isAdvance: str(b.advance) === "1",
+      amount, date, payee: formText(b.payee).slice(0, 160) || (personId ? lists.people.find((p) => p.id === personId)?.name ?? "" : ""),
+      personId, type, categoryId: lists.categories.some((c) => c.id === formText(b.category)) ? formText(b.category) : null,
+      companyId: formId(b.company) ?? (splits.length === 1 ? lists.channelCompany.get(splits[0]!.channel) ?? null : null),
+      methodId: formId(b.method), recordId: recordOf(b.record), recurringId: existing?.recurringId ?? null,
+      status, paidOn: isRealDate(formText(b.paid_on)) ? formText(b.paid_on) : null, isAdvance: formText(b.advance) === "1",
       unitsVideos: videos, unitsMinutes: minutes, calculated, paySnapshot: snapshot,
-      receiptUrl: /^https?:\/\//i.test(url) ? url.slice(0, 500) : null, notes: str(b.notes).slice(0, 2000), splits,
+      receiptUrl: /^https?:\/\//i.test(url) ? url.slice(0, 500) : null, notes: formText(b.notes).slice(0, 2000), splits,
     };
   }
   const attach = async (id: number, b: Body) => {
@@ -376,14 +373,14 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.post<{ Body: Body }>("/finance/expenses", async (request, reply) => {
     const b = request.body ?? {};
     const e = await expenseFrom(b, await loadLists());
-    if (typeof e === "string") return back(reply, `/finance/expenses/new${str(b.voice) ? `?voice=${encodeURIComponent(str(b.voice))}` : ""}`, e);
+    if (typeof e === "string") return back(reply, `/finance/expenses/new${formText(b.voice) ? `?voice=${encodeURIComponent(formText(b.voice))}` : ""}`, e);
     const id = await saveExpense(e);
     await attach(id, b);
     await finishDraft(b.voice, { type: "expense", id, label: `${fmtMoney(e.amount)} · ${e.payee || "expense"}` });
     return back(reply, `/finance/expenses?m=${e.date.slice(0, 7)}`, "Expense added.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/expenses/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const existing = id ? await getExpense(id) : null;
     if (!id || !existing) return reply.redirect("/finance/expenses");
     const b = request.body ?? {};
@@ -394,29 +391,28 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, `/finance/expenses?m=${e.date.slice(0, 7)}`, "Saved.");
   });
   app.post<{ Params: { id: string } }>("/finance/expenses/:id/delete", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await deleteExpense(id);
     return back(reply, "/finance/expenses", "Deleted.");
   });
   app.post<{ Params: { id: string } }>("/finance/expenses/:id/paid", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await markPaid([id], today());
     return reply.redirect(refererPath(request.headers.referer, "/finance/expenses"));
   });
   app.get<{ Params: { id: string } }>("/finance/attachments/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const a = id ? await getAttachment(id) : null;
     if (!a) return reply.code(404).send("Not found");
     const inline = /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(a.mime);
     return reply
       .header("Content-Type", inline ? a.mime : "application/octet-stream")
       .header("Content-Disposition", contentDisposition(inline ? "inline" : "attachment", a.filename))
-      .header("X-Content-Type-Options", "nosniff")
       .header("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'")
       .send(a.data);
   });
   app.post<{ Params: { id: string } }>("/finance/attachments/:id/delete", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const { rows } = await pool.query("SELECT expense_id FROM fin_attachments WHERE id = $1", [id]);
     if (id) await deleteAttachment(id);
     return reply.redirect(rows[0] ? `/finance/expenses/${rows[0].expense_id}` : "/finance/expenses");
@@ -435,19 +431,19 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
           voice: draft.prefill,
         }
       : undefined;
-    return html(reply, renderSubscriptions(s, { list, lists, msg: request.query.msg ?? "", editing: idOf(request.query.edit), voice, prefill }));
+    return html(reply, renderSubscriptions(s, { list, lists, msg: request.query.msg ?? "", editing: formId(request.query.edit), voice, prefill }));
   });
   const recurringFrom = (b: Body) => {
-    const amount = parseMoney(str(b.amount));
-    if (amount === null || !str(b.vendor)) return null;
+    const amount = parseMoney(formText(b.amount));
+    if (amount === null || !formText(b.vendor)) return null;
     return {
-      kind: (str(b.kind) === "recurring" ? "recurring" : "subscription") as "subscription" | "recurring",
-      vendor: str(b.vendor).slice(0, 120), personId: idOf(b.person), amount,
-      frequency: FREQUENCY.has(str(b.frequency)) ? str(b.frequency) : "monthly",
-      nextBill: isDate(str(b.next_bill)) ? str(b.next_bill) : null,
-      categoryId: str(b.category) || null, companyId: idOf(b.company), methodId: idOf(b.method),
-      autoPost: str(b.auto) === "1", postStatus: (str(b.post_status) === "unpaid" ? "unpaid" : "paid") as "paid" | "unpaid",
-      active: str(b.active) === "1", notes: str(b.notes).slice(0, 500), splits: readSplits(b),
+      kind: (formText(b.kind) === "recurring" ? "recurring" : "subscription") as "subscription" | "recurring",
+      vendor: formText(b.vendor).slice(0, 120), personId: formId(b.person), amount,
+      frequency: FREQUENCY.has(formText(b.frequency)) ? formText(b.frequency) : "monthly",
+      nextBill: isRealDate(formText(b.next_bill)) ? formText(b.next_bill) : null,
+      categoryId: formText(b.category) || null, companyId: formId(b.company), methodId: formId(b.method),
+      autoPost: formText(b.auto) === "1", postStatus: (formText(b.post_status) === "unpaid" ? "unpaid" : "paid") as "paid" | "unpaid",
+      active: formText(b.active) === "1", notes: formText(b.notes).slice(0, 500), splits: readSplits(b),
     };
   };
   app.post<{ Body: Body }>("/finance/subscriptions", async (request, reply) => {
@@ -459,24 +455,24 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, "/finance/subscriptions", `${r.vendor} added.`);
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/subscriptions/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const r = recurringFrom(request.body ?? {});
     if (id && r) await saveRecurring(r, id);
     await catchUp();
     return back(reply, "/finance/subscriptions", "Saved.");
   });
   app.post<{ Params: { id: string } }>("/finance/subscriptions/:id/bill", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await postNextBill(id, today());
     return back(reply, "/finance/subscriptions", "Bill posted as an expense.");
   });
   app.post<{ Params: { id: string } }>("/finance/subscriptions/:id/toggle", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await pool.query("UPDATE fin_recurring SET active = NOT active, updated_at = now() WHERE id = $1", [id]);
     return reply.redirect("/finance/subscriptions");
   });
   app.post<{ Params: { id: string } }>("/finance/subscriptions/:id/delete", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await deleteRecurring(id);
     return back(reply, "/finance/subscriptions", "Deleted. Bills already posted stay as expenses.");
   });
@@ -488,41 +484,41 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return html(reply, renderContractors(s, { people, msg: request.query.msg ?? "", voice }));
   });
   app.post<{ Body: Body }>("/finance/contractors", async (request, reply) => {
-    const name = str(request.body?.name).slice(0, 80);
+    const name = formText(request.body?.name).slice(0, 80);
     if (!name) return reply.redirect("/finance/contractors");
-    const id = await savePerson({ name, role: str(request.body?.role).slice(0, 80), notes: "", active: true });
+    const id = await savePerson({ name, role: formText(request.body?.role).slice(0, 80), notes: "", active: true });
     return reply.redirect(`/finance/contractors/${id}`);
   });
   app.get<{ Params: { id: string }; Querystring: Record<string, string> }>("/finance/contractors/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const person = (await listPeople(today())).find((p) => p.id === id);
     if (!person) return reply.redirect("/finance/contractors");
     const [s, work, lists, records, voice] = await Promise.all([fshell(), listExpenses({ person: person.id }, 200), loadLists(), recordsForAttribution(""), listVoiceNotes("contractor", 20)]);
     return html(reply, renderPerson(s, { person, work, lists, records, msg: request.query.msg ?? "", today: today(), voice }));
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/profile", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const b = request.body ?? {};
-    if (id && str(b.name)) await savePerson({ id, name: str(b.name).slice(0, 80), role: str(b.role).slice(0, 80), notes: str(b.notes).slice(0, 500), active: str(b.active) === "1" });
+    if (id && formText(b.name)) await savePerson({ id, name: formText(b.name).slice(0, 80), role: formText(b.role).slice(0, 80), notes: formText(b.notes).slice(0, 500), active: formText(b.active) === "1" });
     return back(reply, `/finance/contractors/${id}`, "Saved.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/model", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const b = request.body ?? {};
-    const model = str(b.model) as PayModelId;
+    const model = formText(b.model) as PayModelId;
     if (!id || !PAY_MODEL.has(model)) return reply.redirect(`/finance/contractors/${id}`);
     const params: PayParams = {};
-    const cents = (k: string) => parseMoney(str(b[k])) ?? undefined;
+    const cents = (k: string) => parseMoney(formText(b[k])) ?? undefined;
     if (["per_video", "per_minute", "prepaid"].includes(model)) params.rate = cents("rate") ?? 0;
-    if (model === "prepaid") params.per = str(b.per) === "minute" ? "minute" : "video";
-    if (model === "tiered") { params.base = cents("base"); params.tiers = parseTiers(str(b.tiers)); }
-    if (model === "retainer" || model === "salary") { params.amount = cents("amount") ?? 0; params.frequency = FREQUENCY.has(str(b.frequency)) ? str(b.frequency) : "monthly"; }
+    if (model === "prepaid") params.per = formText(b.per) === "minute" ? "minute" : "video";
+    if (model === "tiered") { params.base = cents("base"); params.tiers = parseTiers(formText(b.tiers)); }
+    if (model === "retainer" || model === "salary") { params.amount = cents("amount") ?? 0; params.frequency = FREQUENCY.has(formText(b.frequency)) ? formText(b.frequency) : "monthly"; }
     if (model === "revenue_share") params.pct = (num(b.pct) ?? 0) / 100;
     params.channels = channelsOf(b.channels);
-    const from = isDate(str(b.from)) ? str(b.from) : today();
-    await addPayModel(id, model, params, from, str(b.note).slice(0, 200));
+    const from = isRealDate(formText(b.from)) ? formText(b.from) : today();
+    await addPayModel(id, model, params, from, formText(b.note).slice(0, 200));
     // A retainer or salary is money on a schedule: set it up as a recurring cost too.
-    if ((model === "retainer" || model === "salary") && str(b.recurring) === "1" && params.amount) {
+    if ((model === "retainer" || model === "salary") && formText(b.recurring) === "1" && params.amount) {
       const person = (await listPeople(today())).find((p) => p.id === id);
       await saveRecurring({
         kind: "recurring", vendor: `${person?.name ?? "Person"} — ${model === "salary" ? "salary" : "retainer"}`, personId: id, amount: params.amount,
@@ -533,27 +529,27 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, `/finance/contractors/${id}`, "Pay model saved. Earlier work keeps the rate it was worked out with.");
   });
   app.post<{ Params: { id: string; mid: string } }>("/finance/contractors/:id/model/:mid/delete", async (request, reply) => {
-    const mid = idOf(request.params.mid);
+    const mid = formId(request.params.mid);
     if (mid) await deletePayModel(mid);
     return reply.redirect(`/finance/contractors/${request.params.id}`);
   });
 
   /** Log a piece of work: worked out from the model in force, drawn from any advance first. */
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/work", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const b = request.body ?? {};
     const person = (await listPeople(today())).find((p) => p.id === id);
     if (!person) return reply.redirect("/finance/contractors");
     const r = await logWork(person, {
-      date: isDate(str(b.date)) ? str(b.date) : today(), channels: channelsOf(b.ch), videos: num(b.videos), minutes: num(b.minutes),
-      amount: parseMoney(str(b.amount)), categoryId: str(b.category) || null, notes: str(b.notes), recordId: recordOf(b.record),
+      date: isRealDate(formText(b.date)) ? formText(b.date) : today(), channels: channelsOf(b.ch), videos: num(b.videos), minutes: num(b.minutes),
+      amount: parseMoney(formText(b.amount)), categoryId: formText(b.category) || null, notes: formText(b.notes), recordId: recordOf(b.record),
     }, await loadLists());
     return back(reply, `/finance/contractors/${id}`, r.ok ? `Logged: ${r.explain}.` : `Enter an amount — ${r.why}.`);
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/share", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const person = (await listPeople(today())).find((p) => p.id === id);
-    const date = isDate(str(request.body?.date)) ? str(request.body?.date) : today();
+    const date = isRealDate(formText(request.body?.date)) ? formText(request.body?.date) : today();
     const model = person ? modelOn(person.models, date) : null;
     if (!person || model?.model !== "revenue_share") return reply.redirect(`/finance/contractors/${id}`);
     const month = date.slice(0, 7);
@@ -572,36 +568,36 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, `/finance/contractors/${id}`, `Share worked out: ${earned.explain}.`);
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/advance", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const b = request.body ?? {};
-    const amount = parseMoney(str(b.amount));
+    const amount = parseMoney(formText(b.amount));
     const person = (await listPeople(today())).find((p) => p.id === id);
     if (!person || !amount) return reply.redirect(`/finance/contractors/${id}`);
-    const date = isDate(str(b.date)) ? str(b.date) : today();
+    const date = isRealDate(formText(b.date)) ? formText(b.date) : today();
     await saveExpense({
-      amount, date, payee: person.name, personId: person.id, type: "contractor", categoryId: null, companyId: null, methodId: idOf(b.method), recordId: null,
+      amount, date, payee: person.name, personId: person.id, type: "contractor", categoryId: null, companyId: null, methodId: formId(b.method), recordId: null,
       status: "paid", paidOn: date, isAdvance: true, unitsVideos: null, unitsMinutes: null, calculated: null, paySnapshot: null, receiptUrl: null,
       notes: "Advance", splits: [],
     });
     return back(reply, `/finance/contractors/${id}`, "Advance recorded — work logged from now is drawn from it.");
   });
   app.post<{ Params: { id: string }; Body: Body }>("/finance/contractors/:id/pay", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (!id) return reply.redirect("/finance/contractors");
     const owed = await listExpenses({ person: id, status: "unpaid" }, 2000);
-    await markPaid(owed.map((e) => e.id), isDate(str(request.body?.on)) ? str(request.body?.on) : today());
+    await markPaid(owed.map((e) => e.id), isRealDate(formText(request.body?.on)) ? formText(request.body?.on) : today());
     return back(reply, `/finance/contractors/${id}`, "Paid.");
   });
 
   // ── voice notes ──────────────────────────────────────────────────────
   const voiceBack = (b: Body, fallback: string) => {
-    const v = str(b.back);
+    const v = formText(b.back);
     return /^\/finance[a-z0-9/_?=&#.-]*$/i.test(v) ? v : fallback;
   };
   app.post<{ Body: Body }>("/finance/voice", async (request, reply) => {
     const b = request.body ?? {};
-    const tab = (VOICE_TABS as string[]).includes(str(b.tab)) ? (str(b.tab) as VoiceTab) : "expense";
-    const text = str(b.text);
+    const tab = (VOICE_TABS as string[]).includes(formText(b.tab)) ? (formText(b.tab) as VoiceTab) : "expense";
+    const text = formText(b.text);
     const to = voiceBack(b, "/finance");
     if (!text) return reply.redirect(to);
     const { summary } = await takeVoiceNote(tab, text);
@@ -645,7 +641,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     await saveThresholds({
       healthyMargin: pctOf("healthy", DEFAULT_THRESHOLDS.healthyMargin),
       minMargin: pctOf("min_margin", DEFAULT_THRESHOLDS.minMargin),
-      minProfitPerHour: parseMoney(str(b.per_hour)) ?? DEFAULT_THRESHOLDS.minProfitPerHour,
+      minProfitPerHour: parseMoney(formText(b.per_hour)) ?? DEFAULT_THRESHOLDS.minProfitPerHour,
       lossMonths: intOf("loss_months", DEFAULT_THRESHOLDS.lossMonths),
       declineMonths: intOf("decline_months", DEFAULT_THRESHOLDS.declineMonths),
       dashboard: dash,
@@ -653,44 +649,43 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     return back(reply, "/finance/settings", "Thresholds saved.");
   });
   app.post<{ Body: Body }>("/finance/settings/company", async (request, reply) => {
-    if (str(request.body?.name)) await addCompany(str(request.body?.name).slice(0, 120));
+    if (formText(request.body?.name)) await addCompany(formText(request.body?.name).slice(0, 120));
     return back(reply, "/finance/settings", "Company added.");
   });
   app.post<{ Body: Body }>("/finance/settings/category", async (request, reply) => {
-    const colour = /^#[0-9a-f]{6}$/i.test(str(request.body?.colour)) ? str(request.body?.colour) : "#8f8fa0";
-    if (str(request.body?.label)) await addCategory(str(request.body?.label).slice(0, 60), colour);
+    const colour = /^#[0-9a-f]{6}$/i.test(formText(request.body?.colour)) ? formText(request.body?.colour) : "#8f8fa0";
+    if (formText(request.body?.label)) await addCategory(formText(request.body?.label).slice(0, 60), colour);
     return back(reply, "/finance/settings", "Category added.");
   });
   app.post<{ Body: Body }>("/finance/settings/stream", async (request, reply) => {
-    if (str(request.body?.label)) await addStream(str(request.body?.label).slice(0, 60), str(request.body?.platform) === "1");
+    if (formText(request.body?.label)) await addStream(formText(request.body?.label).slice(0, 60), formText(request.body?.platform) === "1");
     return back(reply, "/finance/settings", "Stream added.");
   });
   app.post<{ Body: Body }>("/finance/settings/method", async (request, reply) => {
-    if (str(request.body?.label)) await addMethod(str(request.body?.label).slice(0, 80));
+    if (formText(request.body?.label)) await addMethod(formText(request.body?.label).slice(0, 80));
     return back(reply, "/finance/settings", "Payment method added.");
   });
   app.post<{ Body: Body }>("/finance/settings/list", async (request, reply) => {
     const b = request.body ?? {};
-    const table = str(b.table);
+    const table = formText(b.table);
     if (!["fin_companies", "fin_categories", "fin_streams", "fin_methods"].includes(table)) return reply.redirect("/finance/settings");
     const t = table as "fin_companies" | "fin_categories" | "fin_streams" | "fin_methods";
-    const id = str(b.id);
-    const act = str(b.do);
+    const id = formText(b.id);
+    const act = formText(b.do);
     if (act === "archive" || act === "restore") await setArchived(t, id, act === "archive");
-    else if (str(b.label)) await renameItem(t, id, str(b.label).slice(0, 120));
-    if (t === "fin_streams" && act === "rename") await setStreamPlatform(id, str(b.platform) === "1");
+    else if (formText(b.label)) await renameItem(t, id, formText(b.label).slice(0, 120));
+    if (t === "fin_streams" && act === "rename") await setStreamPlatform(id, formText(b.platform) === "1");
     return back(reply, "/finance/settings", "Saved.");
   });
   app.post<{ Body: Body }>("/finance/settings/channels", async (request, reply) => {
     const b = request.body ?? {};
-    for (const c of CHANNELS) await setChannelCompany(c.name, idOf(b[`c:${c.name}`]));
+    for (const c of CHANNELS) await setChannelCompany(c.name, formId(b[`c:${c.name}`]));
     return back(reply, "/finance/settings", "Channels saved.");
   });
 }
 
 /** Every expense or income row in a span, as CSV. */
 async function rawCsv(kind: "expenses" | "income", from: string, to: string, lists: Lists): Promise<string> {
-  const q = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const $ = (c: number) => (c / 100).toFixed(2);
   const company = (id: number | null) => lists.companies.find((c) => c.id === id)?.name ?? "";
   const lines: unknown[][] = [];
@@ -706,5 +701,5 @@ async function rawCsv(kind: "expenses" | "income", from: string, to: string, lis
       lines.push([i.periodStart, i.periodEnd, $(i.amount), lists.streams.find((s) => s.id === i.streamId)?.label ?? i.streamId, i.source, i.channel ?? "General", company(i.companyId), i.receivedOn ?? "", i.notes]);
     }
   }
-  return lines.map((l) => l.map(q).join(",")).join("\n") + "\n";
+  return toCsv(lines);
 }

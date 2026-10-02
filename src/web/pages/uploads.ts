@@ -4,14 +4,14 @@
  * Gaming's series, and one channel on its own page.
  */
 import { CATEGORIES, CHANNELS, type CategoryId, contrastRatio } from "../../catalog.js";
-import { type ChannelCadence, type DailyCadence, type PaceState, STORIES_EVERY_DAYS, addDays, dayOf, daysBetween } from "../cadence.js";
+import { type ChannelCadence, type DailyCadence, type PaceState, STORIES_EVERY_DAYS, dayOf, daysBetween } from "../cadence.js";
 import type { ChannelLink, Upload } from "../../jobs/youtube.js";
 import type { ChannelShortHealth, ShortScore, ShortTier, SlotStat } from "../shorts-perf.js";
 import { FORMAT_BY_ID } from "../stories/formats.js";
 import type { FeatureStat, IdeaAnalysis, IdeaCheck, IdeaVideo, Suggestion } from "../ideas.js";
 import type { LabIdea } from "../stories/lab.js";
 import type { NextUp, Series } from "../gaming/series.js";
-import { ORG_TZ, relativeDay, shortsDay, usDate } from "../../parse/derive.js";
+import { ORG_TZ, relativeDay, shiftDate, shortsDay, usDate } from "../../parse/derive.js";
 import { type Performance, compactViews, formatMultiple } from "../performance.js";
 import { type Shell, channelColour, channelPauseButton, channelPausedTag, layout, liftText, pageHeader, timeAgo, uploadScriptMark } from "../page.js";
 import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, describeTarget, everyFor, formatFor, isOwnPace } from "../targets.js";
@@ -58,7 +58,7 @@ function dailyView(
     .join("");
 
   const days: string[] = [];
-  for (let i = range - 1; i >= 0; i -= 1) days.push(addDays(today, -i));
+  for (let i = range - 1; i >= 0; i -= 1) days.push(shiftDate(today, -i));
   const W = 1100, LABEL = 188, RIGHT = 70, ROW = 30, TOP = 30;
   const cw = (W - LABEL - RIGHT) / days.length;
   const H = TOP + channels.length * ROW + 6;
@@ -849,9 +849,9 @@ export function renderUploads(
   const behind = trackedT.filter((c) => c.state === "behind").length;
   const last30 = tracked.reduce((n, c) => n + c.uploads30, 0);
   const target30 = Math.round(linkedT.reduce((n, name) => n + 30 / everyOf(name)!, 0));
-  const gapsT = trackedT.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)).map((g) => ({ g, ev: everyOf(c.channel)! })));
+  const gapsT = trackedT.flatMap((c) => c.gaps.filter((g) => g.to > shiftDate(today, -90)).map((g) => ({ g, ev: everyOf(c.channel)! })));
   const onTime = gapsT.length ? Math.round((gapsT.filter(({ g, ev }) => g.days <= ev).length / gapsT.length) * 100) : null;
-  const allGaps = tracked.flatMap((c) => c.gaps.filter((g) => g.to > addDays(today, -90)).map((g) => g.days)).sort((x, y) => x - y);
+  const allGaps = tracked.flatMap((c) => c.gaps.filter((g) => g.to > shiftDate(today, -90)).map((g) => g.days)).sort((x, y) => x - y);
   const medGap = allGaps.length ? allGaps[Math.floor(allGaps.length / 2)]! : null;
   const active7 = tracked.filter((c) => c.daysSince !== null && c.daysSince <= 7).length;
   const tiles = (hasTarget
@@ -872,8 +872,8 @@ export function renderUploads(
 
   // ── the timeline
   const W = 1100, LABEL = 188, RIGHT = 70, ROW = 36, TOP = 34;
-  const start = addDays(today, -data.range);
-  const end = addDays(today, hasTarget ? every + 2 : 3);
+  const start = shiftDate(today, -data.range);
+  const end = shiftDate(today, hasTarget ? every + 2 : 3);
   const span = daysBetween(start, end);
   const x = (day: string) => LABEL + (daysBetween(start, day) / span) * (W - LABEL - RIGHT);
   const H = TOP + data.channels.length * ROW + 8;
@@ -885,7 +885,7 @@ export function renderUploads(
 
   // Week lines, labelled on Mondays; the tick labels are M/D.
   const grid: string[] = [];
-  for (let d = start; d <= end; d = addDays(d, 1)) {
+  for (let d = start; d <= end; d = shiftDate(d, 1)) {
     if (new Date(`${d}T12:00:00Z`).getUTCDay() !== 1) continue;
     const gx = x(d).toFixed(1);
     grid.push(`<line x1="${gx}" x2="${gx}" y1="${TOP - 6}" y2="${H - 6}" class="wk"/>`);

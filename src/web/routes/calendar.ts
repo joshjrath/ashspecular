@@ -7,6 +7,7 @@ import { type CalendarMode, type StoredRecord, calendarRange, dueOnDay, feedReco
 import { DAY_SPAN, type StatusHide, calendarGrid, monthOf, renderCalendar, renderDay, renderWeek, weekStart } from "../pages/calendar.js";
 import { type WorkItem as MyWorkItem, projectBatches, remaining, spreadDayOff, toItem } from "../work.js";
 import { ORG_TZ, dateIn, shiftDate } from "../../parse/derive.js";
+import { isMonth } from "../../finance/money.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../ics.js";
 import { clearBatchesOn, reopenBatchesOn } from "../../jobs/batches.js";
 import { hasDatabase } from "../../config.js";
@@ -158,8 +159,7 @@ async function spreadOff(date: string): Promise<void> {
 
 /** A real YYYY-MM from the address, else this month — so a bad URL can't 500. */
 function safeMonth(value: string | undefined): string {
-  if (!value || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return monthOf();
-  return value;
+  return isMonth(value) ? value : monthOf();
 }
 
 export function registerCalendar(app: FastifyInstance): void {
@@ -189,7 +189,7 @@ export function registerCalendar(app: FastifyInstance): void {
   app.get<{ Querystring: { mode?: string } }>("/calendar", async (request, reply) => {
     const [view, savedMode] = (request.cookies.cal_view ?? "").split(".");
     const mode = request.query.mode ?? (savedMode === "deadlines" ? "deadlines" : undefined);
-    const q = mode ? `?mode=${mode}` : "";
+    const q = mode ? `?mode=${safeMode(mode)}` : "";
     if (view === "day") return reply.redirect(`/day/${dateIn(ORG_TZ)}${q}`);
     if (view === "4day") return reply.redirect(`/4day/${dateIn(ORG_TZ)}${q}`);
     if (view === "week") return reply.redirect(`/week/${dateIn(ORG_TZ)}${q}`);

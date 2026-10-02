@@ -21,6 +21,7 @@
  */
 import { formatOfTitle } from "../web/stories/formats.js";
 import { readTitle } from "../web/stories/lore.js";
+import { shiftDate } from "../parse/derive.js";
 
 export type Kind = "movie" | "sleep";
 
@@ -483,23 +484,17 @@ export function inferMovieConcept(compTitle: string): string {
 
 // ── slots ──────────────────────────────────────────────────────────────────
 
-const addDays = (d: string, n: number) => {
-  const x = new Date(`${d}T12:00:00Z`);
-  x.setUTCDate(x.getUTCDate() + n);
-  return x.toISOString().slice(0, 10);
-};
-
 /** The next day from today with no Movie on it (and not a day off). */
 export function nextMovieSlot(today: string, taken: Set<string>, daysOff: Set<string> = new Set()): string {
   let d = today;
-  for (let i = 0; i < 400 && (taken.has(d) || daysOff.has(d)); i++) d = addDays(d, 1);
+  for (let i = 0; i < 400 && (taken.has(d) || daysOff.has(d)); i++) d = shiftDate(d, 1);
   return d;
 }
 
 /** Sleep every 4 days from the last one posted or planned; never before today. */
 export function nextSleepSlot(today: string, lastSleep: string | null, taken: Set<string>): string {
-  let d = lastSleep ? addDays(lastSleep, 4) : today;
+  let d = lastSleep ? shiftDate(lastSleep, 4) : today;
   if (d < today) d = today;
-  for (let i = 0; i < 200 && taken.has(d); i++) d = addDays(d, 4);
+  for (let i = 0; i < 200 && taken.has(d); i++) d = shiftDate(d, 4);
   return d;
 }

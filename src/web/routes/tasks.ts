@@ -2,7 +2,7 @@
  * Tasks: the list, quick add (read like a message in #tasks), and each
  * task's actions.
  */
-import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate } from "../../parse/derive.js";
+import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, isRealDate, shiftDate } from "../../parse/derive.js";
 import { PRIORITY, type Priority, TASK_CATEGORY, type TaskCategory, parseTask } from "../../tasks/parse.js";
 import { REPEAT, type Repeat } from "../../tasks/repeat.js";
 import { addTask, deleteTask, editTask, knownPeople, listTasks, repeatTask, setTaskStatus, snoozeTask } from "../../db/tasks.js";
@@ -18,7 +18,7 @@ const taskFields = (b: Record<string, string | undefined>) => {
   const priority = (PRIORITY.has(b.priority ?? "") ? b.priority : "normal") as Priority;
   // The form's date and time are the studio's wall clock.
   const day = (b.due_date ?? "").trim();
-  const due = /^\d{4}-\d{2}-\d{2}$/.test(day) ? instantIn(day, /^\d{2}:\d{2}$/.test(b.due_time ?? "") ? b.due_time! : DEADLINE_TIME, ORG_TZ) : null;
+  const due = isRealDate(day) ? instantIn(day, /^\d{2}:\d{2}$/.test(b.due_time ?? "") ? b.due_time! : DEADLINE_TIME, ORG_TZ) : null;
   const est = Number(b.est);
   return {
     title: (b.title ?? "").trim().slice(0, 200) || "Task",

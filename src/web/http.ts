@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import type { CalendarMode } from "../db/records.js";
 import { config } from "../config.js";
+import { isRealDate } from "../parse/derive.js";
 
 /**
  * What every route shares about requests and responses: where a redirect
@@ -43,6 +44,20 @@ export function contentDisposition(kind: "inline" | "attachment", filename: stri
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+/**
+ * Rows as CSV. A cell someone typed that starts like a formula (=, +, -, @)
+ * would run when the file opens in a spreadsheet, so it is kept as text with
+ * a leading apostrophe; a plain number such as -12.50 is left alone.
+ */
+export function toCsv(rows: unknown[][]): string {
+  const cell = (v: unknown) => {
+    let s = String(v ?? "");
+    if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return rows.map((r) => r.map(cell).join(",")).join("\n") + "\n";
+}
+
 /** Whether a request asked for JSON back (the board's own fetches) rather than a page. */
 export function wantsJson(request: FastifyRequest): boolean {
   return (request.headers.accept ?? "").includes("application/json") || request.headers["x-fetch"] === "1";
@@ -76,11 +91,20 @@ export function baseUrlOf(request: FastifyRequest): string {
   return host ? `${proto}://${host}` : "";
 }
 
-/** A real YYYY-MM-DD from the address or a form, or null — so a bad URL can't 500. */
-export function safeDate(value: string | undefined): string | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const d = new Date(`${value}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : value;
+/** One text field from a form or query, trimmed: the first of a repeated field, "" when absent. */
+export function formText(v: unknown): string {
+  return (Array.isArray(v) ? String(v[0] ?? "") : typeof v === "string" ? v : "").trim();
+}
+
+/** A row id from a form or the address: a positive whole number, or null. */
+export function formId(v: unknown): number | null {
+  const n = Number(formText(v));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** A real YYYY-MM-DD from the address or a form, or null — so a bad URL can't 500 or hang. */
+export function safeDate(value: unknown): string | null {
+  return isRealDate(value) ? value : null;
 }
 
 /** The calendar's mode from the address: deadlines, or posting (air dates) for anything else. */

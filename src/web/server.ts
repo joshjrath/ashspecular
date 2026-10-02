@@ -8,7 +8,9 @@
  * already were — starts the background work that belongs with the board,
  * and listens.
  */
-import Fastify, { type FastifyInstance } from "fastify";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
@@ -97,6 +99,22 @@ export async function startWeb(): Promise<void> {
 }
 
 /**
+ * Pages carry their styles and scripts inline, so most are hundreds of KB:
+ * gzipped when the browser takes it, about a tenth of that on the wire.
+ */
+const gzipAsync = promisify(gzip);
+async function compressed(request: FastifyRequest, reply: FastifyReply, payload: unknown): Promise<unknown> {
+  if (typeof payload !== "string" && !Buffer.isBuffer(payload)) return payload;
+  if (Buffer.byteLength(payload) < 1024 || request.method === "HEAD" || reply.getHeader("content-encoding")) return payload;
+  if (!/^(text\/|application\/(json|javascript))/.test(String(reply.getHeader("content-type") ?? ""))) return payload;
+  reply.header("Vary", "Accept-Encoding");
+  if (!/\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""))) return payload;
+  reply.header("Content-Encoding", "gzip");
+  reply.removeHeader("content-length");
+  return gzipAsync(payload);
+}
+
+/**
  * The board as a Fastify app with every route registered, not listening yet.
  * startWeb() runs it; the tests build one to check every route's guards.
  * `everyRoute` registers the areas that otherwise need the database too, and
@@ -120,6 +138,15 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
   app.setNotFoundHandler((request, reply) =>
     wantsJson(request) ? reply.code(404).send({ ok: false, error: "Not found" }) : reply.code(404).type("text/html").send(renderError(404)),
   );
+
+  // Every answer: no type sniffing, no framing by other sites, and links out
+  // (YouTube, Tumblr, Frame.io) don't learn the board's addresses.
+  app.addHook("onSend", async (request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "SAMEORIGIN");
+    reply.header("Referrer-Policy", "same-origin");
+    return compressed(request, reply, payload);
+  });
 
   // Every change is a POST from the board's own pages, and a browser says
   // where a POST came from. One from another site is refused — on top of the

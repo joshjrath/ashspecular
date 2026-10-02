@@ -25,7 +25,7 @@ import { ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive
 import type { StoredRecord } from "../db/records.js";
 import type { Task } from "../db/tasks.js";
 import { TASK_CATEGORY } from "../tasks/parse.js";
-import { addDays, daysBetween } from "./cadence.js";
+import { daysBetween } from "./cadence.js";
 
 export type WorkType = "vo" | "moviesvo" | "gaming" | "reading" | "bits" | "longform" | "revision" | "task";
 
@@ -443,7 +443,7 @@ export function forgottenWork(
 /** The days a page covers, from today. */
 export function nextDays(n: number, now = new Date()): string[] {
   const today = dateIn(ORG_TZ, now);
-  return Array.from({ length: n }, (_, i) => addDays(today, i));
+  return Array.from({ length: n }, (_, i) => shiftDate(today, i));
 }
 
 export { shortsDay };

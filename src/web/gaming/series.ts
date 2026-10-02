@@ -14,7 +14,8 @@
  * same multiple ("how it did against the channel's usual at the same age")
  * the Uploads page gives every long-form video.
  */
-import { addDays, dayOf, daysBetween } from "../cadence.js";
+import { dayOf, daysBetween } from "../cadence.js";
+import { shiftDate } from "../../parse/derive.js";
 
 /** "2026-06-09" → "6/9", as the board writes a day without its year. */
 const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
@@ -221,7 +222,7 @@ export function gamingSeries(videos: SeriesVideo[], now: Date = new Date()): { s
 
     const latest = Math.max(...list.map((v) => v.episode));
     const next = latest + 1;
-    const nextDue = live && gap !== null ? addDays(lastDay, gap) : null;
+    const nextDue = live && gap !== null ? shiftDate(lastDay, gap) : null;
     const draft = nextTitle(name, mark.marker, next);
 
     let advice: string;

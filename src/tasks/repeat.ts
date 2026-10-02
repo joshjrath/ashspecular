@@ -4,6 +4,8 @@
  * lands after today — finishing a daily task three days late opens
  * tomorrow's, not three already-late ones.
  */
+import { shiftDate } from "../parse/derive.js";
+
 export const REPEATS = [
   { id: "daily", label: "Every day" },
   { id: "weekdays", label: "Every weekday" },
@@ -14,20 +16,15 @@ export const REPEATS = [
 export type Repeat = (typeof REPEATS)[number]["id"];
 export const REPEAT = new Map<string, (typeof REPEATS)[number]>(REPEATS.map((r) => [r.id, r]));
 
-const addDays = (d: string, n: number) => {
-  const x = new Date(`${d}T12:00:00Z`);
-  x.setUTCDate(x.getUTCDate() + n);
-  return x.toISOString().slice(0, 10);
-};
 
 function step(d: string, r: Repeat): string {
   switch (r) {
-    case "daily": return addDays(d, 1);
-    case "weekly": return addDays(d, 7);
-    case "biweekly": return addDays(d, 14);
+    case "daily": return shiftDate(d, 1);
+    case "weekly": return shiftDate(d, 7);
+    case "biweekly": return shiftDate(d, 14);
     case "weekdays": {
-      let n = addDays(d, 1);
-      while ([0, 6].includes(new Date(`${n}T12:00:00Z`).getUTCDay())) n = addDays(n, 1);
+      let n = shiftDate(d, 1);
+      while ([0, 6].includes(new Date(`${n}T12:00:00Z`).getUTCDay())) n = shiftDate(n, 1);
       return n;
     }
     case "monthly": {

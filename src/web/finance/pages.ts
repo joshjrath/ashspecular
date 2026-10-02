@@ -11,6 +11,7 @@ import {
 import { addMonths, fmtMoney, fmtPct, monthLabel, monthsEnding } from "../../finance/money.js";
 import { channelColour, fmtMin, type Shell } from "../page.js";
 import { esc } from "../html.js";
+import { toCsv } from "../http.js";
 import { barList, financePage, flagCard, groupAlerts, flagPill, money, monthSwitch, pct, tile, trendChart } from "./ui.js";
 
 const catOf = (lists: Lists, id: string) => lists.categories.find((c) => c.id === id) ?? ({ id, label: id === "other" ? "Other" : id, colour: "#6E6E7A" } as Category);
@@ -360,10 +361,6 @@ export function renderFinanceReports(shell: Shell, d: ReportsData): string {
 /** Reports as CSV: one row per month (P&L) or per channel × month. */
 export function reportsCsv(kind: string, d: ReportsData): string {
   const months = monthsEnding(d.to, d.n);
-  const q = (v: unknown) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
   const $ = (c: number) => (c / 100).toFixed(2);
   const lines: string[][] = [];
   if (kind === "channels") {
@@ -382,6 +379,6 @@ export function reportsCsv(kind: string, d: ReportsData): string {
       lines.push([m, $(p.revenue), $(p.expenses), $(p.byGroup.recurring), $(p.byGroup.production), $(p.byGroup.oneoff), $(p.profit), p.margin === null ? "" : p.margin.toFixed(4), $(p.cashOut), $(p.unpaid)]);
     }
   }
-  return lines.map((l) => l.map(q).join(",")).join("\n") + "\n";
+  return toCsv(lines);
 }
 

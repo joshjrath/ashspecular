@@ -35,7 +35,8 @@ export const fmtPct = (x: number | null, digits = 1) => (x === null || !Number.i
 
 // ── months ─────────────────────────────────────────────────────────────────
 
-export const isMonth = (s: unknown): s is string => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+/** "2026-09", in years the board can count through (the same span as a day's, parse/derive isRealDate). */
+export const isMonth = (s: unknown): s is string => typeof s === "string" && /^(19[7-9]\d|2[01]\d\d)-(0[1-9]|1[0-2])$/.test(s);
 
 /** "2026-09" → "2026-09-01". */
 export const monthStart = (m: string) => `${m}-01`;

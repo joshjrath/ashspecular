@@ -9,7 +9,7 @@
  *   due      today is the fourth day — an upload today keeps the pace
  *   behind   more than four days since the last one, by that many days
  */
-import { ORG_TZ, dateIn, shortsDay } from "../parse/derive.js";
+import { ORG_TZ, dateIn, shiftDate, shortsDay } from "../parse/derive.js";
 
 export const STORIES_EVERY_DAYS = 4;
 
@@ -44,12 +44,6 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
 }
 
-export function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
 export function cadenceFor(
   channel: string,
   uploads: Date[],
@@ -72,16 +66,16 @@ export function cadenceFor(
     for (let i = gaps.length - 1; i >= 0 && gaps[i]!.days <= every; i -= 1) streak += 1;
   }
 
-  const since90 = addDays(today, -90);
+  const since90 = shiftDate(today, -90);
   const recent = gaps.filter((g) => g.to > since90);
-  const since30 = addDays(today, -30);
+  const since30 = shiftDate(today, -30);
 
   return {
     channel,
     last,
     lastDay,
     daysSince,
-    nextDue: lastDay ? addDays(lastDay, every) : null,
+    nextDue: lastDay ? shiftDate(lastDay, every) : null,
     state,
     behindBy: daysSince !== null && daysSince > every ? daysSince - every : 0,
     streak,
@@ -100,7 +94,7 @@ export function cadenceFor(
  * gap is late when it runs longer than the channel usually leaves.
  */
 export function usualGap(uploads: Date[], now: Date = new Date()): number | null {
-  const since = addDays(dayOf(now), -90);
+  const since = shiftDate(dayOf(now), -90);
   const days = [...new Set(uploads.map(dayOf))].filter((d) => d >= since).sort();
   const gaps = days.slice(1).map((d, i) => daysBetween(days[i]!, d)).sort((a, b) => a - b);
   if (gaps.length < 3) return null;
@@ -135,12 +129,12 @@ export function dailyFor(channel: string, uploads: Date[], perDay: number, now: 
   const met = (d: string) => (counts.get(d) ?? 0) >= perDay;
 
   let streak = met(today) ? 1 : 0;
-  for (let d = addDays(today, -1); first && d >= first && met(d); d = addDays(d, -1)) streak += 1;
+  for (let d = shiftDate(today, -1); first && d >= first && met(d); d = shiftDate(d, -1)) streak += 1;
 
   const window = (n: number) => {
     const days: string[] = [];
     for (let i = 1; i <= n; i += 1) {
-      const d = addDays(today, -i);
+      const d = shiftDate(today, -i);
       if (first && d >= first) days.push(d);
     }
     return days;

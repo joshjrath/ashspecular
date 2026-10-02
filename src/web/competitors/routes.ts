@@ -6,6 +6,7 @@ import {
 } from "../../db/competitors.js";
 import { CHANNELS } from "../../catalog.js";
 import type { Shell } from "../page.js";
+import { formId, formText } from "../http.js";
 import { canUseClaude } from "../../ai/claude.js";
 import { ytKey } from "../../competitors/youtube.js";
 import { loadNiche } from "../../competitors/niche.js";
@@ -15,11 +16,6 @@ import { readChannel } from "../../jobs/competitors.js";
 import { renderChannel, renderEmpty, renderGaps, renderManage, renderNiche, renderVideos, type NicheQuery } from "./pages.js";
 
 type Q = Record<string, string | undefined>;
-const str = (v: unknown) => (typeof v === "string" ? v : Array.isArray(v) ? String(v[0] ?? "") : "").trim();
-const idOf = (v: unknown) => {
-  const n = Number(str(v));
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
 
 export function registerCompetitors(app: FastifyInstance, shell: (active: string) => Promise<Shell>): void {
   const html = (reply: FastifyReply, s: string) => reply.type("text/html").send(s);
@@ -39,7 +35,7 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
   });
 
   app.get<{ Params: { gid: string }; Querystring: Q }>("/competitors/:gid", async (request, reply) => {
-    const gid = idOf(request.params.gid);
+    const gid = formId(request.params.gid);
     const n = gid ? await loadNiche(gid) : null;
     if (!n) return reply.redirect("/competitors");
     const q = query(request.query, mainFormat(n.rows));
@@ -64,7 +60,7 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
   });
 
   app.get<{ Params: { gid: string }; Querystring: Q }>("/competitors/:gid/gaps", async (request, reply) => {
-    const gid = idOf(request.params.gid);
+    const gid = formId(request.params.gid);
     const n = gid ? await loadNiche(gid) : null;
     if (!n) return reply.redirect("/competitors");
     const q = query(request.query, mainFormat(n.rows));
@@ -83,11 +79,11 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
       trendMap.set(t, e);
     }
     const trends = [...trendMap].filter(([, e]) => e.outliers > 0).map(([trend, e]) => ({ trend, outliers: e.outliers, channels: e.channels.size, covered: e.covered })).sort((a, b) => b.outliers - a.outliers).slice(0, 20);
-    return html(reply, renderGaps(await shell("competitors"), { groups: await listGroups(), group: n.group, q, settings: s, gaps, status: str(request.query.status), open, related: open ? relatedGaps(open, gaps) : [], trends }));
+    return html(reply, renderGaps(await shell("competitors"), { groups: await listGroups(), group: n.group, q, settings: s, gaps, status: formText(request.query.status), open, related: open ? relatedGaps(open, gaps) : [], trends }));
   });
 
   app.get<{ Params: { gid: string }; Querystring: Q }>("/competitors/:gid/videos", async (request, reply) => {
-    const gid = idOf(request.params.gid);
+    const gid = formId(request.params.gid);
     const n = gid ? await loadNiche(gid) : null;
     if (!n) return reply.redirect("/competitors");
     const q = query(request.query, mainFormat(n.rows));
@@ -97,7 +93,7 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
   });
 
   app.get<{ Params: { cid: string } }>("/competitors/c/:cid", async (request, reply) => {
-    const c = await getChannel(idOf(request.params.cid) ?? 0);
+    const c = await getChannel(formId(request.params.cid) ?? 0);
     if (!c) return reply.redirect("/competitors");
     const n = await loadNiche(c.groupId);
     if (!n) return reply.redirect("/competitors");
@@ -133,24 +129,24 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
     reply.redirect(`${to}${to.includes("?") ? "&" : "?"}${new URLSearchParams(msg as Record<string, string>).toString()}`);
 
   app.post<{ Body: Q }>("/competitors/groups", async (request, reply) => {
-    const r = await addGroup(str(request.body?.name));
+    const r = await addGroup(formText(request.body?.name));
     return "error" in r ? back(reply, "/competitors/manage", { err: r.error }) : reply.redirect(`/competitors/${r.id}#add`);
   });
   app.post<{ Params: { id: string }; Body: Q }>("/competitors/groups/:id", async (request, reply) => {
-    const r = await renameGroup(idOf(request.params.id) ?? 0, str(request.body?.name));
+    const r = await renameGroup(formId(request.params.id) ?? 0, formText(request.body?.name));
     return back(reply, "/competitors/manage", "error" in r ? { err: r.error } : { msg: "Renamed." });
   });
   app.post<{ Params: { id: string } }>("/competitors/groups/:id/delete", async (request, reply) => {
-    await deleteGroup(idOf(request.params.id) ?? 0);
+    await deleteGroup(formId(request.params.id) ?? 0);
     return back(reply, "/competitors/manage", { msg: "Niche deleted." });
   });
 
   app.post<{ Body: Q }>("/competitors/channels", async (request, reply) => {
     const b = request.body ?? {};
-    const gid = idOf(b.to) ?? idOf(b.group);
+    const gid = formId(b.to) ?? formId(b.group);
     if (!gid) return back(reply, "/competitors/manage", { err: "Pick a niche." });
-    const board = CHANNELS.find((c) => c.name === str(b.board))?.name ?? null;
-    const url = str(b.url);
+    const board = CHANNELS.find((c) => c.name === formText(b.board))?.name ?? null;
+    const url = formText(b.url);
     if (!board && !url) return back(reply, `/competitors/${gid}`, { msg: "Paste a channel link, or pick one of the board's channels." });
     const r = await addChannel({ groupId: gid, input: board ?? url, youtubeId: null, mine: Boolean(board) || b.mine === "1", boardChannel: board });
     if ("error" in r) return back(reply, `/competitors/${gid}`, { msg: r.error });
@@ -162,17 +158,17 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
     return back(reply, `/competitors/${gid}`, { msg: after?.error ? `Added, but: ${after.error}` : `Added ${after?.title ?? board ?? "the channel"}.` });
   });
   app.post<{ Params: { id: string }; Body: Q }>("/competitors/channels/:id", async (request, reply) => {
-    const id = idOf(request.params.id) ?? 0;
-    const to = idOf(request.body?.to);
+    const id = formId(request.params.id) ?? 0;
+    const to = formId(request.body?.to);
     await updateChannel(id, { ...(to ? { groupId: to } : {}), mine: request.body?.mine === "1" });
     return back(reply, "/competitors/manage", { msg: "Saved." });
   });
   app.post<{ Params: { id: string } }>("/competitors/channels/:id/delete", async (request, reply) => {
-    await removeChannel(idOf(request.params.id) ?? 0);
+    await removeChannel(formId(request.params.id) ?? 0);
     return back(reply, "/competitors/manage", { msg: "Removed." });
   });
   app.post<{ Params: { id: string } }>("/competitors/channels/:id/refresh", async (request, reply) => {
-    const id = idOf(request.params.id) ?? 0;
+    const id = formId(request.params.id) ?? 0;
     await refreshNow(id);
     const c = await getChannel(id);
     if (c) await readChannel(c).catch((err) => console.error("[competitors] refresh failed:", err));

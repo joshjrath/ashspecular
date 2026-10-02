@@ -32,7 +32,7 @@ export function offsetFor(zone: string, at: Date): string {
  * pass can land on the wrong side of a DST change.
  */
 export function instantIn(dateISO: string, hhmm: string, zone: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  if (!isRealDate(dateISO)) return null;
   const guess = new Date(`${dateISO}T${hhmm}:00Z`);
   if (Number.isNaN(guess.getTime())) return null;
 
@@ -102,6 +102,19 @@ export function shortsDay(at: Date = new Date()): string {
 }
 
 /** Shift a YYYY-MM-DD by whole days without touching clock time. */
+/**
+ * A real day written YYYY-MM-DD, in years the board can count through: no
+ * 2/31 (which Date rolls into March and Postgres refuses), and no year 0
+ * (which shifts into negative years and sends a day-by-day walk on forever).
+ */
+export function isRealDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  if (year < 1970 || year > 2199) return false;
+  const d = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 export function shiftDate(dateISO: string, days: number): string {
   const d = new Date(`${dateISO}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -230,14 +243,14 @@ export function normaliseDate(value: string | null): string | null {
   if (!value) return null;
   const text = value.trim();
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return isRealDate(text) ? text : null;
 
   const slashed = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
   if (slashed) {
     const [, mm, dd, yy] = slashed;
     const year = yy!.length === 2 ? 2000 + Number(yy) : Number(yy);
     const iso = `${year}-${mm!.padStart(2, "0")}-${dd!.padStart(2, "0")}`;
-    return Number.isNaN(new Date(`${iso}T12:00:00Z`).getTime()) ? null : iso;
+    return isRealDate(iso) ? iso : null;
   }
 
   const parsed = new Date(text);

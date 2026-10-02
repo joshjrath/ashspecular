@@ -13,7 +13,7 @@ import { anthropic, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { CHANNELS } from "../catalog.js";
-import { ORG_TZ, dateIn } from "../parse/derive.js";
+import { ORG_TZ, dateIn, isRealDate } from "../parse/derive.js";
 import { parseWhen } from "../parse/when.js";
 
 export type VoiceTab = "income" | "expense" | "subscription" | "contractor";
@@ -131,9 +131,9 @@ function tidy(e: VoiceEntry, ctx: VoiceContext): VoiceEntry {
   const stream = e.stream && ctx.streams.some((s) => s.id === e.stream) ? e.stream : null;
   if (e.stream && !stream) unsure.add("stream");
   const person = e.person ? ctx.people.find((p) => p.toLowerCase() === e.person!.toLowerCase()) ?? e.person : null;
-  const date = e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : null;
+  const date = isRealDate(e.date) ? e.date : null;
   const month = e.month && /^\d{4}-\d{2}$/.test(e.month) ? e.month : null;
-  const nextBill = e.next_bill && /^\d{4}-\d{2}-\d{2}$/.test(e.next_bill) ? e.next_bill : null;
+  const nextBill = isRealDate(e.next_bill) ? e.next_bill : null;
   return { ...e, channels, category, stream, person, date, month, next_bill: nextBill, unsure: [...unsure] };
 }
 

@@ -11,7 +11,8 @@
  * the next is expected today. A channel quiet for a month with nothing ahead
  * is resting, not behind.
  */
-import { addDays, daysBetween } from "./cadence.js";
+import { daysBetween } from "./cadence.js";
+import { shiftDate } from "../parse/derive.js";
 
 export const GAP_HORIZON_DAYS = 8;
 
@@ -32,19 +33,19 @@ export interface UploadGap {
 export function channelGaps(channel: string, every: number, days: string[], today: string, horizon = GAP_HORIZON_DAYS): UploadGap[] {
   const known = [...new Set(days)].sort();
   if (!known.length || every <= 0) return [];
-  const end = addDays(today, horizon);
+  const end = shiftDate(today, horizon);
   // The end of what's lined up: the furthest video, scheduled or not.
   const last = known[known.length - 1]!;
   const ahead = last >= today;
   // Nothing ahead and nothing for a month: resting, not behind.
   if (!ahead && daysBetween(last, today) > 30) return [];
-  let expected = addDays(last, every);
+  let expected = shiftDate(last, every);
   // Nothing ahead and already past when the next was due: it's due today.
   if (expected < today) expected = today;
   const gaps: UploadGap[] = [];
   for (let guard = 0; expected <= end && guard < 100; guard++) {
     gaps.push({ channel, date: expected, inDays: daysBetween(today, expected), after: last });
-    expected = addDays(expected, every);
+    expected = shiftDate(expected, every);
   }
   return gaps;
 }

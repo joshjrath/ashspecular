@@ -11,6 +11,7 @@
  * Cached for a minute, so switching tabs doesn't hammer his service.
  */
 import { config } from "../config.js";
+import { isRealDate } from "../parse/derive.js";
 
 export type ScriptStatus =
   | "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "PENDING" | "NO_DEADLINE"
@@ -59,7 +60,7 @@ export function readReport(data: unknown): ScriptRow[] {
       id: String(a.thread_id ?? a.title),
       code: typeof a.slot === "string" && a.slot ? a.slot : null,
       title: a.title,
-      airDate: slate && /^\d{4}-\d{2}-\d{2}$/.test(slate) ? slate : null,
+      airDate: isRealDate(slate) ? slate : null,
       deadline: date(a.deadline),
       status: a.status as ScriptStatus,
       role: typeof a.role === "string" ? a.role : "",

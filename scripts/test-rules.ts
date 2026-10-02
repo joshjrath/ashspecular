@@ -78,7 +78,7 @@ import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
-import { fmtMoney, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
+import { fmtMoney, isMonth, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
 import { parseMultipart } from "../src/web/finance/routes.js";
@@ -111,7 +111,8 @@ import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
 import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { buildApp } from "../src/web/server.js";
-import { contentDisposition, localPath, refererPath } from "../src/web/http.js";
+import { contentDisposition, formId, formText, localPath, refererPath, safeDate, toCsv } from "../src/web/http.js";
+import { gunzipSync } from "node:zlib";
 import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
 import { IDEA_BOUNDS, ideaSetting } from "../src/db/ideas.js";
 import { NAME_ARRAYS, NAME_COLUMNS } from "../src/db/channelsettings.js";
@@ -2367,6 +2368,18 @@ t("a download's name survives any language, and can't break the header", [
   contentDisposition("attachment", "receipt.pdf"), contentDisposition("inline", "收据 \"1\".png"),
 ], ['attachment; filename="receipt.pdf"; filename*=UTF-8\'\'receipt.pdf', 'inline; filename="__ 1.png"; filename*=UTF-8\'\'%E6%94%B6%E6%8D%AE%20%221%22.png']);
 
+section("Dates, ids and downloads from a request");
+t("a day must be a real one, in years the board can count through", [
+  safeDate("2026-10-02"), safeDate("2028-02-29"), safeDate("2026-02-29"), safeDate("2026-02-31"), safeDate("2026-04-31"), safeDate("0000-01-01"), safeDate("9999-12-31"), safeDate("2026-1-2"), safeDate(["2026-10-02"]), safeDate(undefined),
+], ["2026-10-02", "2028-02-29", null, null, null, null, null, null, null, null]);
+t("…and the same goes for one read from a post or a voice note", [normaliseDate("2/31/2026"), normaliseDate("2026-02-31"), normaliseDate("10/2/26"), instantIn("0000-01-01", "12:00", "UTC")], [null, null, "2026-10-02", null]);
+t("a month too", [isMonth("2026-09"), isMonth("2026-13"), isMonth("0000-01"), isMonth("9999-12"), isMonth("1970-01")], [true, false, false, false, true]);
+t("a form field: the first of a repeated one, trimmed", [formText(" a "), formText(["b", "c"]), formText(undefined), formText(4)], ["a", "b", "", ""]);
+t("a row id: a positive whole number a database can hold", [formId("12"), formId(" 7 "), formId("0"), formId("-3"), formId("1.5"), formId("1e30"), formId("abc"), formId(["9"])], [12, 7, null, null, null, null, null, 9]);
+t("CSV: quotes, commas and line breaks stay in their cell", toCsv([["a,b", 'say "hi"', "line\r\nbreak", null, 4]]), '"a,b","say ""hi""","line\r\nbreak",,4\n');
+t("CSV: a typed cell can't run as a formula; a negative amount stays a number", toCsv([["=HYPERLINK(\"http://x\")", "+1+1", "-cmd", "@SUM(A1)", "-12.50", "+3", "Dinner - team"]]),
+  `"'=HYPERLINK(""http://x"")",'+1+1,'-cmd,'@SUM(A1),-12.50,+3,Dinner - team\n`);
+
 section("Competitors");
 const cNow = new Date("2026-10-01T12:00:00Z");
 const cDay = 86_400_000;
@@ -2495,6 +2508,12 @@ section("Every route is behind the sign-in");
   t("an unknown page is a 404 page (JSON for the board's own fetches)", [unknown.statusCode, unknown.body.includes("That page isn't here"), unknownJson.json()], [404, true, { ok: false, error: "Not found" }]);
   const wrong = await app.inject({ method: "POST", url: "/login", headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": "192.0.2.77" }, payload: "password=definitely-wrong" });
   t("a wrong password is refused with the sign-in page again", [wrong.statusCode, wrong.body.includes("Wrong password.")], [401, true]);
+  const zipped = await app.inject({ method: "GET", url: "/login", headers: { "accept-encoding": "gzip, br" } });
+  const plain = await app.inject({ method: "GET", url: "/login" });
+  t("pages go out gzipped to a browser that takes it, plain otherwise, with the safety headers either way", [
+    zipped.headers["content-encoding"], gunzipSync(zipped.rawPayload).toString() === plain.body, plain.headers["content-encoding"], plain.headers.vary,
+    zipped.headers["x-content-type-options"], zipped.headers["x-frame-options"], plain.headers["referrer-policy"],
+  ], ["gzip", true, undefined, "Accept-Encoding", "nosniff", "SAMEORIGIN", "same-origin"]);
   await app.close();
 }
 

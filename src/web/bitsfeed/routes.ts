@@ -16,25 +16,20 @@ import { modelFor } from "../../ai/claude.js";
 import { tumblrKey } from "../../ideas/tumblr.js";
 import { IDEA_STATUSES, REJECT_BY_ID, bitsChannels, isClassification } from "../../ideas/types.js";
 import type { Shell } from "../page.js";
+import { formId, formText, localPath, wantsJson } from "../http.js";
 import { ideaCard, ideaRowCard, renderIdeaFeed, renderIdeaSources, type FeedQuery } from "./pages.js";
 
 type Body = Record<string, string | string[] | undefined>;
-const str = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : typeof v === "string" ? v : "").trim();
 const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : []);
-const idOf = (v: unknown) => {
-  const n = Number(str(v));
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
 const channelOf = (v: unknown) => {
-  const c = str(v);
+  const c = formText(v);
   return bitsChannels().includes(c) ? c : null;
 };
 /** Only ever send someone back to the feed. */
 const safeBack = (v: unknown, fallback = "/ideas") => {
-  const b = str(v);
+  const b = localPath(formText(v), fallback);
   return /^\/ideas(\/|\?|#|$)/.test(b) ? b : fallback;
 };
-const wantsJson = (request: FastifyRequest) => request.headers["x-fetch"] === "1";
 
 export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) => Promise<Shell>): void {
   const html = (reply: FastifyReply, s: string) => reply.type("text/html").send(s);
@@ -55,7 +50,7 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
 
   app.get<{ Querystring: Record<string, string | undefined> }>("/ideas", async (request, reply) => {
     const q = feedQuery(request.query);
-    const src = idOf(request.query.src);
+    const src = formId(request.query.src);
     const filter = { channel: q.channel, classification: q.cls, canon: q.canon, minScore: q.min, q: q.q || null };
     const [s, counts, pulse, feeds, settings, usage] = await Promise.all([shell("ideas"), tabCounts(filter), feedPulse(), listFeeds(), getSettings(), usageOn()]);
     let rows: Awaited<ReturnType<typeof feedSources>> = { rows: [], total: 0 };
@@ -89,8 +84,8 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
           aiCapped: settings.ai && canAnalyze() && (usage.get("ai-full")?.items ?? 0) >= settings.fullCap,
           paused: reader.pausedUntil ? reader.reason : "",
         },
-        flash: str(request.query.msg).slice(0, 300) || undefined,
-        error: str(request.query.adderr).slice(0, 300) || undefined,
+        flash: formText(request.query.msg).slice(0, 300) || undefined,
+        error: formText(request.query.adderr).slice(0, 300) || undefined,
       }),
     );
   });
@@ -107,7 +102,7 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
   }
 
   app.post<{ Params: { id: string; act: string }; Body: Body }>("/ideas/s/:id/:act", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (!id) return reply.code(404).send({ ok: false });
     const s = await getSource(id);
     if (!s) return reply.code(404).send({ ok: false });
@@ -121,8 +116,8 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
         await decide(id, request.params.act);
         break;
       case "reject": {
-        const reason = str(b.reason);
-        await decide(id, "reject", { reason: REJECT_BY_ID.has(reason) ? reason : "other", note: str(b.note).slice(0, 300) || null });
+        const reason = formText(b.reason);
+        await decide(id, "reject", { reason: REJECT_BY_ID.has(reason) ? reason : "other", note: formText(b.note).slice(0, 300) || null });
         forgetHistory();
         break;
       }
@@ -132,25 +127,25 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
         void ideaTick();
         break;
       case "classify": {
-        const c = str(b.classification);
+        const c = formText(b.classification);
         if (isClassification(c)) await reclassify(id, c);
         break;
       }
       case "canon":
-        await verifyCanon(id, str(b.on) === "1");
+        await verifyCanon(id, formText(b.on) === "1");
         break;
       case "approve": {
         const r = (s.analysis?.depth === "full" ? s.analysis.result : null) ?? {};
-        const title = (str(b.title) || String(r.suggested_title ?? "")).slice(0, 200);
+        const title = (formText(b.title) || String(r.suggested_title ?? "")).slice(0, 200);
         if (!title) return after(request, reply, id, "Give the idea a title first (or analyse the post fully for a suggestion).");
-        const classification = str(b.classification) || s.classification || String(r.classification ?? "");
+        const classification = formText(b.classification) || s.classification || String(r.classification ?? "");
         await approveSource(id, {
           channel: channelOf(b.channel) ?? s.channel ?? s.channels[0] ?? bitsChannels()[0]!,
           title,
-          premise: (b.title !== undefined ? str(b.premise) : String(r.suggested_premise ?? "")).slice(0, 2000),
-          direction: (b.title !== undefined ? str(b.direction) : String(r.suggested_direction ?? "")).slice(0, 2000),
+          premise: (b.title !== undefined ? formText(b.premise) : String(r.suggested_premise ?? "")).slice(0, 2000),
+          direction: (b.title !== undefined ? formText(b.direction) : String(r.suggested_direction ?? "")).slice(0, 2000),
           classification: isClassification(classification) ? classification : "CANON_INSPIRED",
-          notes: str(b.notes).slice(0, 500),
+          notes: formText(b.notes).slice(0, 500),
         });
         forgetHistory();
         break;
@@ -162,8 +157,8 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
   });
 
   app.post<{ Params: { id: string }; Body: Body }>("/ideas/i/:id/status", async (request, reply) => {
-    const id = idOf(request.params.id);
-    const status = str(request.body?.status);
+    const id = formId(request.params.id);
+    const status = formText(request.body?.status);
     if (id && IDEA_STATUSES.some((x) => x.id === status)) {
       await setIdeaStatus(id, status);
       forgetHistory();
@@ -178,7 +173,7 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
 
   app.post<{ Body: Body }>("/ideas/add", async (request, reply) => {
     const b = request.body ?? {};
-    const r = await addManualSource({ url: str(b.url), text: str(b.text), channel: channelOf(b.channel) });
+    const r = await addManualSource({ url: formText(b.url), text: formText(b.text), channel: channelOf(b.channel) });
     if ("error" in r) return reply.redirect(`/ideas?tab=new&adderr=${encodeURIComponent(r.error)}`);
     void ideaTick();
     const msg = r.existed ? "That post was already in the feed — it's being read in full again." : "Added — it's being read in full now; this card fills in within a minute or two.";
@@ -193,7 +188,7 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
       reply,
       renderIdeaSources(s, {
         feeds, settings, usage, tumblr: Boolean(tumblrKey()), ai: canAnalyze(), model: modelFor("ideas"), reader: readerState(),
-        flash: str(request.query.msg).slice(0, 300) || undefined,
+        flash: formText(request.query.msg).slice(0, 300) || undefined,
       }),
     );
   });
@@ -203,12 +198,12 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
     const b = request.body ?? {};
     const cur = await getSettings();
     const next: IdeaSettings = {
-      polling: str(b.polling) === "on",
-      ai: str(b.ai) === "on",
-      triageCap: Math.round(ideaSetting("triageCap", str(b.triageCap), cur.triageCap)),
-      fullCap: Math.round(ideaSetting("fullCap", str(b.fullCap), cur.fullCap)),
-      fullThreshold: Math.round(ideaSetting("fullThreshold", str(b.fullThreshold), cur.fullThreshold) * 100) / 100,
-      tumblrDailyCap: Math.round(ideaSetting("tumblrDailyCap", str(b.tumblrDailyCap), cur.tumblrDailyCap)),
+      polling: formText(b.polling) === "on",
+      ai: formText(b.ai) === "on",
+      triageCap: Math.round(ideaSetting("triageCap", formText(b.triageCap), cur.triageCap)),
+      fullCap: Math.round(ideaSetting("fullCap", formText(b.fullCap), cur.fullCap)),
+      fullThreshold: Math.round(ideaSetting("fullThreshold", formText(b.fullThreshold), cur.fullThreshold) * 100) / 100,
+      tumblrDailyCap: Math.round(ideaSetting("tumblrDailyCap", formText(b.tumblrDailyCap), cur.tumblrDailyCap)),
     };
     await saveSettings(next);
     return toSources(reply, "Settings saved.", "#settings");
@@ -217,32 +212,32 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
   app.post<{ Body: Body }>("/ideas/sources/feed", async (request, reply) => {
     const b = request.body ?? {};
     const channels = list(b.channels).filter((c) => bitsChannels().includes(c));
-    const id = await addFeed({ query: str(b.query), channels, weight: Number(str(b.weight)) || 3 });
+    const id = await addFeed({ query: formText(b.query), channels, weight: Number(formText(b.weight)) || 3 });
     if (id) void ideaTick();
-    return toSources(reply, id ? `Watching #${str(b.query).replace(/^#/, "")} — its first read is within a minute.` : "That tag is already watched (or was empty).", id ? `#f-${id}` : "");
+    return toSources(reply, id ? `Watching #${formText(b.query).replace(/^#/, "")} — its first read is within a minute.` : "That tag is already watched (or was empty).", id ? `#f-${id}` : "");
   });
 
   app.post<{ Params: { id: string }; Body: Body }>("/ideas/sources/feed/:id", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     const b = request.body ?? {};
     if (id) {
       await updateFeed(id, {
         channels: list(b.channels).filter((c) => bitsChannels().includes(c)),
-        enabled: str(b.enabled) === "on",
-        weight: Number(str(b.weight)) || 3,
-        exclusions: str(b.exclusions).split(",").map((x) => x.trim()).filter(Boolean),
-        minNotes: Number(str(b.minNotes)) || 0,
+        enabled: formText(b.enabled) === "on",
+        weight: Number(formText(b.weight)) || 3,
+        exclusions: formText(b.exclusions).split(",").map((x) => x.trim()).filter(Boolean),
+        minNotes: Number(formText(b.minNotes)) || 0,
       });
     }
     return toSources(reply, "Saved.", id ? `#f-${id}` : "");
   });
   app.post<{ Params: { id: string } }>("/ideas/sources/feed/:id/delete", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await deleteFeed(id);
     return toSources(reply, "Tag removed. The posts it found stay in the feed.");
   });
   app.post<{ Params: { id: string } }>("/ideas/sources/feed/:id/poll", async (request, reply) => {
-    const id = idOf(request.params.id);
+    const id = formId(request.params.id);
     if (id) await pollFeedNow(id);
     void ideaTick();
     return toSources(reply, tumblrKey() ? "Reading it now — refresh in a moment." : "It's queued, but reading needs TUMBLR_API_KEY.", id ? `#f-${id}` : "");
@@ -250,10 +245,10 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
 
   app.post<{ Body: Body }>("/ideas/rescore", async (request, reply) => {
     const b = request.body ?? {};
-    const scope = str(b.scope);
+    const scope = formText(b.scope);
     const since = scope === "24h" ? new Date(Date.now() - 86_400_000) : scope === "7d" ? new Date(Date.now() - 7 * 86_400_000) : scope === "30d" ? new Date(Date.now() - 30 * 86_400_000) : null;
     const ids = await sourcesInScope({ since, channel: channelOf(b.channel), unusedOnly: scope === "unused" });
-    const n = await queueSources(ids, str(b.depth) === "full" ? "full" : "triage");
+    const n = await queueSources(ids, formText(b.depth) === "full" ? "full" : "triage");
     void ideaTick();
     return toSources(reply, n ? `Re-scoring ${n.toLocaleString("en-US")} post${n === 1 ? "" : "s"} with the current analysis — they update over the next minutes, within the daily caps.` : "No posts matched.", "#rescore");
   });

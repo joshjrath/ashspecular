@@ -12,11 +12,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { CHANNELS, isLongFormRecurring } from "../catalog.js";
 import { type CalendarMode, type GapNotice, type Notice, type StoredRecord, calendarRange, categoryCounts, channelAirDays, doneToday, getRecord as getRecordById, lastIntake, listDaysOff, listNotices, listReviews, openBatchCount, openByCategory, openWork, pausedCount, removedCount, revisionKeys } from "../db/records.js";
 import { GAP_HORIZON_DAYS, type UploadGap, nextToAssign, uploadGaps } from "./gaps.js";
-import { ORG_TZ, dateIn } from "../parse/derive.js";
+import { dateIn, ORG_TZ, shiftDate } from "../parse/derive.js";
 import type { Shell } from "./page.js";
 import type { TimerState } from "./pages/mywork.js";
 import { type WorkItem, forgottenWork, isVo, itemKey, setEstimates, taskItem, toItem } from "./work.js";
-import { addDays, dayOf, daysBetween, usualGap } from "./cadence.js";
+import { dayOf, daysBetween, usualGap } from "./cadence.js";
 import { boardScripts, corpus } from "./stories/corpus.js";
 import { config, hasDatabase } from "../config.js";
 import { dismissedGaps, pausedChannels } from "../db/channels.js";
@@ -270,7 +270,7 @@ export async function nextAssignments(): Promise<UploadGap[]> {
 async function gapInputs(): Promise<{ channels: Array<{ channel: string; every: number; days: string[] }>; today: string; dismissed: Set<string> }> {
   await refreshOwnPaces();
   const today = dateIn(ORG_TZ);
-  const from = addDays(today, -45);
+  const from = shiftDate(today, -45);
   const [uploads, aired, paused, dismissed] = await Promise.all([
     listUploads(new Date(`${from}T00:00:00Z`)).catch(() => []),
     channelAirDays(from).catch(() => []),
@@ -295,7 +295,7 @@ async function gapInputs(): Promise<{ channels: Array<{ channel: string; every: 
 export function gapNotices(gaps: UploadGap[]): GapNotice[] {
   return gaps.map((gap) => ({
     kind: "gap" as const,
-    at: new Date(Math.min(Date.now(), zonedMidnight(addDays(gap.date, -GAP_HORIZON_DAYS)).getTime())),
+    at: new Date(Math.min(Date.now(), zonedMidnight(shiftDate(gap.date, -GAP_HORIZON_DAYS)).getTime())),
     gap,
   }));
 }
