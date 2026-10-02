@@ -25,7 +25,8 @@ in two; the default runs both (`src/start.ts`).
 
 ```
 src/
-  start.ts            production entrypoint: checks config, prepares the DB, starts the bot, the schedule, the board
+  start.ts            production entrypoint: prepares the DB, starts the bot, the schedule, the board
+  preflight.ts        imported first by every entrypoint: checkConfig() and guardProcess() before anything loads
   config.ts           settings read once at start (+ checkConfig: fail fast on bad values)
   process.ts          guardProcess: a stray promise rejection is logged, not fatal
   catalog.ts          the categories and every channel — the source of truth for channels

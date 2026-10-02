@@ -1,12 +1,10 @@
+import "../preflight.js";
 import { Events } from "discord.js";
 import { client, isIntakeChannel } from "./client.js";
 import { registerIntake } from "./intake.js";
-import { guardProcess } from "../process.js";
-import { checkConfig, config, hasDatabase } from "../config.js";
+import { config, hasDatabase } from "../config.js";
 import { modelFor } from "../ai/claude.js";
 
-guardProcess();
-checkConfig();
 // Run on its own (npm run bot), the bot gets the database ready itself: the
 // channels renamed and the keys set in Settings. Under start.ts it's done already.
 if (hasDatabase) {
