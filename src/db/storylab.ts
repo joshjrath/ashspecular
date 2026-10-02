@@ -70,11 +70,6 @@ export async function listAiIdeas(): Promise<AiIdeaRow[]> {
   return rows.map(ideaOf);
 }
 
-export async function getAiIdea(id: number): Promise<AiIdeaRow | null> {
-  const { rows } = await pool.query("SELECT * FROM lab_ai_ideas WHERE id = $1", [id]);
-  return rows[0] ? ideaOf(rows[0]) : null;
-}
-
 export async function addAiIdeas(
   channelId: string,
   ideas: Array<{ title: string; premise: string; beats: string[]; why: string; modelledOn: string[] }>,

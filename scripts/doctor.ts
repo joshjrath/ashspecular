@@ -13,6 +13,7 @@ import { CATEGORIES, CHANNELS } from "../src/catalog.js";
 import { classify } from "../src/parse/classify.js";
 import { derive, ORG_TZ, TEAM_TZ, VO_BUFFER_DAYS } from "../src/parse/derive.js";
 import { parseAssignment } from "../src/parse/structured.js";
+import { modelFor } from "../src/ai/claude.js";
 
 const C = {
   dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
@@ -51,7 +52,7 @@ else
 
 // ── 3. Anthropic key ──────────────────────────────────────────────────────
 const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-const model = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
+const model = modelFor("intake");
 
 if (!anthropicKey) {
   // Not fatal. Templated assignment posts are read by pattern and never touch

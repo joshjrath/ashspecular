@@ -22,11 +22,6 @@ function categoryLabel(categoryId: string): string {
   return CATEGORIES.find((c) => c.id === categoryId)?.label ?? "Unsorted";
 }
 
-/** Discord renders <t:unix:f> in each viewer's own timezone. */
-function stamp(d: Date): string {
-  return `<t:${Math.floor(d.getTime() / 1000)}:f>`;
-}
-
 /**
  * What the bot understood, laid out so a wrong field is obvious at a glance.
  * While we're tuning the parser this card is the product — it is how you see

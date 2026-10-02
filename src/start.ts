@@ -6,13 +6,14 @@
  * traffic they fit in one process, so that is the default. `SERVICE=bot` or
  * `SERVICE=web` splits them later without touching the code.
  */
-import { config, hasDatabase } from "./config.js";
+import { checkConfig, config, hasDatabase } from "./config.js";
 import { guardProcess } from "./process.js";
 
 const only = (process.env.SERVICE ?? "").trim().toLowerCase();
 
 async function main(): Promise<void> {
   guardProcess();
+  checkConfig();
   // The schema, the keys and the channels first, so the bot files under the
   // right names from its first message (startWeb finds this already done).
   if (hasDatabase) {

@@ -9,8 +9,7 @@
  * more of it is marked to check. Either way nothing is made up: what isn't
  * said is left empty, and the board shows it as missing.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { anthropic } from "../ai/claude.js";
+import { anthropic, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { CHANNELS } from "../catalog.js";
@@ -70,7 +69,6 @@ export interface VoiceContext {
   methods: string[];
 }
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
 /** Stable so it caches: everything that varies (lists, today, the note) goes in the user turn. */
 const SYSTEM = `You turn a voice note from the owner of a YouTube studio into bookkeeping entries for their finance board.
@@ -94,7 +92,7 @@ export async function readVoiceNote(text: string, ctx: VoiceContext): Promise<{ 
   try {
     const today = dateIn(ORG_TZ, ctx.now ?? new Date());
     const response = await anthropic().messages.parse({
-      model: MODEL,
+      model: modelFor("finance"),
       max_tokens: 8192,
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: zodOutputFormat(NoteSchema) },

@@ -31,12 +31,6 @@ export interface Digest {
   daysOff?: Array<{ day: string; moved: StoredRecord[] }>;
 }
 
-const DUE = "COALESCE(vo_due, deadline, script_due)";
-
-const SELECT = `SELECT id, kind, category, channel, code, title, tag, stage,
-  air_date, script_due, vo_due, vo_source, deadline, word_count, assignee,
-  version, links, brief, note, status, parsed_by, confidence, warnings,
-  source_url, source_author, raw_content, created_at FROM records`;
 
 /** Everything the digest says, gathered in one place so it can be previewed. */
 export async function buildDigest(date = dateIn(ORG_TZ)): Promise<Digest> {

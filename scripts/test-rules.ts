@@ -24,7 +24,7 @@ import { classifyUrl } from "../src/parse/rules.js";
 import { parseWhen } from "../src/parse/when.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
-import { config, siteAddress } from "../src/config.js";
+import { config, configProblems, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
 import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed, readShortsFeed } from "../src/jobs/youtube.js";
 import { cadenceFor, dailyFor, usualGap } from "../src/web/cadence.js";
@@ -103,6 +103,7 @@ import { contentDisposition, localPath, refererPath } from "../src/web/http.js";
 import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
 import { IDEA_BOUNDS, ideaSetting } from "../src/db/ideas.js";
 import { NAME_ARRAYS, NAME_COLUMNS } from "../src/db/channelsettings.js";
+import { modelFor } from "../src/ai/claude.js";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
 import { distinctColour } from "../src/jobs/avatars.js";
@@ -665,7 +666,7 @@ t("a calendar, CRLF line endings", [icsLines[0], ics.endsWith("END:VCALENDAR\r\n
 t("every line fits 75 octets", icsLines.every((l) => Buffer.byteLength(l) <= 75), true);
 t("an air date is an all-day event", ics.includes("UID:air-41@specular-board") && ics.includes("DTSTART;VALUE=DATE:20260929") && ics.includes("DTEND;VALUE=DATE:20260930"), true);
 t("a deadline sits at its time", ics.includes("UID:due-41@specular-board") && ics.includes("DTEND:20260924T035900Z"), true);
-t("commas and semicolons are escaped", ics.replace(/\r\n /g, "").includes("A long\\, long title\\, with commas\; and semicolons"), true);
+t("commas and semicolons are escaped", ics.replace(/\r\n /g, "").includes("A long\\, long title\\, with commas\\; and semicolons"), true);
 t("daily batches are left out unless asked", [ics.includes("UID:air-42"), buildIcs([feedBatch], [feedBatch], parseFeedOptions({ batches: "1" }), "").includes("UID:air-42")], [false, true]);
 t("cleared work stays, ticked", ics.replace(/\r\n /g, "").includes("SUMMARY:✓ 🎬 Airs: VIDEO-012"), true);
 t("an open deadline carries a reminder, a cleared one doesn't", (ics.match(/BEGIN:VALARM/g) ?? []).length, 1);
@@ -2269,6 +2270,48 @@ t("a forged or expired sign-in is refused", [verifyToken(undefined), verifyToken
 }
 t("cookies are Secure over https, and only left off for plain http", [cookieOptions(true).secure, cookieOptions(false).secure === config.publicUrl.startsWith("https://"), cookieOptions(true).httpOnly, cookieOptions(true).sameSite], [true, true, true, "lax"]);
 
+section("Configuration is checked before anything runs");
+{
+  const ok = configProblems({ ORG_TZ: "America/New_York", PORT: "8080", DASHBOARD_PASSWORD: "x", SESSION_SECRET: "y", PUBLIC_URL: "https://board.example" });
+  const bad = configProblems({ ORG_TZ: "Eastern", TEAM_TZ: "Asia/Kolkata", PORT: "eighty", DEADLINE_TIME: "11:59pm", SERVICE: "both", DASHBOARD_PASSWORD: "x", PUBLIC_URL: "board.example" });
+  t("a good environment passes; a misspelt zone, a word for a number, a 12-hour time and an unknown SERVICE stop it", [
+    ok, bad.fatal.length, bad.fatal[0]!.startsWith('ORG_TZ="Eastern"'), bad.warnings.some((w) => w.startsWith("PUBLIC_URL")), bad.warnings.some((w) => w.startsWith("SESSION_SECRET")),
+  ], [{ fatal: [], warnings: [] }, 4, true, true, true]);
+}
+
+section("Every environment variable is documented");
+{
+  // Read every variable the code reads; each must be in .env.example (commented out is fine).
+  const used = new Set<string>();
+  const walk = (dir: URL): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(new URL(`${e.name}/`, dir));
+      else if (e.name.endsWith(".ts")) {
+        const src = readFileSync(new URL(e.name, dir), "utf8");
+        for (const m of src.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)|\bopt\("([A-Z][A-Z0-9_]+)"|\benv: "([A-Z][A-Z0-9_]+)"/g)) used.add(m[1] ?? m[2] ?? m[3]!);
+      }
+    }
+  };
+  walk(new URL("../src/", import.meta.url));
+  const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  const documented = new Set([...example.matchAll(/^#?\s*([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1]!));
+  t("each variable the code reads is in .env.example, and nothing there is unused", [[...used].filter((v) => !documented.has(v)).sort(), [...documented].filter((v) => !used.has(v)).sort(), used.size > 30], [[], [], true]);
+}
+
+section("Claude models: one table");
+{
+  const saved = { a: process.env.ANTHROPIC_MODEL, i: process.env.IDEAS_MODEL };
+  delete process.env.ANTHROPIC_MODEL; delete process.env.IDEAS_MODEL;
+  const defaults = [modelFor("intake"), modelFor("ideas"), modelFor("storylab")];
+  process.env.ANTHROPIC_MODEL = "claude-sonnet-5-5";
+  const everywhere = [modelFor("intake"), modelFor("competitors")];
+  process.env.IDEAS_MODEL = "claude-haiku-4-5";
+  const own = [modelFor("ideas"), modelFor("finance")];
+  if (saved.a === undefined) delete process.env.ANTHROPIC_MODEL; else process.env.ANTHROPIC_MODEL = saved.a;
+  if (saved.i === undefined) delete process.env.IDEAS_MODEL; else process.env.IDEAS_MODEL = saved.i;
+  t("each feature's default, ANTHROPIC_MODEL for all, a feature's own variable for one", [defaults, everywhere, own], [["claude-opus-5", "claude-opus-5-5", "claude-opus-5-5"], ["claude-sonnet-5-5", "claude-sonnet-5-5"], ["claude-haiku-4-5", "claude-sonnet-5-5"]]);
+}
+
 section("Database: channel names");
 {
   // Every column that stores a channel's name, read from the migrations themselves.
@@ -2352,7 +2395,7 @@ const pos = myPosition(cStats);
 t("my position: every channel's real numbers beside the competitors' median, no made-up rank", [pos.stats.map((x) => x.channel.id), pos.niche.medianViews], [[1, 2, 3, 9], 10_000]);
 const working = whatsWorking(cRows, { days: 90, outlier: 2 });
 t("what's working: what outliers share more than the niche, from 2+ channels", [working.map((p) => `${p.dimension}:${p.value}`).slice(0, 2), working.some((p) => p.dimension === "trend")], [["character:Spider-Man", "franchise:Jujutsu Kaisen"], false]);
-const emerge = emergingTopics([...cRows, ...[1, 2, 3].map((ch) => ({ ...rowOf(`b${ch}0`), ageDays: 5, concept: cCon("e", "Invincible", "Dragon Ball") }))], { outlier: 2 });
+const emerge = emergingTopics([...cRows, ...[1, 2, 3].map((ch) => ({ ...rowOf(`b${ch}0`), ageDays: 5, concept: cCon("e", "Invincible", "Dragon Ball") }))]);
 const emergeC = emerge.find((e) => e.kind === "concept");
 t("emerging: three channels on one thing in two weeks, flagged as early", [emergeC?.label, emergeC?.channels, emergeC?.fact.startsWith("3 channels uploaded 3 videos on Invincible × Dragon Ball in the last 14 days")], ["Invincible × Dragon Ball", 3, true]);
 

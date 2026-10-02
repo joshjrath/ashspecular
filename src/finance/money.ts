@@ -37,9 +37,6 @@ export const fmtPct = (x: number | null, digits = 1) => (x === null || !Number.i
 
 export const isMonth = (s: unknown): s is string => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
 
-/** "2026-09-14" → "2026-09". */
-export const monthOfDate = (date: string) => date.slice(0, 7);
-
 /** "2026-09" → "2026-09-01". */
 export const monthStart = (m: string) => `${m}-01`;
 

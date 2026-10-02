@@ -179,9 +179,6 @@ export function catalogColour(name: string): string {
 /** Whether a channel is one of the catalog's own (not added on the board). */
 export const isCatalogChannel = (id: string) => ORIGINAL.has(id);
 
-/** The name a catalog channel had in the code, whatever it's called now. */
-export const originalName = (id: string) => ORIGINAL.get(id)?.name ?? null;
-
 /**
  * A channel added on the board, or one of the catalog's renamed there. Kept
  * in the database (db/channels.ts) and applied to CHANNELS in memory, so
@@ -284,12 +281,6 @@ export function applyChannelColours(colours: Map<string, string>): void {
 
 export function category(id: string): Category | undefined {
   return CATEGORIES.find((c) => c.id === id);
-}
-
-export function channelByName(name: string | null): Channel | undefined {
-  if (!name) return undefined;
-  const needle = name.trim().toLowerCase();
-  return CHANNELS.find((c) => c.name.toLowerCase() === needle);
 }
 
 /** The phrase as a whole word run: "torch" matches "torch is at 3", never "torchlight". */

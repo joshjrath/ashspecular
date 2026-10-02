@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits, Partials } from "discord.js";
+import { config } from "../config.js";
 
 export const client = new Client({
   intents: [
@@ -12,15 +13,8 @@ export const client = new Client({
   partials: [Partials.Channel, Partials.Message],
 });
 
-const INTAKE = (process.env.INTAKE_CHANNEL_IDS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-const TASKS = (process.env.TASKS_CHANNEL_IDS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+const INTAKE = config.intakeChannelIds;
+const TASKS = config.tasksChannelIds;
 
 /**
  * The to-do channel: anything posted or forwarded there becomes a task, not a

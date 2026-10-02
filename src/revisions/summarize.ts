@@ -4,13 +4,11 @@
  * uses it to read messages); by rules otherwise. Either way the score itself
  * is worked out in score.ts, so it's the same sum every time.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { anthropic } from "../ai/claude.js";
+import { anthropic, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { THEMES, ruleSummary, scoreRevision, type PastVideo, type RevComment, type ScoreBreakdown } from "./score.js";
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
 const Output = z.object({
   summary: z.string().describe("Three or four plain sentences: what the notes ask for, the biggest problems first, and anything the editor was told on earlier videos."),
@@ -44,7 +42,7 @@ export async function summarize(opts: {
   if (process.env.ANTHROPIC_API_KEY?.trim() && comments.length) {
     try {
       const res = await anthropic().messages.parse({
-        model: MODEL,
+        model: modelFor("revisions"),
         max_tokens: 4096,
         output_config: { effort: "low", format: zodOutputFormat(Output) },
         messages: [

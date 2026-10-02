@@ -48,14 +48,12 @@ const list = (xs: string[], n = xs.length) => {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** "Infinity (automatic)" → "Infinity" for use inside a sentence. */
 const bare = (s: string) => s.replace(/\s*\([^)]*\)/g, "").trim();
-const plural = (s: string) => (/(s|x)$/.test(s) ? s : /y$/.test(s) && !/[aeiou]y$/.test(s) ? s.slice(0, -1) + "ies" : /o$/.test(s) ? s + "es" : s + "s");
 const titleCase = (s: string) => s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
 const who = (m: { name: string; role: string }) => `${m.name} (${m.role})`;
 
 function titleFor(format: FormatId, hero: Hero | null, world: World | null, power: Power | null, target: Hero | null): { title: string; alternates: string[] } {
   const h = hero?.name ?? "YOU";
   const w = world?.name ?? "";
-  const p = power ? power.name.replace(/^(the|a) /i, "") : "";
   const P = power ? titleCase(power.name) : "";
   switch (format) {
     case "insert":
@@ -166,8 +164,6 @@ function planParts(format: Format, hero: Hero | null, world: World | null, power
     case "insert": {
       if (!hero || !w) return [];
       const insider = w.ladder.find((r) => /insider|truth|done with/i.test(r.test));
-      const leader = w.faction?.members[0];
-      const conscience = w.faction?.members[1];
       return [
         { name: "Arrival", at: [1], names: [], plan: `Lock the version: ${hero.version}. {He} lands ${w.arrival}. First public moment: ${w.incident} — with ${bare(L[0]!)}, in front of people, without anyone understanding what they just saw.` },
         { name: `${cap(w.institution.name)} can't classify {him}`, at: [1, 2], names: [w.institution.name], plan: `${cap(w.institution.cantClassify)}. That one fact is the engine of the script: ${hero.engine}.` },

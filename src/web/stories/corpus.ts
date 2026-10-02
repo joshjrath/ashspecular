@@ -298,6 +298,3 @@ export function partFor(script: Script, at: number[], names: string[] = []): Sec
 export function firstSentence(section: Section): string {
   return sentencesOf(section.paras.join(" "))[0] ?? "";
 }
-export function lastSentence(section: Section): string {
-  return sentencesOf(section.paras.join(" ")).at(-1) ?? "";
-}

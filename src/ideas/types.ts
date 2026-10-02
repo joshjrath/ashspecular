@@ -60,7 +60,6 @@ export const COMEDY_ENGINES = [
   "dramatic_irony", "relationship_dynamic", "character_interaction", "visual_gag", "escalation",
   "counterpart_meeting", "absurd_logic", "emotional_twist", "parody", "fourth_wall_meta", "other",
 ] as const;
-export type ComedyEngine = (typeof COMEDY_ENGINES)[number];
 export const engineLabel = (e: string) => e.replace(/_/g, " ");
 
 /** Why an idea was turned down — kept, so recommendations can learn from it later. */
@@ -89,7 +88,6 @@ export const IDEA_STATUSES = [
   { id: "published", label: "Published" },
   { id: "cancelled", label: "Cancelled" },
 ] as const;
-export type IdeaStatus = (typeof IDEA_STATUSES)[number]["id"] | "draft";
 
 /** The Bits channels, from the catalog: the feed's channel filter and the AI's choices. */
 export const bitsChannels = (): string[] => CHANNELS.filter((c) => c.category === "bits").map((c) => c.name);

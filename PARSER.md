@@ -165,7 +165,6 @@ Discord, paste it into a new case file before fixing the prompt.
 
 ## Status
 
-- `src/catalog.ts`, `src/parse/*`, `scripts/*` — current.
-- `src/_legacy/` — the first-pass Discord bot and web board, written against
-  the earlier model. Excluded from the build, kept for the plumbing. It gets
-  rebuilt on the new record once the eval score holds up.
+- `src/catalog.ts`, `src/parse/*`, `scripts/*` — current. The parser feeds the
+  bot (`src/bot/`) and the board (`src/web/`); see ARCHITECTURE.md for how
+  the pieces fit.

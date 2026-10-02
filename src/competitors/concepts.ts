@@ -15,14 +15,13 @@
  * numbers); without a key, Story Lab's lore reads what it can (rules).
  */
 import { z } from "zod";
-import { askClaude, canUseClaude, type Usage } from "../ai/claude.js";
+import { askClaude, modelFor, type Usage } from "../ai/claude.js";
 import { readTitle } from "../web/stories/lore.js";
 import { formatOfTitle } from "../web/stories/formats.js";
 import { titleShape } from "../web/stories/lab.js";
 import type { Concept } from "../db/competitors.js";
 
 export const CONCEPT_VERSION = "concepts-1";
-export const competitorsModel = () => process.env.COMPETITORS_MODEL?.trim() || process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 
 export const FORMATS = ["what_if", "power", "survival", "versus", "ranking", "explainer", "reborn", "alternate_history", "you", "story", "other"] as const;
 export const FORMAT_LABEL: Record<string, string> = {
@@ -92,7 +91,7 @@ export async function readConcepts(items: Array<{ ref: string; title: string }>,
     "TITLES:",
     ...[...ids].map(([id, it]) => `${id}: ${it.title}`),
   ].join("\n");
-  const { parsed, usage, model } = await askClaude({ model: competitorsModel(), system: SYSTEM, schema: Read, effort: "low", maxTokens: 16000, content: [{ type: "text", text }], what: "read these titles" });
+  const { parsed, usage, model } = await askClaude({ model: modelFor("competitors"), system: SYSTEM, schema: Read, effort: "low", maxTokens: 16000, content: [{ type: "text", text }], what: "read these titles" });
   const concepts: Concept[] = [];
   for (const v of parsed.videos) {
     const it = ids.get(v.id);
@@ -108,5 +107,3 @@ export async function readConcepts(items: Array<{ ref: string; title: string }>,
   for (const it of items) if (!concepts.some((c) => c.ref === it.ref)) concepts.push(ruleConcept(it.ref, it.title));
   return { concepts, usage, model };
 }
-
-export const canReadWithAi = canUseClaude;

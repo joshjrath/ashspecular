@@ -309,7 +309,7 @@ export interface Emerging {
 }
 
 /** Several channels picking something up in the last two weeks, doing above their normal where it can be told yet. */
-export function emergingTopics(rows: Row[], o: { outlier: number }): Emerging[] {
+export function emergingTopics(rows: Row[]): Emerging[] {
   const comp = rows.filter((r) => !r.channel.mine && r.concept);
   const keysOf = (r: Row): Array<[Emerging["kind"], string]> => [
     ...(conceptKey(r.concept!) ? [["concept", conceptLabel(r.concept!)] as [Emerging["kind"], string]] : []),

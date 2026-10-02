@@ -519,16 +519,6 @@ export async function listOpen(limit = 200): Promise<StoredRecord[]> {
   return rows.map(hydrate);
 }
 
-/** Open work with a voiceover deadline, soonest first — the spine of the day. */
-export async function listVoQueue(limit = 50): Promise<StoredRecord[]> {
-  const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${LIVE} AND vo_due IS NOT NULL
-     ORDER BY vo_due ASC LIMIT $1`,
-    [limit],
-  );
-  return rows.map(hydrate);
-}
-
 /** Everything carrying a Frame.io link — the thing that used to live in DMs. */
 /**
  * Open revisions — new cuts to review, soonest deadline first. Their own
@@ -968,14 +958,4 @@ export async function calendarRange(
   );
 
   return rows.map((r) => ({ day: r.day, record: hydrate(r) }));
-}
-
-/** One day's worth, for the day page a calendar cell links to. */
-export async function listByDay(
-  date: string,
-  mode: CalendarMode,
-  zone: string,
-): Promise<StoredRecord[]> {
-  const entries = await calendarRange(date, date, mode, zone);
-  return entries.map((e) => e.record);
 }

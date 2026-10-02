@@ -11,7 +11,8 @@ import {
   retryErrors, getIdea, type FeedTab, type IdeaSettings,
 } from "../../db/ideas.js";
 import { addManualSource, ideaTick, readerState } from "../../jobs/ideas.js";
-import { canAnalyze, ideasModel } from "../../ideas/analyze.js";
+import { canAnalyze } from "../../ideas/analyze.js";
+import { modelFor } from "../../ai/claude.js";
 import { tumblrKey } from "../../ideas/tumblr.js";
 import { IDEA_STATUSES, REJECT_BY_ID, bitsChannels, isClassification } from "../../ideas/types.js";
 import type { Shell } from "../page.js";
@@ -191,7 +192,7 @@ export function registerIdeaFeed(app: FastifyInstance, shell: (active: string) =
     return html(
       reply,
       renderIdeaSources(s, {
-        feeds, settings, usage, tumblr: Boolean(tumblrKey()), ai: canAnalyze(), model: ideasModel(), reader: readerState(),
+        feeds, settings, usage, tumblr: Boolean(tumblrKey()), ai: canAnalyze(), model: modelFor("ideas"), reader: readerState(),
         flash: str(request.query.msg).slice(0, 300) || undefined,
       }),
     );

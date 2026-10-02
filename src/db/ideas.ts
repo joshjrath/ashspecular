@@ -51,10 +51,6 @@ export async function listFeeds(): Promise<Feed[]> {
   const { rows } = await pool.query(`${FEED_SELECT} ORDER BY f.channels[1] NULLS LAST, lower(f.query)`);
   return rows.map(feedOf);
 }
-export async function getFeed(id: number): Promise<Feed | null> {
-  const { rows } = await pool.query(`${FEED_SELECT} WHERE f.id = $1`, [id]);
-  return rows[0] ? feedOf(rows[0]) : null;
-}
 /** Enabled feeds due a read, the most overdue first. */
 export async function dueFeeds(limit = 6): Promise<Feed[]> {
   const { rows } = await pool.query(`${FEED_SELECT} WHERE f.enabled AND f.next_poll_at <= now() ORDER BY f.next_poll_at LIMIT $1`, [limit]);
@@ -474,10 +470,6 @@ export async function reclassify(id: number, classification: string): Promise<vo
   await pool.query("UPDATE idea_sources SET classification = $2, classification_manual = true, updated_at = now() WHERE id = $1", [id, classification]);
   await pool.query("UPDATE ideas SET classification = $2, updated_at = now() WHERE source_id = $1", [id, classification]);
   await logDecision({ sourceId: id, action: "reclassify", reason: classification });
-}
-export async function setChannel(id: number, channel: string): Promise<void> {
-  await pool.query("UPDATE idea_sources SET channel = $2, updated_at = now() WHERE id = $1", [id, channel]);
-  await logDecision({ sourceId: id, action: "channel", reason: channel });
 }
 export async function verifyCanon(id: number, on: boolean): Promise<void> {
   await pool.query("UPDATE idea_sources SET canon_verified_at = CASE WHEN $2 THEN now() END, updated_at = now() WHERE id = $1", [id, on]);

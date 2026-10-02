@@ -7,7 +7,7 @@ import { CATEGORIES, CHANNELS } from "../../catalog.js";
 import type { Expense, Income, Lists, Person, Recurring, VoiceNote } from "../../db/finance.js";
 import { EXPENSE_TYPES, EXPENSE_TYPE, FLAGS, type Thresholds } from "../../finance/metrics.js";
 import { FREQUENCIES, FREQUENCY, fmtMoney, monthLabel, usDay } from "../../finance/money.js";
-import { PAY_MODELS, PAY_MODEL, describePay, payChannels, tiersText, type PayModel } from "../../finance/pay.js";
+import { PAY_MODELS, PAY_MODEL, describePay, payChannels, tiersText } from "../../finance/pay.js";
 import { ORG_TZ, dateIn } from "../../parse/derive.js";
 import { channelColour, type Shell } from "../page.js";
 import { esc } from "../html.js";
@@ -488,8 +488,6 @@ export function renderPerson(shell: Shell, d: PersonData): string {
       <div class="fbtns"><button class="clear secondary">Save profile</button></div></form></section>`;
   return financePage(shell, "contractors", p.name, body);
 }
-
-export const modelSummary = (m: PayModel | null) => describePay(m);
 
 // ── settings ───────────────────────────────────────────────────────────────
 

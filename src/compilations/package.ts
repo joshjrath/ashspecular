@@ -7,8 +7,7 @@
  *
  * Never from titles alone: every source needs its text first.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { anthropic } from "../ai/claude.js";
+import { anthropic, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -41,7 +40,6 @@ const PackageSchema = z.object({
     .describe("One transition into each source after the first, in play order."),
 });
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
 /** Stable so it caches: the sources, the title and the voice samples go in the user turn. */
 const SYSTEM = `You put together the editor package for a "Full Movie" compilation on Specular, a YouTube channel of narrated what-if stories about anime, comic and game characters. A Movie joins four or five of the channel's own videos, back to back, under one umbrella title.
@@ -71,7 +69,7 @@ export const canWritePackages = () => Boolean(process.env.ANTHROPIC_API_KEY?.tri
 export async function writePackage(title: string, sources: PackageSource[], voice: string[]): Promise<EditorPackage> {
   if (!canWritePackages()) throw new Error("Writing the intro and transitions needs ANTHROPIC_API_KEY set on the server.");
   const response = await anthropic().messages.parse({
-    model: MODEL,
+    model: modelFor("compilations"),
     max_tokens: 8192,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     output_config: { effort: "medium", format: zodOutputFormat(PackageSchema) },

@@ -2,30 +2,32 @@ import { Events } from "discord.js";
 import { client, isIntakeChannel } from "./client.js";
 import { registerIntake } from "./intake.js";
 import { guardProcess } from "../process.js";
+import { checkConfig, config, hasDatabase } from "../config.js";
+import { modelFor } from "../ai/claude.js";
 
 guardProcess();
-
-function required(name: string): string {
-  const v = process.env[name]?.trim();
-  if (!v) {
-    console.error(`Missing ${name}. Copy .env.example to .env and fill it in.`);
-    process.exit(1);
-  }
-  return v;
+checkConfig();
+// Run on its own (npm run bot), the bot gets the database ready itself: the
+// channels renamed and the keys set in Settings. Under start.ts it's done already.
+if (hasDatabase) {
+  const { prepareDatabase } = await import("../db/prepare.js");
+  await prepareDatabase();
 }
 
-const token = required("DISCORD_TOKEN");
-const hasModel = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+const token = config.discordToken;
+if (!token) {
+  console.error("Missing DISCORD_TOKEN. Copy .env.example to .env and fill it in.");
+  process.exit(1);
+}
 
 registerIntake();
 
 client.once(Events.ClientReady, (ready) => {
-  const ids = (process.env.INTAKE_CHANNEL_IDS ?? "").trim();
   console.log(`[bot] logged in as ${ready.user.tag}`);
-  console.log(`[bot] intake: ${ids || "every channel it can see"}`);
+  console.log(`[bot] intake: ${config.intakeChannelIds.join(",") || "every channel it can see"}`);
   console.log(
-    hasModel
-      ? `[bot] model: ${process.env.ANTHROPIC_MODEL ?? "claude-opus-5"}`
+    process.env.ANTHROPIC_API_KEY?.trim()
+      ? `[bot] model: ${modelFor("intake")}`
       : "[bot] no API key — assignment posts and Frame.io links parse by pattern; prose is filed by channel name only",
   );
   if (!isIntakeChannel("probe")) console.log("[bot] (channel filter active)");

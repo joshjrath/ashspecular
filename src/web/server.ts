@@ -69,10 +69,10 @@ import {
 } from "../parse/derive.js";
 import { fetchScriptReport } from "./scriptcheck.js";
 import cron from "node-cron";
-import { latestUploads, listChannelLinks, listUploads, setChannelLink, storiesChannels, syncUploads, type Upload } from "../jobs/youtube.js";
+import { latestUploads, listChannelLinks, listUploads, setChannelLink, syncUploads, type Upload } from "../jobs/youtube.js";
 import { addDays, cadenceFor, dailyFor, dayOf, daysBetween, usualGap } from "./cadence.js";
 import { GAP_HORIZON_DAYS, nextToAssign, uploadGaps, type UploadGap } from "./gaps.js";
-import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, categoryOfChannel, channelsIn, everyFor, ownPaceChannels, perDayFor, setOwnPaces } from "./targets.js";
+import { UPLOAD_CATEGORIES, UPLOAD_TARGETS, channelsIn, everyFor, ownPaceChannels, perDayFor, setOwnPaces } from "./targets.js";
 import { gamingSeries, nextUp, type SeriesVideo } from "./gaming/series.js";
 import { analyzeIdeas, checkIdea } from "./ideas.js";
 import { boardOpenings, boardScripts, corpus, learnsFrom, normsFor, setBoardScripts } from "./stories/corpus.js";

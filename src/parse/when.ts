@@ -75,10 +75,6 @@ function ymd(dateISO: string): Ymd {
   return { y: y!, m: m!, d: d! };
 }
 
-function iso(v: Ymd): string {
-  return `${v.y}-${String(v.m).padStart(2, "0")}-${String(v.d).padStart(2, "0")}`;
-}
-
 function noon(v: Ymd): Date {
   return new Date(Date.UTC(v.y, v.m - 1, v.d, 12));
 }

@@ -11,6 +11,29 @@ import type { z } from "zod";
 
 export const canUseClaude = () => Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 
+/**
+ * Which Claude model each feature asks: the one place that's decided.
+ * ANTHROPIC_MODEL sets it for every feature; a feature's own variable
+ * (IDEAS_MODEL, COMPETITORS_MODEL, STORYLAB_MODEL) overrides that for it
+ * alone. With neither set, the first features keep claude-opus-5 and the
+ * later ones claude-opus-5-5, as each always has.
+ */
+const FEATURE_MODELS = {
+  intake: { env: "", fallback: "claude-opus-5" },
+  revisions: { env: "", fallback: "claude-opus-5" },
+  finance: { env: "", fallback: "claude-opus-5" },
+  compilations: { env: "", fallback: "claude-opus-5" },
+  ideas: { env: "IDEAS_MODEL", fallback: "claude-opus-5-5" },
+  competitors: { env: "COMPETITORS_MODEL", fallback: "claude-opus-5-5" },
+  storylab: { env: "STORYLAB_MODEL", fallback: "claude-opus-5-5" },
+} as const;
+export type ClaudeFeature = keyof typeof FEATURE_MODELS;
+
+export function modelFor(feature: ClaudeFeature): string {
+  const f = FEATURE_MODELS[feature];
+  return (f.env ? process.env[f.env]?.trim() : "") || process.env.ANTHROPIC_MODEL?.trim() || f.fallback;
+}
+
 /** Models that take the server-side refusal fallback. */
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
 

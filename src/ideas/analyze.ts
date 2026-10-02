@@ -13,18 +13,17 @@
  *
  * The AI never produces the Idea Score itself or any performance number: it
  * rates parts, and the score is worked out from them in code (score.ts).
- * The model is ideasModel() (IDEAS_MODEL or ANTHROPIC_MODEL overrides the
+ * The model is modelFor("ideas") (IDEAS_MODEL or ANTHROPIC_MODEL overrides the
  * default), low effort for the quick look, medium for the full read. Refusal
  * fallback is on where the model supports it: if the model declines a post,
  * another model answers in the same call.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { ClaudeError as AnalysisError, askClaude, canUseClaude, type Usage } from "../ai/claude.js";
+import { ClaudeError as AnalysisError, askClaude, canUseClaude, modelFor, type Usage } from "../ai/claude.js";
 import { z } from "zod";
 import { CLASSIFICATION_IDS, COMEDY_ENGINES } from "./types.js";
 import type { HistoryItem } from "./similar.js";
 
-export const ideasModel = () => process.env.IDEAS_MODEL?.trim() || process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 export const canAnalyze = canUseClaude;
 
 export type { Usage };
@@ -198,7 +197,7 @@ function ask<T>(opts: {
   maxTokens: number;
   content: Anthropic.Beta.BetaContentBlockParam[];
 }): Promise<{ parsed: T; model: string; usage: Usage }> {
-  return askClaude({ ...opts, model: ideasModel(), what: "analyse this post" });
+  return askClaude({ ...opts, model: modelFor("ideas"), what: "analyse this post" });
 }
 
 /** The quick look at a batch of posts. */

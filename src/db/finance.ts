@@ -7,7 +7,6 @@
  * time zone can move a day.
  */
 import { inTransaction, pool } from "./pool.js";
-import { CHANNELS } from "../catalog.js";
 import type { ExpenseFact, ExpenseType, Facts, IncomeFact, RecurringFact, Thresholds, ChannelMonth } from "../finance/metrics.js";
 import { DEFAULT_THRESHOLDS } from "../finance/metrics.js";
 import { addMonths, monthEnd, monthStart, monthlyEquivalent, nextBill } from "../finance/money.js";
@@ -753,9 +752,6 @@ export async function loadFacts(months: string[], tz: string): Promise<Facts> {
   };
 }
 
-/** The finance channels: every catalog channel, in catalog order. */
-export const financeChannels = () => CHANNELS.map((c) => ({ name: c.name, category: c.category, colour: c.color }));
-
 /** Open records for a channel, newest first — to attribute an expense to a video. */
 export async function recordsForAttribution(q: string, limit = 40): Promise<Array<{ id: number; label: string; channel: string | null }>> {
   const { rows } = await pool.query(
@@ -820,13 +816,4 @@ export async function dismissVoiceNote(id: number): Promise<void> {
 export async function clearReview(type: "expense" | "income" | "recurring", id: number): Promise<void> {
   const table = type === "expense" ? "fin_expenses" : type === "income" ? "fin_income" : "fin_recurring";
   await pool.query(`UPDATE ${table} SET review = NULL WHERE id = $1`, [id]);
-}
-/** How many rows in each place are still marked to check. */
-export async function reviewCounts(): Promise<{ expense: number; income: number; recurring: number }> {
-  const { rows } = await pool.query(
-    `SELECT (SELECT COUNT(*) FROM fin_expenses WHERE cardinality(review) > 0) AS e,
-            (SELECT COUNT(*) FROM fin_income WHERE cardinality(review) > 0) AS i,
-            (SELECT COUNT(*) FROM fin_recurring WHERE cardinality(review) > 0) AS r`,
-  );
-  return { expense: Number(rows[0].e), income: Number(rows[0].i), recurring: Number(rows[0].r) };
 }

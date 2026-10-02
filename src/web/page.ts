@@ -5275,7 +5275,6 @@ function outlierPanel(
   perf: Map<string, Performance>,
   shorts: Map<string, ShortScore> | null,
   typical: { views: number; basis: string } | null,
-  now: Date,
 ): string {
   const scored = f.all
     .map((u) => ({ u, j: judged(u, perf, shorts) }))
@@ -5955,7 +5954,7 @@ export function renderUploads(
           : `<div class="utiles">${tiles}</div>${timeline}${focus ? "" : performers}${table}`
         : ""
     }
-    ${focus && linked.length ? outlierPanel(focus, perf, data.shorts?.scores ?? null, typical.get(focus.channel) ?? null, now) : ""}
+    ${focus && linked.length ? outlierPanel(focus, perf, data.shorts?.scores ?? null, typical.get(focus.channel) ?? null) : ""}
     ${focus && linked.length ? everyVideoPanel(focus, perf, data.shorts?.scores ?? null, now) : ""}
     ${focus?.lab ? channelLabPanel(focus) : ""}
     ${focus?.next ? gamingNextPanel(focus, now) : ""}

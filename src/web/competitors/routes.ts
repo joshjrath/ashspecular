@@ -52,7 +52,7 @@ export function registerCompetitors(app: FastifyInstance, shell: (active: string
       hottest: topVideos(rows, { sort: "multiple", days: q.days, competitorsOnly: true, limit: 8 }).filter((r) => (r.multiple ?? 0) > 1),
       gaps: conceptGaps(rows, n.planned, { days: q.days, outlier: s.outlier, staleMonths: s.staleMonths, now: n.now }),
       working: whatsWorking(rows, { days: q.days, outlier: s.outlier }),
-      emerging: emergingTopics(rows, { outlier: s.outlier }),
+      emerging: emergingTopics(rows),
       stats, position: myPosition(stats),
       recent: topVideos(rows, { sort: "date", days: null, competitorsOnly: true, limit: 8 }),
       alerts, read, status: { key: st.key, ai: st.ai, quotaUsed: st.quota, aiUsed: st.calls },

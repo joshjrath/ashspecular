@@ -15,9 +15,10 @@
  * from the board's secret: change the password and the old link stops working.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { CATEGORIES, CHANNELS } from "../catalog.js";
+import { CATEGORIES } from "../catalog.js";
 import { config } from "../config.js";
 import type { StoredRecord } from "../db/records.js";
+import { ORG_TZ } from "../parse/derive.js";
 
 export function feedKey(): string {
   const set = process.env.CALENDAR_FEED_KEY?.trim();
@@ -34,7 +35,7 @@ export function checkFeedKey(given: string | undefined): boolean {
 
 /** RFC 5545 text: escape \ ; , and newlines. */
 function text(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
 /** Lines are folded at 75 octets, continuation lines start with a space. */
@@ -112,7 +113,7 @@ export function buildIcs(
     "METHOD:PUBLISH",
     "X-WR-CALNAME:Specular",
     "X-WR-CALDESC:Air dates and deadlines from the Specular board",
-    "X-WR-TIMEZONE:America/New_York",
+    `X-WR-TIMEZONE:${ORG_TZ}`,
     // A hint to calendar apps to check back hourly; Google sets its own pace.
     "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
     "X-PUBLISHED-TTL:PT1H",
@@ -177,6 +178,3 @@ export function buildIcs(
   out.push("END:VCALENDAR");
   return out.map(fold).join("\r\n") + "\r\n";
 }
-
-/** Channel names for the subscribe panel's category checkboxes. */
-export const feedCategories = () => CATEGORIES.map((c) => ({ id: c.id, label: c.label, channels: CHANNELS.filter((ch) => ch.category === c.id).length }));

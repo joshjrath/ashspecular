@@ -1,5 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { anthropic } from "../ai/claude.js";
+import { anthropic, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { CATEGORIES, CHANNELS } from "../catalog.js";
 import { ORG_TZ, TEAM_TZ, dateIn } from "./derive.js";
@@ -10,7 +9,6 @@ import { parsePattern } from "./structured.js";
 import { readLabelledTimes } from "./when.js";
 import { enrichWithFrame } from "./frameio.js";
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
 
 
 /**
@@ -119,7 +117,7 @@ async function classifyText(input: ClassifyInput): Promise<ClassifyResult> {
 
   try {
     const response = await anthropic().messages.parse({
-      model: MODEL,
+      model: modelFor("intake"),
       max_tokens: 8192,
       system: [{ type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } }],
       output_config: { effort: "low", format: zodOutputFormat(ExtractionSchema) },
@@ -147,7 +145,7 @@ async function classifyText(input: ClassifyInput): Promise<ClassifyResult> {
     return {
       extraction: response.parsed_output,
       parsedBy: "llm",
-      model: MODEL,
+      model: modelFor("intake"),
       raw,
       usage: {
         input: response.usage.input_tokens,

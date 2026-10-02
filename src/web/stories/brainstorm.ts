@@ -13,11 +13,10 @@
  * (lab.ts writtenIdea), never from Claude.
  */
 import { z } from "zod";
-import { askClaude, type Usage } from "../../ai/claude.js";
+import { askClaude, modelFor, type Usage } from "../../ai/claude.js";
 import { publicMatch, norm, type PublicVideo } from "./lab.js";
 import { fitsChannel, focusSource, piecesOfTitle, type ChannelProfile } from "./domain.js";
 
-export const storyModel = () => process.env.STORYLAB_MODEL?.trim() || process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 
 /** The most calls a day, all channels together (STORYLAB_AI_DAILY). */
 export const dailyCap = () => Math.max(0, Math.round(Number(process.env.STORYLAB_AI_DAILY) || 30));
@@ -165,7 +164,7 @@ export async function writeIdeasFor(
   count = 6,
 ): Promise<{ ideas: z.infer<typeof Written>["ideas"]; model: string; usage: Usage }> {
   const { parsed, model, usage } = await askClaude({
-    model: storyModel(),
+    model: modelFor("storylab"),
     system: storySystem(network),
     schema: Written,
     effort: "medium",

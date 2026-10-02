@@ -196,9 +196,6 @@ export async function listSkips(kind: Kind): Promise<Set<string>> {
 export async function addSkip(kind: Kind, combo: string): Promise<void> {
   await pool.query("INSERT INTO compilation_skips (kind, combo) VALUES ($1, $2) ON CONFLICT DO NOTHING", [kind, combo]);
 }
-export async function clearSkips(kind: Kind): Promise<void> {
-  await pool.query("DELETE FROM compilation_skips WHERE kind = $1", [kind]);
-}
 
 /** Days already holding a compilation of this kind (planned or posted), and days off. */
 export async function takenDays(kind: Kind): Promise<{ taken: Set<string>; last: string | null; daysOff: Set<string> }> {

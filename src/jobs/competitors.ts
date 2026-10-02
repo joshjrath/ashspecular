@@ -17,14 +17,14 @@
  *             every note citing the facts it rests on.
  */
 import { z } from "zod";
-import { askClaude, canUseClaude } from "../ai/claude.js";
+import { askClaude, canUseClaude, modelFor } from "../ai/claude.js";
 import {
   addUsage, dueChannels, getCompSettings, hasReadToday, listGroups, raiseAlert, recentVideoIds, saveChannelRead, saveConcepts, saveRead, saveVideos,
   conceptsToRead, usageToday, type CompChannel,
 } from "../db/competitors.js";
 import { pool } from "../db/pool.js";
 import { channelInfo, feedVideos, findChannel, uploadIds, videoDetails, ytKey } from "../competitors/youtube.js";
-import { CONCEPT_VERSION, competitorsModel, readConcepts, ruleConcept } from "../competitors/concepts.js";
+import { CONCEPT_VERSION, readConcepts, ruleConcept } from "../competitors/concepts.js";
 import { loadNiche } from "../competitors/niche.js";
 import { conceptGaps, emergingTopics, whatsWorking } from "../competitors/analysis.js";
 
@@ -128,7 +128,7 @@ async function raiseAlerts(): Promise<void> {
       await raiseAlert({ groupId: g.id, kind: "gap", key: gap.key, text: `New concept gap in ${g.name}: ${gap.label} — ${gap.channels} competitors with outliers, highest ${gap.maxMultiple.toFixed(1)}×`, href: `/competitors/${g.id}/gaps?c=${encodeURIComponent(gap.key)}` });
     }
     // Spreading and doing well: three channels, and above their normal where it can be told — never mere volume.
-    for (const e of emergingTopics(n.rows, { outlier: s.outlier }).filter((x) => x.channels >= 3 && (x.medianMultiple ?? 0) >= 1.5).slice(0, 2)) {
+    for (const e of emergingTopics(n.rows).filter((x) => x.channels >= 3 && (x.medianMultiple ?? 0) >= 1.5).slice(0, 2)) {
       await raiseAlert({ groupId: g.id, kind: "spread", key: `${e.kind}:${e.label.toLowerCase()}:${new Date().toISOString().slice(0, 7)}`, text: `${e.channels} ${g.name} competitors picked up ${e.label} in the last 14 days`, href: `/competitors/${g.id}#emerging` });
     }
   }
@@ -150,11 +150,11 @@ async function dailyReads(): Promise<void> {
     const add = (text: string) => facts.push({ id: `F${facts.length + 1}`, text });
     for (const gap of conceptGaps(n.rows, n.planned, { days: 30, outlier: s.outlier, staleMonths: s.staleMonths, now: n.now }).slice(0, 6)) add(`Concept gap — ${gap.why}`);
     for (const p of whatsWorking(n.rows, { days: 30, outlier: s.outlier }).slice(0, 8)) add(`Working — ${p.fact}`);
-    for (const e of emergingTopics(n.rows, { outlier: s.outlier }).slice(0, 5)) add(`Emerging — ${e.fact}`);
+    for (const e of emergingTopics(n.rows).slice(0, 5)) add(`Emerging — ${e.fact}`);
     if (facts.length < 2) continue;
     try {
       const { parsed, model } = await askClaude({
-        model: competitorsModel(),
+        model: modelFor("competitors"),
         system: `You read a YouTube niche's competitive facts for a studio that makes videos in it, and say what they mean: patterns worth acting on, what might explain them, what to be careful about. Write at most five short notes. Every note must cite the fact ids it rests on, and must not state any number, video or channel that isn't in the facts. Interpret; never invent performance. Don't recommend copying any one video; point at the repeatable pattern.`,
         schema: ReadSchema, effort: "medium", maxTokens: 8000, what: "interpret these facts",
         content: [{ type: "text", text: `NICHE: ${g.name}\n\nFACTS:\n${facts.map((f) => `${f.id}: ${f.text}`).join("\n")}` }],

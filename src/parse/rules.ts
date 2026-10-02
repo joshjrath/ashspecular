@@ -38,29 +38,6 @@ function safeHost(url: string): string {
   }
 }
 
-/**
- * Deterministic floor under the classifier: every URL present in the raw text
- * ends up on the item even if the model omitted one, and links keep the kind
- * the hostname actually implies rather than the model's guess.
- */
-export function reconcileLinks(
-  raw: string,
-  modelLinks: Extraction["links"],
-): Extraction["links"] {
-  const byUrl = new Map<string, Extraction["links"][number]>();
-
-  for (const link of modelLinks) {
-    if (!/^https?:\/\//i.test(link.url)) continue;
-    byUrl.set(link.url, { ...link, kind: classifyUrl(link.url) });
-  }
-  for (const url of extractUrls(raw)) {
-    if (!byUrl.has(url)) {
-      byUrl.set(url, { url, kind: classifyUrl(url), label: "link" });
-    }
-  }
-  return [...byUrl.values()];
-}
-
 /** A bare Frame.io link with no other words is always a revision to look at. */
 export function looksLikeBareRevision(raw: string): boolean {
   const urls = extractUrls(raw);
