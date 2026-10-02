@@ -6,7 +6,8 @@
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
 import { addMonths, fmtMoney, fmtPct, monthLabel } from "../../finance/money.js";
 import { FLAG, type Flag } from "../../finance/metrics.js";
-import { channelColour, esc, layout, pageHeader, type Shell } from "../page.js";
+import { channelColour, layout, pageHeader, type Shell } from "../page.js";
+import { esc } from "../html.js";
 
 export const FIN_TABS = [
   { id: "overview", label: "Overview", href: "/finance" },

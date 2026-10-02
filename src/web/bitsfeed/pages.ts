@@ -9,10 +9,10 @@ import type { ScoreBreakdown, SimilarMatch } from "../../ideas/score.js";
 import {
   CLASSIFICATIONS, CLASSIFICATION_BY_ID, IDEA_STATUSES, REJECT_BY_ID, REJECT_REASONS, bitsChannels, engineLabel, shortChannel,
 } from "../../ideas/types.js";
-import { channelColour, esc, layout, pageHeader, timeAgo, type Shell } from "../page.js";
+import { channelColour, layout, pageHeader, timeAgo, type Shell } from "../page.js";
+import { esc, safeUrl } from "../html.js";
 import { minutesIntoDay, pacedAllowance } from "../../ideas/pace.js";
 
-const safeUrl = (u: unknown) => (typeof u === "string" && /^https?:\/\//i.test(u) ? u : "");
 const pct = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? `${Math.round(Math.max(0, Math.min(1, n)) * 100)}%` : "—");
 const dayOf = (d: Date) => dateIn(ORG_TZ, d);
 const scoreColour = (n: number) => (n >= 85 ? "#3CCB84" : n >= 70 ? "#9BD35A" : n >= 50 ? "#E8C547" : "#E5534B");
@@ -120,7 +120,7 @@ function sourceBlock(s: SourceRow, full: boolean): string {
   ].filter(Boolean);
   const url = safeUrl(s.url);
   return `<div class="isrc">
-    ${imgs.length ? `<div class="iimgs n${imgs.length}">${imgs.map((m) => `<a href="${esc(m.url)}" target="_blank" rel="noreferrer"><img src="${esc(m.url)}" alt="${esc(m.alt ?? "")}" loading="lazy" referrerpolicy="no-referrer"></a>`).join("")}</div>` : ""}
+    ${imgs.length ? `<div class="iimgs n${imgs.length}">${imgs.map((m) => `<a href="${esc(safeUrl(m.url))}" target="_blank" rel="noreferrer"><img src="${esc(safeUrl(m.url))}" alt="${esc(m.alt ?? "")}" loading="lazy" referrerpolicy="no-referrer"></a>`).join("")}</div>` : ""}
     ${body ? (full || body.length <= 700 ? `<div class="ibody">${esc(body)}</div>` : `<details class="ibodyd"><summary><div class="ibody">${esc(short)}</div><span class="more">Show the whole post</span></summary><div class="ibody">${esc(body)}</div></details>`) : ""}
     <div class="ifrom">
       <span class="prov">${s.provider === "tumblr" ? "Tumblr" : s.provider === "manual" ? "Pasted in" : esc(s.provider)}</span>

@@ -8,7 +8,8 @@
 import { ORG_TZ, dateIn, usDate } from "../../parse/derive.js";
 import { compactViews } from "../performance.js";
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
-import { esc, layout, pageHeader, timeAgo, type Shell } from "../page.js";
+import { layout, pageHeader, timeAgo, type Shell } from "../page.js";
+import { esc, safeHref, safeUrl } from "../html.js";
 import type { Alert, CompChannel, CompSettings, Group, Read } from "../../db/competitors.js";
 import type { ChannelStats, Emerging, Gap, Pattern, Position, Row, SortKey, FormatPick } from "../../competitors/analysis.js";
 import { FORMAT_LABEL } from "../../competitors/concepts.js";
@@ -37,7 +38,7 @@ const cname = (c: CompChannel) => esc(c.title ?? c.boardChannel ?? c.input);
 /** A video: thumbnail, its multiple (relative) and its views (raw), kept apart. */
 export function videoCard(r: Row, s: CompSettings, compact = false): string {
   const h = heat(r.multiple, s);
-  return `<a class="cvid h-${h}${r.channel.mine ? " mine" : ""}" href="${esc(r.video.url)}" target="_blank" rel="noreferrer" title="${esc(r.video.title)}">
+  return `<a class="cvid h-${h}${r.channel.mine ? " mine" : ""}" href="${esc(safeUrl(r.video.url))}" target="_blank" rel="noreferrer" title="${esc(r.video.title)}">
     <span class="cthumb"><img src="${esc(safe(r.video.thumbnail) || `https://i.ytimg.com/vi/${r.video.videoId}/mqdefault.jpg`)}" alt="" loading="lazy" referrerpolicy="no-referrer">
       <b class="cmult" title="${r.multiple === null ? "Not enough of its channel's videos to compare with yet" : `Against its channel's normal, ${esc(r.basis ?? "")}`}">${mult(r.multiple)}</b>
       ${r.video.isShort ? `<i class="cshort">Short</i>` : ""}</span>
@@ -117,7 +118,7 @@ export function renderNiche(shell: Shell, d: NichePage): string {
       d.status.key ? `YouTube API · ${d.status.quotaUsed.toLocaleString("en-US")} of ${s.quota.toLocaleString("en-US")} quota units today` : `<b>No YouTube key</b> (<a href="/settings#key-youtube">add one in Settings</a>): only each channel's latest 15 videos (free feed), no durations or subscribers`
     }${failing.length ? ` · <span class="cerr">${failing.length} channel${failing.length === 1 ? "" : "s"} couldn't be read</span>` : ""}</p>`;
   const alerts = d.alerts.filter((a) => !a.seenAt).slice(0, 5);
-  const insight = alerts.length ? `<section class="cinsights">${alerts.map((a) => `<a href="${esc(a.href ?? "#")}"${a.href?.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}><i class="k-${esc(a.kind)}"></i>${esc(a.text)}</a>`).join("")}</section>` : "";
+  const insight = alerts.length ? `<section class="cinsights">${alerts.map((a) => `<a href="${esc(safeHref(a.href) || "#")}"${a.href?.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}><i class="k-${esc(a.kind)}"></i>${esc(a.text)}</a>`).join("")}</section>` : "";
   const hottest = `<section class="panel" id="hottest"><h2>Hottest outliers <span class="sub">— against each video's own channel's normal, not raw views</span><a class="cmore" href="${esc(qs(gid, d.q, { sort: "multiple" }, "/videos"))}">All top videos →</a></h2>
       ${d.hottest.length ? `<div class="cgrid">${d.hottest.map((r) => videoCard(r, s)).join("")}</div>` : `<p class="empty">No competitor video scored above its channel's normal in this window yet. A channel needs a few videos at a known age before its videos can be compared — see Data below.</p>`}</section>`;
   const gaps = `<section class="panel" id="gaps"><h2>Top concept gaps <span class="sub">— working for competitors, not covered by your channels</span><a class="cmore" href="${esc(qs(gid, d.q, {}, "/gaps"))}">View all gaps →</a></h2>

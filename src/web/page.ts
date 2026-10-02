@@ -48,14 +48,8 @@ import type { AiIdeaRow } from "../db/storylab.js";
 import { FORMAT_BY_ID, type Format } from "./stories/formats.js";
 import { HEROES, POWERS, WORLDS, type Hero, type World } from "./stories/lore.js";
 import type { CalendarEntry, CalendarMode, DayBucket, Notice, NoticeKind, Stats, StoredRecord } from "../db/records.js";
+import { esc, jsonForScript, safeHref, safeUrl } from "./html.js";
 
-export function esc(s: unknown): string {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 const COLOURS: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.id, c.color]),
@@ -2871,7 +2865,7 @@ function row(r: StoredRecord): string {
   for (const l of r.links) {
     const label = l.kind === "frameio" ? `Frame.io${r.version ? ` v${r.version}` : ""}` : l.label || l.kind;
     meta.push(
-      `<a class="lnk ${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.label || l.url)}">${esc(label)}</a>`,
+      `<a class="lnk ${esc(l.kind)}" href="${esc(safeUrl(l.url))}" target="_blank" rel="noreferrer" title="${esc(l.label || l.url)}">${esc(label)}</a>`,
     );
   }
   // A revision is a link to watch; there's nothing about it to double-check.
@@ -3133,7 +3127,7 @@ function scriptMark(r: StoredRecord, iconOnly = false): string {
   if (r.batchNo || r.kind === "review") return "";
   const hit = scriptFor({ id: r.id, code: r.code, title: r.title });
   if (hit) {
-    return `<a class="scriptmark has${iconOnly ? " icon" : ""}" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}${iconOnly ? "" : "Script"}</a>`;
+    return `<a class="scriptmark has${iconOnly ? " icon" : ""}" href="${esc(safeHref(hit.href))}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}${iconOnly ? "" : "Script"}</a>`;
   }
   // "No script · waiting" already says it louder.
   if (r.noScriptAt && r.status === "open") return "";
@@ -3441,7 +3435,7 @@ function revMini(r: StoredRecord): string {
     `<span class="rv">${REV_ICON}v${r.version ?? 1}</span>`,
     typeof r.reviewScore === "number" ? `<a class="rscore" href="/r/${r.id}#summary" style="--sc:${revColour(r.reviewScore)}">${esc(fmtScore(r.reviewScore))}/10</a>` : "",
     r.channel ? `<span class="rch" style="--ch:${channelColour(r.channel)}"><i></i>${esc(r.channel.replace(/^Specular /, ""))}</span>` : "",
-    frame ? `<a class="rframe" href="${esc(frame.url)}" target="_blank" rel="noreferrer" title="Open on Frame.io">Frame.io ↗</a>` : "",
+    frame ? `<a class="rframe" href="${esc(safeUrl(frame.url))}" target="_blank" rel="noreferrer" title="Open on Frame.io">Frame.io ↗</a>` : "",
   ].join("");
   return `<article class="revmini${state === "late" ? " late" : ""}${r.pinnedAt ? " pinned" : ""}">
     <a class="rt" href="/r/${r.id}" title="${esc(displayTitle(r))}">${esc(displayTitle(r))}</a>
@@ -3767,7 +3761,7 @@ function scriptCard(sc: StoredScript, colour: string, from = ""): string {
   return `<div class="scard" style="--c:${colour}">
       <div class="st">${esc(sc.title)}</div>
       <div class="sm">${sc.words.toLocaleString("en-US")} words · ${parts ? `${parts} part${parts === 1 ? "" : "s"}` : "no PART headers"}${
-        sc.url ? ` · <a href="${esc(sc.url)}" target="_blank" rel="noreferrer">Google Doc</a>` : " · pasted"
+        safeUrl(sc.url) ? ` · <a href="${esc(safeUrl(sc.url))}" target="_blank" rel="noreferrer">Google Doc</a>` : " · pasted"
       } · added ${esc(usDate(dayOf(sc.addedAt)))}${sc.updatedAt.getTime() - sc.addedAt.getTime() > 60_000 ? `, re-read ${esc(usDate(dayOf(sc.updatedAt)))}` : ""}${from}</div>
       ${status}
       <details><summary>Read it</summary><div class="scripttext">${shown}</div></details>
@@ -3885,7 +3879,7 @@ export function renderRecord(
     ? `<section><h2>Links</h2><div class="links">${r.links
         .map(
           (l) =>
-            `<a class="${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.url)}</a>`,
+            `<a class="${esc(l.kind)}" href="${esc(safeUrl(l.url))}" target="_blank" rel="noreferrer">${esc(l.url)}</a>`,
         )
         .join("")}</div></section>`
     : "";
@@ -3996,7 +3990,7 @@ export function renderRecord(
              </form>`
           : ""
       }
-      ${r.sourceUrl ? `<a class="back" style="margin-left:10px" href="${esc(r.sourceUrl)}">open in Discord →</a>` : ""}
+      ${r.sourceUrl ? `<a class="back" style="margin-left:10px" href="${esc(safeUrl(r.sourceUrl))}">open in Discord →</a>` : ""}
     </section>
     <a class="back" href="/">← everything</a>`,
   );
@@ -4014,6 +4008,19 @@ export function renderLogin(error = ""): string {
         <input type="password" name="password" placeholder="Password" autofocus>
         <button type="submit">Sign in</button>
       </form>
+    </div>`,
+  );
+}
+
+/** A page that failed or isn't there, said plainly with the way back. Nothing internal is shown. */
+export function renderError(status: number, message = ""): string {
+  const missing = status === 404;
+  return layout(
+    missing ? "Not found" : "Something went wrong",
+    null,
+    `<div class="empty" style="padding:40px 22px;line-height:1.7">
+      <strong style="color:var(--text)">${missing ? "That page isn't here." : message ? esc(message) : "Something went wrong on the board."}</strong><br>
+      ${missing || message ? "" : "It's been logged. Try again, or "}<a href="/">Back to the dashboard</a>
     </div>`,
   );
 }
@@ -4423,7 +4430,7 @@ const MOVED_JS = `
 function columnDragScript(mode: CalendarMode): string {
   return `<script>
     (function () {
-      var mode = ${JSON.stringify(mode)};
+      var mode = ${jsonForScript(mode)};
       var dragging = null;
       document.querySelectorAll(".dcard[draggable]").forEach(function (card) {
         card.addEventListener("dragstart", function (e) {
@@ -4501,7 +4508,7 @@ function subscribePanel(feedUrl: string): string {
   </details>
   <script>
   (function () {
-    var base = ${JSON.stringify(feedUrl)};
+    var base = ${jsonForScript(feedUrl)};
     var input = document.getElementById("feedurl"), webcal = document.getElementById("feedwebcal");
     function update() {
       var u = new URL(base);
@@ -4632,7 +4639,7 @@ export function renderCalendar(
     // Drag a chip onto another day: it moves there at once, the change is
     // saved, and the page reloads so every count on it agrees.
     (function () {
-      var mode = ${JSON.stringify(mode)};
+      var mode = ${jsonForScript(mode)};
       var dragging = null;
       document.querySelectorAll(".cal .chip[draggable]").forEach(function (chip) {
         chip.addEventListener("dragstart", function (e) {
@@ -4731,8 +4738,8 @@ export function renderScriptBoard(shell: Shell, url: string, report: ScriptRepor
       meta.push(`<span class="airs${!done && n >= 0 && n <= 3 ? " soon" : ""}">airs ${esc(usDate(r.airDate))} · ${esc(relativeDay(r.airDate))}</span>`);
     }
     if (r.role) meta.push(`<span>${esc(r.role.toLowerCase())}</span>`);
-    r.delivered.slice(-1).forEach((l) => meta.push(`<a class="lnk" href="${esc(l)}" target="_blank" rel="noreferrer">Script doc ↗</a>`));
-    if (r.discordUrl) meta.push(`<a class="lnk" href="${esc(r.discordUrl)}" target="_blank" rel="noreferrer">Discord ↗</a>`);
+    r.delivered.slice(-1).forEach((l) => meta.push(`<a class="lnk" href="${esc(safeUrl(l))}" target="_blank" rel="noreferrer">Script doc ↗</a>`));
+    if (r.discordUrl) meta.push(`<a class="lnk" href="${esc(safeUrl(r.discordUrl))}" target="_blank" rel="noreferrer">Discord ↗</a>`);
     if (r.needsReview) meta.push(`<span class="warn">needs a look</span>`);
 
     let pill = `<span class="due none">no deadline</span>`;
@@ -4979,7 +4986,7 @@ function shortsPanel(
         .map(({ u, sc }) => {
           const t = TIER[sc.tier];
           const tip = `${t.icon ? `${t.icon} ` : ""}${u.title} · ${u.views !== null ? `${u.views.toLocaleString()} views · ` : ""}${formatMultiple(sc.multiple)} usual ${sc.basis} · beat ${sc.percentile}% of the last ${sc.sample}`;
-          return `<a href="${esc(u.url)}" target="_blank" rel="noreferrer" data-tip="${esc(tip)}">
+          return `<a href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer" data-tip="${esc(tip)}">
             <circle cx="${x(sc.multiple).toFixed(1)}" cy="${(y + jitter()).toFixed(1)}" r="${t.r}" fill="${t.colour}" class="sdot ${sc.tier}"/></a>`;
         })
         .join("");
@@ -5040,7 +5047,7 @@ function shortsPanel(
   const row = (u: Upload) => {
     const sc = scores.get(u.videoId)!;
     const t = TIER[sc.tier];
-    return `<a class="prow" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+    return `<a class="prow" href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer">
       <span class="pmult ${sc.tier === "flop" || sc.tier === "soft" ? "under" : "breakout"}">${esc(formatMultiple(sc.multiple))}</span>
       <span class="pbody"><span class="ut">${t.icon} ${esc(u.title)}</span>
         <span class="pmeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span>${esc(u.channel)} · ${
@@ -5091,7 +5098,7 @@ function ideasPanel(
   const catLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
   const scope = channel ?? `${catLabel} channels`;
   const ago = (d: Date) => relativeDay(dayOf(d));
-  const vidLine = (v: IdeaVideo) => `<li><a href="${esc(v.url)}" target="_blank" rel="noreferrer">
+  const vidLine = (v: IdeaVideo) => `<li><a href="${esc(safeUrl(v.url))}" target="_blank" rel="noreferrer">
       <span class="vm ${v.multiple! >= 1 ? "up" : "down"}">${esc(formatMultiple(v.multiple!))}</span>
       <span class="vt">${esc(v.title)}</span>
       <span class="vc"><span class="cdot" style="--ch:${channelColour(v.channel)}"></span>${esc(v.channel.replace(/^Specular /, ""))} · ${esc(ago(v.publishedAt))}</span>
@@ -5314,7 +5321,7 @@ function outlierPanel(
       <span class="ot"><i style="width:${((b.n / most) * 100).toFixed(1)}%"></i></span><b>${b.n}</b></div>`)
     .join("");
 
-  const line = ({ u, j }: (typeof scored)[number]) => `<li><a href="${esc(u.url)}" target="_blank" rel="noreferrer">
+  const line = ({ u, j }: (typeof scored)[number]) => `<li><a href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer">
       <span class="vm ${j.multiple >= 1 ? "up" : "down"}">${esc(formatMultiple(j.multiple))}</span>
       <span class="vt">${esc(u.title)}${uploadScriptMark(u.title)}</span>
       <span class="vc">${esc(usDate(dayOf(u.publishedAt)))}${u.views !== null ? ` · ${esc(compactViews(u.views))} views` : ""}</span></a></li>`;
@@ -5362,7 +5369,7 @@ function everyVideoPanel(f: ChannelFocus, perf: Map<string, Performance>, shorts
     .map((u, i) => {
       const j = judged(u, perf, shorts);
       const age = relativeDay(dayOf(u.publishedAt));
-      return `<a class="evrow ${j?.kind ?? "none"}" href="${esc(u.url)}" target="_blank" rel="noreferrer"
+      return `<a class="evrow ${j?.kind ?? "none"}" href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer"
         data-t="${u.publishedAt.getTime()}" data-v="${u.views ?? -1}" data-m="${j ? j.multiple.toFixed(4) : -1}" data-k="${j?.kind ?? "none"}"${i >= SHOW ? " hidden" : ""}>
         <span class="evm ${j ? (j.multiple >= 1 ? "up" : "down") : ""}" title="${esc(j ? `${formatMultiple(j.multiple)} the channel's usual · ${j.note}` : "Not scored yet")}">${j ? esc(formatMultiple(j.multiple)) : "—"}</span>
         <span class="evt">${esc(u.title)}</span>
@@ -5747,7 +5754,7 @@ export function renderUploads(
               : p?.verdict === "under"
                 ? `<circle cx="${vx}" cy="${y}" r="9" class="halo-down"/>`
                 : "";
-          return `<a href="${esc(v.url)}" target="_blank" rel="noreferrer" class="up" data-tip="${esc(tip)}">
+          return `<a href="${esc(safeUrl(v.url))}" target="_blank" rel="noreferrer" class="up" data-tip="${esc(tip)}">
             <circle cx="${vx}" cy="${y}" r="11" class="hit"/>${halo}
             <circle cx="${vx}" cy="${y}" r="5.5" fill="${colour}" class="ring"/></a>`;
         })
@@ -5825,7 +5832,7 @@ export function renderUploads(
     .slice()
     .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
     .slice(0, 12)
-    .map((u) => `<a class="ulatest" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+    .map((u) => `<a class="ulatest" href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer">
       <span class="cdot" style="--ch:${channelColour(u.channel)}"></span>
       <span class="ut">${esc(u.title)}${uploadScriptMark(u.title)}</span>
       <span class="uc">${esc(u.channel)}</span>
@@ -5838,7 +5845,7 @@ export function renderUploads(
   const scored = data.uploads
     .filter((u) => u.publishedAt.getTime() >= since30 && perf.has(u.videoId))
     .map((u) => ({ u, p: perf.get(u.videoId)! }));
-  const perfRow = ({ u, p }: { u: Upload; p: Performance }) => `<a class="prow" href="${esc(u.url)}" target="_blank" rel="noreferrer">
+  const perfRow = ({ u, p }: { u: Upload; p: Performance }) => `<a class="prow" href="${esc(safeUrl(u.url))}" target="_blank" rel="noreferrer">
       <span class="pmult ${p.verdict}">${esc(formatMultiple(p.multiple))}</span>
       <span class="pbody"><span class="ut">${esc(u.title)}</span>
         <span class="pmeta"><span class="cdot" style="--ch:${channelColour(u.channel)}"></span>${esc(u.channel)} · ${esc(
@@ -6042,7 +6049,7 @@ export function renderDay(
     </div>
     <script>
     (function () {
-      var mode = ${JSON.stringify(mode)};
+      var mode = ${jsonForScript(mode)};
       var strip = document.getElementById("daystrip");
       var cols = Array.prototype.slice.call(strip.querySelectorAll(".daycol"));
       var focus = strip.querySelector(".daycol.focus") || cols[0];
@@ -6735,7 +6742,7 @@ function unassignedPanel(u: NonNullable<StoryLabData["unassigned"]>): string {
     .map((v, i) => `<li class="uarow" data-ch="${esc(v.channel)}"${i >= LIMIT ? " hidden data-more" : ""}>
       <div class="uahead">
         <span class="cdot" style="--ch:${channelColour(v.channel)}"></span>
-        <a class="uat" href="${esc(v.url)}" target="_blank" rel="noreferrer" title="${esc(v.title)} — on YouTube">${esc(v.title)}</a>
+        <a class="uat" href="${esc(safeUrl(v.url))}" target="_blank" rel="noreferrer" title="${esc(v.title)} — on YouTube">${esc(v.title)}</a>
         <span class="uach">${esc(v.channel.replace(/^Specular /, ""))}</span>
         <span class="uad">${esc(usDate(dayOf(v.publishedAt)))}${v.views !== null ? ` · ${esc(compactViews(v.views))} views` : ""}</span>
         <details class="ualink"><summary>Link a script</summary>
@@ -6822,7 +6829,7 @@ function dicePanel(d: NonNullable<StoryLabData["dice"]>): string {
       ${
         c.opens.length
           ? `<h4>${action === "added" ? "Now in Story Lab — ideas it makes" : "What it opens up"}</h4>
-             <ul class="dcopens">${c.opens.map((o) => `<li><a href="${esc(o.href)}"><span class="ikind">${esc(o.format)}</span>${esc(o.title)}</a></li>`).join("")}</ul>`
+             <ul class="dcopens">${c.opens.map((o) => `<li><a href="${esc(safeHref(o.href))}"><span class="ikind">${esc(o.format)}</span>${esc(o.title)}</a></li>`).join("")}</ul>`
           : `<p class="hint">Every idea it makes is already public or written — it'll still show in the builder.</p>`
       }
       ${
@@ -6996,7 +7003,7 @@ export function renderStoryLab(shell: Shell, d: StoryLabData): string {
       d.blueprint
         ? `<div class="panel" id="blueprint"><h2>Blueprint</h2>${
             d.builtRepeats
-              ? `<p class="labrepeat">Already on YouTube: <a href="${esc(d.builtRepeats.url)}" target="_blank" rel="noreferrer">${esc(d.builtRepeats.title)}</a> (${esc(d.builtRepeats.channel)}). This would repeat it — pick a different world or format.</p>`
+              ? `<p class="labrepeat">Already on YouTube: <a href="${esc(safeUrl(d.builtRepeats.url))}" target="_blank" rel="noreferrer">${esc(d.builtRepeats.title)}</a> (${esc(d.builtRepeats.channel)}). This would repeat it — pick a different world or format.</p>`
               : ""
           }${blueprintHtml(d.blueprint)}</div>`
         : d.picked.format && d.picked.hero
@@ -7993,7 +8000,7 @@ export function renderVoQueue(shell: Shell, d: VoQueueData): string {
       const extra = [
         `<span class="wwords">${i.wordCount ? `${i.wordCount.toLocaleString("en-US")} words · ~${readMinutes(i.wordCount)}m read` : "no word count"}</span>`,
         i.airDate ? `<span class="wair">airs ${esc(usDate(i.airDate))}</span>` : "",
-        hit ? `<a class="scriptmark has" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}Script</a>` : "",
+        hit ? `<a class="scriptmark has" href="${esc(safeHref(hit.href))}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""} title="Script: ${esc(hit.where.join(" · "))}">${SCRIPT_ICON}Script</a>` : "",
       ].join("");
       return `<div class="vorank"><span class="vn">${n + 1}</span>${workRow(i, d.now, running, "/vo", extra)}</div>`;
     })
@@ -8048,7 +8055,7 @@ export function renderRecording(shell: Shell, d: RecordingData): string {
         <span>${c.wordCount ? `${c.wordCount.toLocaleString("en-US")} words · ~${readMinutes(c.wordCount)} min read` : "no word count"}</span>
         <span>${c.est} min est.</span>
       </div>
-      ${hit ? `<a class="clear secondary recscript" href="${esc(hit.href)}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}>${SCRIPT_ICON} Open the script <small>(${esc(hit.where.join(" · "))})</small></a>` : `<p class="hint" style="padding:0">No script found for it — not attached, not in Story Lab, not on the Scripts tab.</p>`}
+      ${hit ? `<a class="clear secondary recscript" href="${esc(safeHref(hit.href))}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}>${SCRIPT_ICON} Open the script <small>(${esc(hit.where.join(" · "))})</small></a>` : `<p class="hint" style="padding:0">No script found for it — not attached, not in Story Lab, not on the Scripts tab.</p>`}
       ${d.brief ? `<details class="recbrief"><summary>Story brief</summary><div class="brief">${esc(d.brief)}</div></details>` : ""}
       <div class="recclock"><span class="tclock" data-start="${d.running?.startedAt.getTime() ?? Date.now()}" data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${c.est} min</small></div>
       <div class="recacts">
@@ -8175,7 +8182,7 @@ function taskRow(t: Task, now: Date, running: string | null): string {
             ? `<form method="post" action="/timer/stop">${back}<button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
             : `<form method="post" action="/timer/start">${hidden("id", t.id)}${hidden("kind", "task")}${back}<button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
         }
-        ${discord ? `<a class="wbtn" href="${esc(discord)}" target="_blank" rel="noopener" title="Open in Discord">↗</a>` : ""}
+        ${discord ? `<a class="wbtn" href="${esc(safeUrl(discord))}" target="_blank" rel="noopener" title="Open in Discord">↗</a>` : ""}
         <details class="tmenu"><summary class="wbtn" title="Snooze">${SNOOZE_ICON}</summary><div class="tpop">
           ${post("snooze", "1 hour", hidden("for", "1h"))}${post("snooze", "3 hours", hidden("for", "3h"))}${post("snooze", "Tomorrow 9 AM", hidden("for", "tomorrow"))}${post("snooze", "Next week", hidden("for", "week"))}${
             t.snoozedUntil ? post("snooze", "Back now", hidden("for", "now")) : ""

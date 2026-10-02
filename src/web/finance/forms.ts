@@ -9,7 +9,8 @@ import { EXPENSE_TYPES, EXPENSE_TYPE, FLAGS, type Thresholds } from "../../finan
 import { FREQUENCIES, FREQUENCY, fmtMoney, monthLabel, usDay } from "../../finance/money.js";
 import { PAY_MODELS, PAY_MODEL, describePay, payChannels, tiersText, type PayModel } from "../../finance/pay.js";
 import { ORG_TZ, dateIn } from "../../parse/derive.js";
-import { channelColour, esc, type Shell } from "../page.js";
+import { channelColour, type Shell } from "../page.js";
+import { esc } from "../html.js";
 import { CHIPS_SCRIPT, channelChips, channelSelect, checkMark, fieldName, financePage, voiceBox, money, monthSwitch, opt, splitEditor, splitsText, tile } from "./ui.js";
 
 const dollars = (c: number | null | undefined) => (c === null || c === undefined ? "" : (c / 100).toFixed(2).replace(/\.00$/, ""));

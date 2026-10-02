@@ -12,7 +12,8 @@ import {
 import { moviePicks, nextMovieSlot, nextSleepSlot, sleepPicks, typicalRuntime, type Kind, type Pick, type Source } from "../compilations/engine.js";
 import { canWritePackages, writePackage } from "../compilations/package.js";
 import { usDate } from "../parse/derive.js";
-import { channelColour, esc, layout, pageHeader, type Shell } from "./page.js";
+import { channelColour, layout, pageHeader, type Shell } from "./page.js";
+import { esc } from "./html.js";
 import { compactViews } from "./performance.js";
 
 const LABEL: Record<Kind, string> = { movie: "MOVIE", sleep: "SLEEP" };

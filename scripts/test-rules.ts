@@ -56,7 +56,8 @@ import { apart, avatarAt, avatarColour, avatarFromPage, deltaE, sampledChannels 
 import { applyChannelColours, catalogColour } from "../src/catalog.js";
 import jpegJs from "jpeg-js";
 import { liveKey, mask, quotaResetAfter, seal, splitKeys, testKey, unseal } from "../src/db/keys.js";
-import { channelPauseButton, esc, renderRecord, renderWhatsNew } from "../src/web/page.js";
+import { channelPauseButton, renderRecord, renderWhatsNew } from "../src/web/page.js";
+import { esc, jsonForScript, safeHref, safeUrl } from "../src/web/html.js";
 import { RELEASES, releaseNotices } from "../src/web/changelog.js";
 import { channelGaps, nextToAssign, uploadGaps } from "../src/web/gaps.js";
 import { DEFAULT_ESTIMATES as ESTIMATE_MIN, setEstimates, typeEstimate, channelEstimate, taskCategoryEstimate, dayLoads, doAhead, forgottenWork, projectBatches, toItem, typeOf, voQueue, whatNext, readMinutes } from "../src/web/work.js";
@@ -97,7 +98,8 @@ import type { SourceRow } from "../src/db/ideas.js";
 import { channelStats, conceptGaps, emergingTopics, myPosition, rowsOf, whatsWorking } from "../src/competitors/analysis.js";
 import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
-import { checkPassword, hashPassword, issueToken, setStoredPassword, verifyToken } from "../src/web/auth.js";
+import { checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
+import { contentDisposition, localPath, refererPath } from "../src/web/http.js";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
 import { distinctColour } from "../src/jobs/avatars.js";
@@ -1674,7 +1676,7 @@ const myDay = renderMyDay(shellFix, {
   loads, trackedToday: 12, running: { recordId: 202, startedAt: new Date(wNow.getTime() - 60_000), title: "Today VO", est: 40, spentBefore: 24 },
   focus: next30, budget: 30, asked: true, voLeft: { n: 3, minutes: 95 },
 });
-t("My Day: the load, a timer running, the week by kind, and What next", [myDay.includes('class="timerbar"'), myDay.includes("today's load"), myDay.includes('class="lrow today"'), myDay.includes("2 pieces that fit 30 min"), /class="fchip on"[^>]*>30 min/.test(myDay)], [true, true, true, true, true]);
+t("My Day: the load, a timer running, the week by kind, and What next", [myDay.includes('class="timerbar"'), myDay.includes("today&#39;s load"), myDay.includes('class="lrow today"'), myDay.includes("2 pieces that fit 30 min"), /class="fchip on"[^>]*>30 min/.test(myDay)], [true, true, true, true, true]);
 t("…each piece shows tracked against its estimate, with start and done", [myDay.includes("25m / 40m"), myDay.includes('action="/timer/start"'), myDay.includes('action="/timer/done"'), myDay.includes('class="wbtn on"')], [true, true, true, true]);
 t("My Day switches: a kind switched off leaves the page", [[...shownTypes(["vo", "batch"])].sort(), shownTypes([]).size], [["gaming", "longform", "revision", "task"], 8]);
 const bitsRec = mk({ id: 230, category: "bits", channel: "Specular FNAF Bits", title: "Specular FNAF Bits", batchNo: 1, batchTarget: 5, batchDone: 2, airDate: wToday });
@@ -2090,7 +2092,7 @@ t("…a bad link is never linked; filtered and failed posts stay, with a way on"
   ideaCard({ ...srcRow, stage: "error", error: "Claude was busy", depth: null, score: null, analysis: null }).includes("Retry analysis"),
 ], [false, true, true, true]);
 const simCard = ideaCard({ ...srcRow, analysis: { ...srcRow.analysis!, similarityStatus: "ok", similarity: [sm({ reason: "Both escalate Flowey's attempts" })] } });
-t("…similar work shown with its date and why", [simCard.includes('<details class="isim warn">'), simCard.includes("82% similar</b> to “Flowey Tries To Grow Up” · 9/25/2026"), simCard.includes("Both escalate Flowey's attempts")], [true, true, true]);
+t("…similar work shown with its date and why", [simCard.includes('<details class="isim warn">'), simCard.includes("82% similar</b> to “Flowey Tries To Grow Up” · 9/25/2026"), simCard.includes("Both escalate Flowey&#39;s attempts")], [true, true, true]);
 
 const ifSettings = { polling: true, ai: true, triageCap: 600, fullCap: 60, fullThreshold: 0.55, tumblrDailyCap: 4000 };
 const ifFeed = { id: 3, provider: "tumblr", query: "undertale", channels: ["Specular Undertale Bits"], enabled: true, weight: 4, exclusions: ["nsfw"], minNotes: 0, cursor: {}, pollMinutes: 15,
@@ -2239,13 +2241,51 @@ t("the page: each channel's focus (changeable), Claude's idea with its beats and
 
 section("Login password");
 const tokenBefore = issueToken();
-setStoredPassword({ hash: hashPassword("newpass123", "salt1"), salt: "salt1", generation: "g1", changedAt: new Date() });
-t("a password set in Settings takes over; the old sign-ins end", [checkPassword("newpass123"), checkPassword(config.dashboardPassword || "test"), checkPassword(""), verifyToken(tokenBefore), verifyToken(issueToken())], [true, false, false, false, true]);
+setStoredPassword({ hash: await hashPassword("newpass123", "salt1"), salt: "salt1", generation: "g1", changedAt: new Date() });
+t("a password set in Settings takes over; the old sign-ins end", [await checkPassword("newpass123"), await checkPassword(config.dashboardPassword || "test"), await checkPassword(""), verifyToken(tokenBefore), verifyToken(issueToken())], [true, false, false, false, true]);
 const tokenG1 = issueToken();
-setStoredPassword({ hash: hashPassword("another-one", "salt2"), salt: "salt2", generation: "g2", changedAt: new Date() });
-t("…and changing it again ends those too", [verifyToken(tokenG1), checkPassword("newpass123"), checkPassword("another-one")], [false, false, true]);
+setStoredPassword({ hash: await hashPassword("another-one", "salt2"), salt: "salt2", generation: "g2", changedAt: new Date() });
+t("…and changing it again ends those too", [verifyToken(tokenG1), await checkPassword("newpass123"), await checkPassword("another-one")], [false, false, true]);
 setStoredPassword(null);
 t("…none set: sign-ins from before still hold", verifyToken(tokenBefore), true);
+t("a forged or expired sign-in is refused", [verifyToken(undefined), verifyToken(""), verifyToken("123.abc"), verifyToken(`${Date.now() - 1000}.x`), verifyToken(tokenBefore.replace(/.$/, (c) => (c === "A" ? "B" : "A")))], [false, false, false, false, false]);
+{
+  const ip = "203.0.113.9";
+  const t0 = Date.parse("2026-10-02T12:00:00Z");
+  for (let i = 0; i < 9; i++) noteLoginFailure(ip, t0 + i);
+  const afterNine = loginWait(ip, t0 + 10);
+  noteLoginFailure(ip, t0 + 10);
+  t("wrong passwords: ten in fifteen minutes and that address waits; others don't; it lifts, and a right one clears it", [
+    afterNine, loginWait(ip, t0 + 20) > 890, loginWait("198.51.100.1", t0 + 20), loginWait(ip, t0 + 15 * 60_000 + 1),
+    (clearLoginFailures(ip), noteLoginFailure(ip, t0), loginWait(ip, t0 + 1)),
+  ], [0, true, 0, 0, 0]);
+  clearLoginFailures(ip);
+  // Two hundred wrong from many addresses (a forged X-Forwarded-For each time): everyone waits.
+  for (let i = 0; i < 200; i++) noteLoginFailure(`10.0.${Math.floor(i / 250)}.${i % 250}`, t0 + i);
+  t("…and a ceiling across every address, which a forged address can't get round", [loginWait("192.0.2.200", t0 + 300) > 0, loginWait("192.0.2.200", t0 + 15 * 60_000 + 300)], [true, 0]);
+}
+t("cookies are Secure over https, and only left off for plain http", [cookieOptions(true).secure, cookieOptions(false).secure === config.publicUrl.startsWith("https://"), cookieOptions(true).httpOnly, cookieOptions(true).sameSite], [true, true, true, "lax"]);
+
+section("HTML safety");
+t("text is escaped for elements and either quote", esc(`<b a="1" b='2'>&`), "&lt;b a=&quot;1&quot; b=&#39;2&#39;&gt;&amp;");
+t("links from outside: http(s) only — never javascript: or data:", [
+  safeUrl("https://www.youtube.com/watch?v=x"), safeUrl(" http://a.example/ "), safeUrl("javascript:alert(1)"), safeUrl("JaVaScRiPt:alert(1)"), safeUrl("data:text/html,x"), safeUrl("/r/4"), safeUrl(null),
+], ["https://www.youtube.com/watch?v=x", "http://a.example/", "", "", "", "", ""]);
+t("…or a path on this site, where a link may be either", [safeHref("/r/4#script"), safeHref("https://docs.google.com/document/d/x"), safeHref("//evil.example"), safeHref("javascript:alert(1)")], ["/r/4#script", "https://docs.google.com/document/d/x", "", ""]);
+t("a value inside an inline script can't end it", [jsonForScript("</script><script>alert(1)</script>"), JSON.parse(jsonForScript("a</b>&\u2028"))], ['"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"', "a</b>&\u2028"]);
+
+section("Redirects stay on this site");
+t("a form's back field: only a path here", [
+  localPath("/my-day", "/x"), localPath("/ideas?tab=approved#s-4", "/x"), localPath("//evil.example/a", "/x"), localPath("/\\evil.example", "/x"),
+  localPath("https://evil.example/", "/x"), localPath("javascript:alert(1)", "/x"), localPath("/a\r\nSet-Cookie: x=1", "/x"), localPath(undefined, "/x"), localPath(["/a"], "/x"),
+], ["/my-day", "/ideas?tab=approved#s-4", "/x", "/x", "/x", "/x", "/x", "/x", "/x"]);
+t("the page someone came from: its path and query, never its host", [
+  refererPath("https://board.example/r/4?moved=1", "/x"), refererPath("https://evil.example/calendar", "/x"), refererPath("https://board.example//evil.example/a", "/x"),
+  refererPath(undefined, "/x"), refererPath("not a url at all", "/x"),
+], ["/r/4?moved=1", "/calendar", "/x", "/x", "/not%20a%20url%20at%20all"]);
+t("a download's name survives any language, and can't break the header", [
+  contentDisposition("attachment", "receipt.pdf"), contentDisposition("inline", "收据 \"1\".png"),
+], ['attachment; filename="receipt.pdf"; filename*=UTF-8\'\'receipt.pdf', 'inline; filename="__ 1.png"; filename*=UTF-8\'\'%E6%94%B6%E6%8D%AE%20%221%22.png']);
 
 section("Competitors");
 const cNow = new Date("2026-10-01T12:00:00Z");

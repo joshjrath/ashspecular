@@ -21,6 +21,7 @@ import { channelAlerts, renderFinanceChannel, renderFinanceChannels, renderFinan
 import { readSplits } from "./ui.js";
 import { logWork, retryEntry, takeVoiceNote } from "./voice.js";
 import { VOICE_TABS, type VoiceEntry, type VoiceTab } from "../../finance/voice.js";
+import { contentDisposition, refererPath } from "../http.js";
 
 type Body = Record<string, string | string[] | undefined> & { __files?: UploadedFile[] };
 interface UploadedFile { field: string; filename: string; mime: string; data: Buffer }
@@ -400,7 +401,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
   app.post<{ Params: { id: string } }>("/finance/expenses/:id/paid", async (request, reply) => {
     const id = idOf(request.params.id);
     if (id) await markPaid([id], today());
-    return reply.redirect(String(request.headers.referer ?? "/finance/expenses").replace(/^https?:\/\/[^/]+/, "") || "/finance/expenses");
+    return reply.redirect(refererPath(request.headers.referer, "/finance/expenses"));
   });
   app.get<{ Params: { id: string } }>("/finance/attachments/:id", async (request, reply) => {
     const id = idOf(request.params.id);
@@ -409,7 +410,7 @@ export function registerFinance(app: FastifyInstance, shell: (active: string) =>
     const inline = /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(a.mime);
     return reply
       .header("Content-Type", inline ? a.mime : "application/octet-stream")
-      .header("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${a.filename.replace(/"/g, "")}"`)
+      .header("Content-Disposition", contentDisposition(inline ? "inline" : "attachment", a.filename))
       .header("X-Content-Type-Options", "nosniff")
       .header("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'")
       .send(a.data);

@@ -9,7 +9,8 @@ import {
   type Facts, type Flag, type PnL, type Projection, type Thresholds,
 } from "../../finance/metrics.js";
 import { addMonths, fmtMoney, fmtPct, monthLabel, monthsEnding } from "../../finance/money.js";
-import { channelColour, esc, fmtMin, type Shell } from "../page.js";
+import { channelColour, fmtMin, type Shell } from "../page.js";
+import { esc } from "../html.js";
 import { barList, financePage, flagCard, groupAlerts, flagPill, money, monthSwitch, pct, tile, trendChart } from "./ui.js";
 
 const catOf = (lists: Lists, id: string) => lists.categories.find((c) => c.id === id) ?? ({ id, label: id === "other" ? "Other" : id, colour: "#6E6E7A" } as Category);

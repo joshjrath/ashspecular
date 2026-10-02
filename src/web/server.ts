@@ -136,10 +136,12 @@ import { scoreAll, typicalViews } from "./performance.js";
 import { announceBreakouts, loadVideoViews } from "../jobs/breakouts.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "./ics.js";
 import { MAX_AHEAD_DAYS, shortsDay, batchDays, batchStatus, clearBatchesOn, openBatchesFor, openBatchesThrough, reopenBatchesOn, reopenChannel, setBatchProgress, todayStatus, tomorrow } from "../jobs/batches.js";
-import { COOKIE_NAME, COOKIE_OPTIONS, checkPassword, issueToken, passwordChangedAt, verifyToken } from "./auth.js";
+import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, issueToken, loginWait, noteLoginFailure, passwordChangedAt, verifyToken } from "./auth.js";
 import { loadBoardPassword, saveBoardPassword } from "../db/password.js";
+import { localPath, refererPath } from "./http.js";
 import { renderForgotten, renderMyDay, renderRecording, renderTasks, renderVoQueue, type TimerState } from "./page.js";
-import { DAY_SPAN, RAIL_ITEMS, calendarGrid, SORTS, channelPauseButton, channelPausedTag, displayTitle, esc, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { DAY_SPAN, RAIL_ITEMS, calendarGrid, SORTS, channelPauseButton, channelPausedTag, displayTitle, noticeTitle, weekStart, type Shell, type StatusHide, type SortDir, type SortKey, type SortState } from "./page.js";
+import { esc, safeUrl } from "./html.js";
 import {
   monthOf,
   renderCalendar,
@@ -153,6 +155,7 @@ import {
   renderWhatsNew,
   renderSettings,
   renderLogin,
+  renderError,
   renderRecurring,
   renderScripts,
   renderScriptBoard,
@@ -339,6 +342,26 @@ async function behindCount(): Promise<number | null> {
   }).length;
 }
 
+/** Whether a request asked for JSON back (the board's own fetches) rather than a page. */
+function wantsJson(request: import("fastify").FastifyRequest): boolean {
+  return (request.headers.accept ?? "").includes("application/json") || request.headers["x-fetch"] === "1";
+}
+
+/** Whether an Origin header names this board: the host the request came in on, or PUBLIC_URL's. */
+function sameSite(origin: string, request: import("fastify").FastifyRequest): boolean {
+  let host: string;
+  try {
+    host = new URL(origin).host.toLowerCase();
+  } catch {
+    return false;
+  }
+  const own = [request.headers.host, request.headers["x-forwarded-host"], config.publicUrl ? new URL(config.publicUrl).host : ""]
+    .flatMap((h) => String(h ?? "").split(","))
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return own.includes(host);
+}
+
 /** This board's own address: PUBLIC_URL, or what the request came in on. */
 function baseUrlOf(request: import("fastify").FastifyRequest): string {
   if (config.publicUrl) return config.publicUrl;
@@ -511,6 +534,33 @@ export async function startWeb(): Promise<void> {
   const app = Fastify({ logger: false, trustProxy: true });
   await app.register(cookie);
   await app.register(formbody);
+
+  // A failure is logged here (Fastify's own logger is off) and answered
+  // plainly: never the error's text, which can carry SQL or internals.
+  app.setErrorHandler((err: Error & { statusCode?: number }, request, reply) => {
+    const status = err.statusCode && err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
+    if (status >= 500) console.error(`[web] ${request.method} ${request.url.split("?")[0]} failed:`, err);
+    const message = status >= 500 ? "Something went wrong on the board." : err.message;
+    if (wantsJson(request)) return reply.code(status).send({ ok: false, error: message });
+    return reply.code(status).type("text/html").send(renderError(status, status >= 500 ? "" : message));
+  });
+  app.setNotFoundHandler((request, reply) =>
+    wantsJson(request) ? reply.code(404).send({ ok: false, error: "Not found" }) : reply.code(404).type("text/html").send(renderError(404)),
+  );
+
+  // Every change is a POST from the board's own pages, and a browser says
+  // where a POST came from. One from another site is refused — on top of the
+  // SameSite cookie — so no other site can make a signed-in browser change
+  // anything. No Origin at all is a non-browser client, left to the cookie.
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") return;
+    const origin = request.headers.origin;
+    if (origin === undefined) return;
+    if (!sameSite(origin, request)) {
+      console.warn(`[web] refused a ${request.method} to ${request.url.split("?")[0]} from ${origin}`);
+      return reply.code(403).type("text/plain").send("Refused: this came from another site.");
+    }
+  });
   // Everything after this runs with the request's cookies to hand.
   app.addHook("onRequest", (request, _reply, done) => {
     requestCookies.run(request.cookies, done);
@@ -559,10 +609,16 @@ export async function startWeb(): Promise<void> {
   app.get("/login", async (_req, reply) => reply.type("text/html").send(renderLogin()));
 
   app.post<{ Body: { password?: string } }>("/login", async (request, reply) => {
-    if (!checkPassword(request.body?.password ?? "")) {
+    const wait = loginWait(request.ip);
+    if (wait) {
+      return reply.code(429).type("text/html").send(renderLogin(`Too many wrong passwords. Try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? "s" : ""}.`));
+    }
+    if (!(await checkPassword(request.body?.password ?? ""))) {
+      noteLoginFailure(request.ip);
       return reply.code(401).type("text/html").send(renderLogin("Wrong password."));
     }
-    return reply.setCookie(COOKIE_NAME, issueToken(), COOKIE_OPTIONS).redirect("/");
+    clearLoginFailures(request.ip);
+    return reply.setCookie(COOKIE_NAME, issueToken(), cookieOptions(request.protocol === "https")).redirect("/");
   });
 
   app.get("/", async (request, reply) => {
@@ -904,7 +960,7 @@ export async function startWeb(): Promise<void> {
     const channel = (request.body?.channel ?? "").trim().slice(0, 200);
     const mark = request.body?.mark === "flag" || request.body?.mark === "trophy" ? request.body.mark : null;
     if (hasDatabase && channel) await setChannelMark(channel, mark);
-    return reply.redirect(backTo(request.headers.referer, "/revisions?view=history"));
+    return reply.redirect(refererPath(request.headers.referer, "/revisions?view=history"));
   });
 
   app.get("/queue", async (request, reply) => {
@@ -1529,11 +1585,10 @@ export async function startWeb(): Promise<void> {
       await dismissGaps(channel, days);
       gapCache = null;
     }
-    return reply.redirect(backTo(request.headers.referer, "/"));
+    return reply.redirect(refererPath(request.headers.referer, "/"));
   });
 
   // ── My Day, timers, the VO Queue, recording mode, forgotten work ──────
-  const safeBack = (b: unknown, fallback: string) => (typeof b === "string" && /^\/[a-z0-9/_?=&#.-]*$/i.test(b) ? b : fallback);
 
   /** Time logged over a range, each stretch labelled with its kind of work. */
   async function timeLog(range: LogRange, today: string, shown?: Set<string>) {
@@ -1598,18 +1653,18 @@ export async function startWeb(): Promise<void> {
   app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/clear", async (request, reply) => {
     const id = Number(request.body?.id);
     if (hasDatabase && id) await clearTime(request.body?.kind === "task" ? { taskId: id } : { recordId: id });
-    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+    return reply.redirect(localPath(request.body?.back, "/my-day"));
   });
 
   app.post<{ Body: { id?: string; kind?: string; back?: string } }>("/timer/start", async (request, reply) => {
     const id = Number(request.body?.id);
     if (hasDatabase && id) await forgetUntracked(`${request.body?.kind === "task" ? "t" : "r"}${id}`);
     if (hasDatabase && id) await (request.body?.kind === "task" ? startTaskTimer(id) : startTimer(id));
-    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+    return reply.redirect(localPath(request.body?.back, "/my-day"));
   });
   app.post<{ Body: { back?: string } }>("/timer/stop", async (request, reply) => {
     if (hasDatabase) await stopTimer();
-    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+    return reply.redirect(localPath(request.body?.back, "/my-day"));
   });
   // Done: the timer stops and the work is cleared.
   app.post<{ Body: { id?: string; kind?: string; back?: string; notime?: string } }>("/timer/done", async (request, reply) => {
@@ -1625,7 +1680,7 @@ export async function startWeb(): Promise<void> {
       if (running?.recordId === id) await stopTimer();
       await setStatus(id, "done");
     }
-    return reply.redirect(safeBack(request.body?.back, "/my-day"));
+    return reply.redirect(localPath(request.body?.back, "/my-day"));
   });
 
   app.get("/vo", async (_request, reply) => {
@@ -1683,7 +1738,7 @@ export async function startWeb(): Promise<void> {
       repeat: (REPEAT.has(b.repeat ?? "") ? b.repeat : null) as Repeat | null,
     };
   };
-  const taskBack = (b: unknown) => safeBack(b, "/tasks");
+  const taskBack = (b: unknown) => localPath(b, "/tasks");
 
   app.get("/tasks", async (_request, reply) => {
     const now = new Date();
@@ -1755,7 +1810,7 @@ export async function startWeb(): Promise<void> {
       }
       gapCache = null;
     }
-    return reply.redirect(backTo(request.headers.referer, channel ? `/channel/${encodeURIComponent(channel)}` : "/"));
+    return reply.redirect(refererPath(request.headers.referer, channel ? `/channel/${encodeURIComponent(channel)}` : "/"));
   });
 
   app.get<{ Params: { name: string } }>("/channel/:name", async (request, reply) => {
@@ -1874,7 +1929,8 @@ export async function startWeb(): Promise<void> {
   /** The script to keep: what was pasted, else the doc's text. */
   async function scriptText(text: string | undefined, url: string | undefined): Promise<{ body: string; url: string | null } | { error: string }> {
     const pasted = (text ?? "").replace(/\r\n?/g, "\n").trim().slice(0, 200_000);
-    const link = (url ?? "").trim().slice(0, 1000) || null;
+    // Only a web link is kept: it's shown as one on the script's card.
+    const link = safeUrl((url ?? "").trim().slice(0, 1000)) || null;
     if (pasted) return { body: pasted, url: link };
     if (!link) return { error: "Paste the script, or give its Google Doc link." };
     const read = await readDoc(link);
@@ -1911,7 +1967,7 @@ export async function startWeb(): Promise<void> {
   // Read a linked doc again, for the latest draft.
   app.post<{ Params: { sid: string } }>("/scripts/:sid/refresh", async (request, reply) => {
     const script = await getScript(Number(request.params.sid));
-    const back = backTo(request.headers.referer, "/story-lab#scripts").replace(/#.*$/, "");
+    const back = refererPath(request.headers.referer, "/story-lab#scripts").replace(/#.*$/, "");
     if (!script?.url) return reply.redirect(back);
     const read = await readDoc(script.url);
     const sep = back.includes("?") ? "&" : "?";
@@ -1927,43 +1983,28 @@ export async function startWeb(): Promise<void> {
       await removeScript(script.id);
       await reloadScripts();
     }
-    return reply.redirect(backTo(request.headers.referer, "/story-lab#scripts"));
+    return reply.redirect(refererPath(request.headers.referer, "/story-lab#scripts"));
   });
-
-  /**
-   * Only ever a path on this site. A Referer is attacker-controllable, so its
-   * pathname is taken and everything else — host, scheme, a whole other URL —
-   * is thrown away, which makes an open redirect impossible.
-   */
-  function backTo(referer: string | undefined, fallback: string): string {
-    if (!referer) return fallback;
-    try {
-      const url = new URL(referer, "http://internal");
-      return url.pathname + url.search;
-    } catch {
-      return fallback;
-    }
-  }
 
   app.post<{ Params: { id: string; action: string } }>("/r/:id/:action", async (request, reply) => {
     const { id, action } = request.params;
     if (action === "pin" || action === "unpin") {
       await setPinned(Number(id), action === "pin");
-      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+      return reply.redirect(refererPath(request.headers.referer, `/r/${id}`));
     }
     // Pause takes it off every deadline until it's resumed; no script marks
     // it as waiting on the writer. Neither touches its status.
     if (action === "pause" || action === "resume") {
       await setPaused(Number(id), action === "pause");
-      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+      return reply.redirect(refererPath(request.headers.referer, `/r/${id}`));
     }
     if (action === "uploaded" || action === "notuploaded") {
       await setUploaded(Number(id), action === "uploaded");
-      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+      return reply.redirect(refererPath(request.headers.referer, `/r/${id}`));
     }
     if (action === "noscript" || action === "script") {
       await setNoScript(Number(id), action === "noscript");
-      return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+      return reply.redirect(refererPath(request.headers.referer, `/r/${id}`));
     }
     const status = action === "remove" ? "removed" : action;
     if (status !== "done" && status !== "open" && status !== "removed") {
@@ -1971,7 +2012,7 @@ export async function startWeb(): Promise<void> {
     }
     await setStatus(Number(id), status);
     // Back where you pressed it, so clearing a list does not bounce you away.
-    return reply.redirect(backTo(request.headers.referer, `/r/${id}`));
+    return reply.redirect(refererPath(request.headers.referer, `/r/${id}`));
   });
 
   // Re-read a record with the parser as it is now. A channel someone set by
@@ -2102,12 +2143,12 @@ export async function startWeb(): Promise<void> {
   app.post<{ Params: { date: string }; Body: { on?: string } }>("/days-off/:date", async (request, reply) => {
     const date = safeDate(request.params.date);
     if (date) await markDayOff(date, request.body?.on !== "0");
-    return reply.redirect(backTo(request.headers.referer, "/calendar"));
+    return reply.redirect(refererPath(request.headers.referer, "/calendar"));
   });
   app.post<{ Body: { date?: string } }>("/days-off", async (request, reply) => {
     const date = safeDate(request.body?.date);
     if (date) await markDayOff(date, true);
-    return reply.redirect(backTo(request.headers.referer, "/"));
+    return reply.redirect(refererPath(request.headers.referer, "/"));
   });
 
   /** A day off has no daily batches: they go when it's marked, and come back when it's a working day again. */
@@ -2263,14 +2304,14 @@ export async function startWeb(): Promise<void> {
     const b = request.body ?? {};
     const fail = (why: string) => reply.redirect(`/settings?${new URLSearchParams({ pwerr: why }).toString()}#password`);
     if (!hasDatabase) return fail("The password can only be changed with the database connected.");
-    if (!checkPassword(b.current ?? "")) return fail("The current password isn't right.");
+    if (!(await checkPassword(b.current ?? ""))) return fail("The current password isn't right.");
     const next = b.next ?? "";
     if (next.length < 8) return fail("The new password needs at least 8 characters.");
     if (next.length > 200) return fail("That's too long (200 characters at most).");
     if (next !== (b.again ?? "")) return fail("The two new passwords don't match.");
-    if (checkPassword(next)) return fail("That's the password already.");
+    if (await checkPassword(next)) return fail("That's the password already.");
     await saveBoardPassword(next);
-    return reply.setCookie(COOKIE_NAME, issueToken(), COOKIE_OPTIONS).redirect("/settings?pw=changed#password");
+    return reply.setCookie(COOKIE_NAME, issueToken(), cookieOptions(request.protocol === "https")).redirect("/settings?pw=changed#password");
   });
 
   app.get<{
@@ -2380,12 +2421,12 @@ export async function startWeb(): Promise<void> {
   app.post<{ Body: { token?: string } }>("/moves/undo", async (request, reply) => {
     const kept = undos.get(String(request.body?.token ?? ""));
     const json = (request.headers.accept ?? "").includes("application/json");
-    if (!kept) return json ? reply.code(410).send({ ok: false }) : reply.redirect(backTo(request.headers.referer, "/calendar"));
+    if (!kept) return json ? reply.code(410).send({ ok: false }) : reply.redirect(refererPath(request.headers.referer, "/calendar"));
     undos.delete(String(request.body?.token));
     await restoreMoves(kept.snaps);
     if (json) return reply.send({ ok: true });
     // From a record's page: back to it, without the note that offered this.
-    const back = backTo(request.headers.referer, "/calendar");
+    const back = refererPath(request.headers.referer, "/calendar");
     return reply.redirect(back.replace(/\?.*$/, ""));
   });
 
@@ -2417,7 +2458,7 @@ export async function startWeb(): Promise<void> {
       if (channel && date && Number.isInteger(done) && CHANNELS.some((c) => c.name === channel)) {
         await setBatchProgress(channel, date, done);
       }
-      return reply.redirect(backTo(request.headers.referer, "/recurring"));
+      return reply.redirect(refererPath(request.headers.referer, "/recurring"));
     },
   );
 
@@ -2427,7 +2468,7 @@ export async function startWeb(): Promise<void> {
     if (channel && date && CHANNELS.some((c) => c.name === channel)) {
       await clearBatches(channel, date);
     }
-    return reply.redirect(backTo(request.headers.referer, "/recurring"));
+    return reply.redirect(refererPath(request.headers.referer, "/recurring"));
   });
 
   /**
@@ -2470,7 +2511,7 @@ export async function startWeb(): Promise<void> {
   app.post<{ Params: { id: string } }>("/missed/:id/undo", async (request, reply) => {
     const recordId = hasDatabase ? await undoMissed(Number(request.params.id), restoreMoves) : null;
     gapCache = null;
-    return reply.redirect(recordId ? `/r/${recordId}` : backTo(request.headers.referer, "/"));
+    return reply.redirect(recordId ? `/r/${recordId}` : refererPath(request.headers.referer, "/"));
   });
 
   // Read YouTube hourly (at :07), and once shortly after boot.
