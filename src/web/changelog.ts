@@ -19,6 +19,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-02-steadier",
+    title: "Steadier and safer behind the scenes",
+    changes: [
+      { text: "A timer can't run twice any more: a double click on Start used to be able to start two and count the time double." },
+      { text: "Moving a video on the calendar moves the rest of its channel in one go, so a hiccup half-way can't leave the schedule half-moved." },
+      { text: "Wrong passwords are slowed down: after ten in fifteen minutes the sign-in page asks you to wait a little.", href: "/settings#password" },
+      { text: "Pages that fail, or don't exist, now say so plainly with a way back, instead of a wall of code." },
+      { text: "Settings → Limits & spending now allows the same ranges as each feature's own page.", href: "/settings#limits" },
+      { text: "The Google Calendar feed shows titles with semicolons correctly, in the studio's time zone." },
+    ],
+  },
+  {
     id: "2026-10-01-settings-hub",
     title: "Settings like a phone's, with API keys and spending limits",
     changes: [

@@ -1905,8 +1905,10 @@ Every daily cap in one place:
 
 Each shows how much it has used today, and 0 turns that use off. These are
 the same settings as on the Idea Feed's and Competitors' own pages; change
-them in either place. For a hard ceiling on all Claude spending, set a monthly
-spend limit at console.anthropic.com → Settings → Limits as well.
+them in either place — both allow the same range (Competitors: up to 10,000
+YouTube quota units and 500 Claude calls a day). For a hard ceiling on all
+Claude spending, set a monthly spend limit at console.anthropic.com →
+Settings → Limits as well.
 
 ## The password
 
@@ -1927,3 +1929,14 @@ the one you changed it from stays signed in.
 redeploy. The changed password is cleared and `DASHBOARD_PASSWORD` works
 again. Remove the variable once you're back in, or it clears the password at
 every restart.
+
+**Wrong guesses are slowed down.** Ten wrong passwords from one place in
+fifteen minutes and the sign-in page asks it to wait (it says how long);
+two hundred from anywhere and sign-ins pause for everyone until the oldest
+are fifteen minutes old. Anyone already signed in carries on — a sign-in
+lasts thirty days.
+
+**Set `SESSION_SECRET` on Railway** (a long random value). Without it the
+password itself signs sign-ins and encrypts the API keys saved in Settings, so
+changing `DASHBOARD_PASSWORD` would sign everyone out and lose those keys. The
+log says so at start while it's missing.

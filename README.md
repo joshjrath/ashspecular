@@ -1,10 +1,9 @@
 # Specular
 
 You forward things into a Discord channel. A bot reads each message, works out
-what it is, and files it. Eventually one website shows all of it.
-
-Both halves now run: the bot files what it reads, and the board shows it.
-Still missing are the 8am digest and the automatic daily bits batches.
+what it is, and files it. One website — the board — shows all of it: the
+calendar, everyone's deadlines, uploads and how they did, Story Lab, the Idea
+Feed, Competitors, finance and Ash's own day.
 
 ## Start here
 
@@ -13,6 +12,8 @@ Still missing are the 8am digest and the automatic daily bits batches.
 | **[BOT.md](BOT.md)** | Set up the Discord bot and run it. Start here. |
 | **[BOARD.md](BOARD.md)** | Run the website, locally and on Railway. |
 | **[PARSER.md](PARSER.md)** | How the parser works, and how to improve it. |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the code fits together, where to put things, the rules to keep. |
+| **[CLAUDE.md](CLAUDE.md)** | The working rules for anyone (or any agent) changing the code. |
 
 ```bash
 npm install
@@ -65,7 +66,9 @@ than a fact. Full reasoning in [PARSER.md](PARSER.md).
 ```bash
 npm run doctor        # preflight: Node, .env, both API keys, one real parse
 npm run bot           # run the Discord bot
-npm run test:rules    # 170 deterministic tests — no API key needed
+npm run test:rules    # ~860 deterministic checks — no API key or database needed
+npm run typecheck     # strict TypeScript
+npm run build         # what Railway runs
 npm run eval          # score the parser against evals/cases/
 npm run parse -- "…"  # parse one message from the command line
 npm run batches       # open today's bits batches by hand
@@ -76,29 +79,18 @@ npm run digest        # print today's digest without sending it
 
 ```
 src/
-  catalog.ts        the five categories and every channel
-  parse/
-    schema.ts       what the model must return
-    classify.ts     the Claude call and its prompt
-    derive.ts       the VO buffer, timezones, channel matching — the testable rules
-    rules.ts        URL extraction
-  bot/
-    index.ts        boots the bot
-    intake.ts       message → parse → reply → save, and the feedback button
-    render.ts       the reply card
-  web/
-    index.ts        boots the board
-    server.ts       routes
-    page.ts         the board's HTML, server-rendered, no build step
-    auth.ts         the password gate
-  db/
-    records.ts      save and query one record
-    migrations/     schema
-  _legacy/          first-pass bot and board, built on the old model. Excluded
-                    from the build; kept for the plumbing.
-scripts/            doctor, eval, parse, test-rules
-evals/cases/        the parser's test set
+  start.ts        both halves, as deployed
+  catalog.ts      the five categories and every channel
+  parse/          message → record (rules, patterns, the Claude prompt, dates)
+  bot/            the Discord bot
+  db/             every query, and migrations/
+  jobs/           batches, digest, nudges, the hourly YouTube read, AI jobs
+  web/            the board: server.ts, routes/ (handlers), pages/ (HTML), page.ts (shared frame)
+scripts/          doctor, eval, parse, test-rules
+evals/cases/      the parser's test set
 ```
+
+The full map, and the rules that keep it healthy, are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## What comes next
 
