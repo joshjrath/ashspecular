@@ -2127,6 +2127,11 @@ h2 .spok, h2 .spwait { font-family: var(--ui); margin-left: 8px; vertical-align:
   /* A chip becomes its own colour dot: a two-word truncation says less. */
   .cal .chip { width: 8px; height: 8px; padding: 0; border-radius: 50%; background: var(--c); gap: 0; }
   .cal .chip .dot, .cal .chip .t { display: none; }
+  /* A "nothing assigned" slot becomes a dashed ring around its channel's dot, like a chip; the Day view clears it. */
+  .cal .gapslot { width: 12px; height: 12px; padding: 0; justify-content: center; border-radius: 50%; gap: 0; }
+  .cal .gapslot > a { flex: none; justify-content: center; }
+  .cal .gapslot .t, .cal .gapslot .gapx { display: none; }
+  .cal .gapslot i { width: 6px; height: 6px; }
   .cal .more { font-size: 9.5px; padding: 0 2px; white-space: nowrap; }
 
   .railtoggle { display: none; }

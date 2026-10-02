@@ -28,6 +28,7 @@ export const RELEASES: Release[] = [
       { text: "Pages that fail, or don't exist, now say so plainly with a way back, instead of a wall of code." },
       { text: "Settings → Limits & spending now allows the same ranges as each feature's own page.", href: "/settings#limits" },
       { text: "The Google Calendar feed shows titles with semicolons correctly, in the studio's time zone." },
+      { text: "On a phone, the month calendar no longer scrolls sideways: a \"nothing assigned\" day shows as a dashed ring like the other dots.", href: "/calendar" },
     ],
   },
   {
