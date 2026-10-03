@@ -127,24 +127,34 @@ export async function refile(id: number, r: DerivedRecord, parsedBy: string): Pr
 /**
  * Move a record's air date — a drag on the calendar, or the date box on its
  * page. A VO deadline that was worked out from the old air date is worked out
- * again from the new one; one that someone stated is theirs and is left alone.
- * Recurring batches never get a VO. Null clears the air date.
+ * again from the new one; one stated in the post moves by `shiftDays`, like
+ * the script due and any deadline (a video two days late is due two days
+ * later). Recurring batches never get a VO and never shift. Null clears the
+ * air date.
  */
-export async function moveAir(id: number, airDate: string | null, calculatedVo: Date | null, db: Db = pool): Promise<void> {
+export async function moveAir(id: number, airDate: string | null, calculatedVo: Date | null, db: Db = pool, shiftDays = 0): Promise<void> {
+  // A video pushed `shiftDays` later (or earlier) takes its own deadlines with
+  // it: a VO time from the post, the script due and any deadline move by the
+  // same days at the same time of day (in ORG_TZ, so a clock change doesn't
+  // nudge them an hour). A calculated VO is simply worked out again.
+  const shifted = (col: string) => `((${col} AT TIME ZONE $5) + make_interval(days => $4::int)) AT TIME ZONE $5`;
   await db.query(
     `UPDATE records SET
        air_date = $2::date,
        vo_due = CASE
          WHEN batch_no IS NOT NULL THEN vo_due
          WHEN vo_source IN ('calculated', 'none') THEN $3::timestamptz
+         WHEN vo_due IS NOT NULL THEN ${shifted("vo_due")}
          ELSE vo_due END,
        vo_source = CASE
          WHEN batch_no IS NOT NULL THEN vo_source
          WHEN vo_source IN ('calculated', 'none') THEN CASE WHEN $3::timestamptz IS NULL THEN 'none' ELSE 'calculated' END
          ELSE vo_source END,
+       script_due = CASE WHEN batch_no IS NULL AND script_due IS NOT NULL THEN ${shifted("script_due")} ELSE script_due END,
+       deadline = CASE WHEN batch_no IS NULL AND deadline IS NOT NULL THEN ${shifted("deadline")} ELSE deadline END,
        updated_at = now()
      WHERE id = $1`,
-    [id, airDate, calculatedVo],
+    [id, airDate, calculatedVo, shiftDays, ORG_TZ],
   );
   // Moved means it may no longer be late — and if it goes late again, it
   // deserves a fresh nudge rather than silence.

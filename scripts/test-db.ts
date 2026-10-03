@@ -128,6 +128,51 @@ const { rows: counts } = await pool.query(
 t("…and what they saved is there", counts[0], { tasks: 1, expenses: 1, scripts: 2, niches: 1, days_off: 1 });
 t("every page opens with a little of everything in it", await crawl(), []);
 
+// ── a pushed video takes its channel's deadlines with it ────────────────────
+// Three Specular Comics videos in 2030 (always ahead of today): the first two
+// with VO times stated in their posts and script dues, the third with a VO
+// worked out from its air date. Pushing the first three days pushes every
+// deadline three days, at the same time of day, across the November clock change.
+{
+  const { moveWithRest, takeUndo } = await import("../src/web/moves.js");
+  const { getRecord, restoreMoves } = await import("../src/db/records.js");
+  const ids: number[] = [];
+  for (const [i, air] of ["2030-10-30", "2030-11-02", "2030-11-05"].entries()) {
+    const record = derive({
+      kind: "assignment", code: `push-${i}`, title: `Pushed video ${i}`, category: "stories", channel: "Specular Comics", tag: null,
+      air_date: air, stage: "script", word_count: 4000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null,
+      links: [], brief: null, note: null, confidence: 0.9,
+    } as never, "", new Date());
+    ids.push(Number(await saveRecord(record, { messageId: `push${i}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" })));
+  }
+  const at = (day: string, hhmm: string) => `${day} ${hhmm}`;
+  await pool.query(
+    `UPDATE records SET vo_due = ($2 || ':00')::timestamp AT TIME ZONE $4, vo_source = 'stated', script_due = ($3 || ':00')::timestamp AT TIME ZONE $4 WHERE id = $1`,
+    [ids[0], at("2030-10-28", "14:00"), at("2030-10-26", "23:59"), ORG_TZ],
+  );
+  await pool.query(
+    `UPDATE records SET vo_due = ($2 || ':00')::timestamp AT TIME ZONE $4, vo_source = 'stated', script_due = ($3 || ':00')::timestamp AT TIME ZONE $4 WHERE id = $1`,
+    [ids[1], at("2030-10-31", "14:00"), at("2030-10-29", "23:59"), ORG_TZ],
+  );
+  const state = async () =>
+    (await pool.query(
+      `SELECT to_char(air_date, 'YYYY-MM-DD') AS air, to_char(vo_due AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI') AS vo, vo_source AS src,
+              to_char(script_due AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI') AS script
+       FROM records WHERE id = ANY($1::bigint[]) ORDER BY air_date`,
+      [ids, ORG_TZ],
+    )).rows;
+  const before = await state();
+  const moved = await moveWithRest((await getRecord(ids[0]!))!, "2030-11-02", "posting", false);
+  const after = await state();
+  t("pushed 3 days: its stated VO and script due go 3 days later, same time of day", after[0], { air: "2030-11-02", vo: "2030-10-31 14:00", src: "stated", script: "2030-10-29 23:59" });
+  t("…and so do the channel's next videos' (one across the clock change, still 2 PM)", after[1], { air: "2030-11-05", vo: "2030-11-03 14:00", src: "stated", script: "2030-11-01 23:59" });
+  t("…a VO worked out from the air date is worked out again", [after[2]!.air, after[2]!.src, after[2]!.vo?.slice(0, 10) < after[2]!.air], ["2030-11-08", "calculated", true]);
+  const kept = moved.undo ? takeUndo(moved.undo) : undefined;
+  if (kept) await restoreMoves(kept.snaps);
+  t("…the note says the deadlines went too", moved.text.endsWith("Their VO and script deadlines moved with them."), true);
+  t("…and Undo puts every date back", await state(), before);
+}
+
 await app.close();
 await pool.end().catch(() => undefined);
 console.log(`\n${pass} passed, ${fail} failed\n`);

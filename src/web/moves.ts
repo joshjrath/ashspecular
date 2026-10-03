@@ -2,7 +2,8 @@
  * Moving a video to another day, the way the calendar means it: its air date
  * (posting) or whichever deadline the calendar shows (deadlines). Unless told
  * otherwise, the rest of its channel's schedule after it moves too — in one
- * transaction — and the move can be undone for fifteen minutes.
+ * transaction — and the move can be undone for fifteen minutes. A posting
+ * move takes each video's own deadlines with it by the same number of days.
  *
  * Used by the calendar drag, a record's date box, and the daily posting check.
  */
@@ -10,7 +11,7 @@ import { type CalendarMode, type MoveSnapshot, type StoredRecord, channelSchedul
 import { type Cascade, cascadeText, planCascade } from "./cascade.js";
 import { DEADLINE_TIME, ORG_TZ, VO_BUFFER_DAYS, dateIn, instantIn, shiftDate } from "../parse/derive.js";
 import { type Db, inTransaction } from "../db/pool.js";
-import { dayOf } from "./cadence.js";
+import { dayOf, daysBetween } from "./cadence.js";
 import { displayTitle } from "./page.js";
 import { randomUUID } from "node:crypto";
 
@@ -39,7 +40,8 @@ const dayIn = (r: StoredRecord, mode: CalendarMode) => {
 /** Put a record on another day, the way the calendar in that mode means it. */
 async function placeOn(r: StoredRecord, date: string, mode: CalendarMode, db: Db): Promise<boolean> {
   if (mode === "posting") {
-    await moveAir(r.id, date, voFor(date), db);
+    // Its deadlines go the same number of days: pushed two days, due two days later.
+    await moveAir(r.id, date, voFor(date), db, r.airDate ? daysBetween(r.airDate, date) : 0);
     return true;
   }
   const due = dueOf(r);
@@ -104,6 +106,7 @@ export async function moveWithRest(
     return true;
   });
   if (!placed) return { ok: false, plan: none, undo: null, text: "" };
-  const text = plan.moves.length ? cascadeText(record.channel!, plan) : "";
+  // Posting moves take each video's deadlines along (moveAir), so the note says so.
+  const text = plan.moves.length ? `${cascadeText(record.channel!, plan)}${mode === "posting" ? " Their VO and script deadlines moved with them." : ""}` : "";
   return { ok: true, plan, undo: plan.moves.length ? keepUndo(snaps, text) : null, text };
 }
