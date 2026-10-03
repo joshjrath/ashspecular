@@ -18,6 +18,7 @@
     "eval": "node --env-file-if-exists=.env --import tsx scripts/eval.ts",
     "parse": "node --env-file-if-exists=.env --import tsx scripts/parse.ts",
     "test:rules": "node --env-file-if-exists=.env --import tsx scripts/test-rules.ts",
+    "test:db": "node --import tsx scripts/test-db.ts",
     "bot": "node --env-file-if-exists=.env --import tsx src/bot/index.ts",
     "web": "node --env-file-if-exists=.env --import tsx src/web/index.ts",
     "bot:watch": "node --env-file-if-exists=.env --import tsx --watch src/bot/index.ts",

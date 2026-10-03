@@ -1,5 +1,6 @@
-# Typecheck, the test suite and the build, on every push and pull request.
-# The tests need no API keys and no database.
+# Typecheck, the test suite and the build, on every push and pull request;
+# then the board against a real Postgres (every migration, every page, the
+# main actions). Nothing needs API keys.
 name: checks
 
 on:
@@ -10,6 +11,19 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: specular_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,3 +34,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:rules
       - run: npm run build
+      - run: npm run test:db
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/specular_test
+          DASHBOARD_PASSWORD: ci-only
+          FRAMEIO_LOOKUP: "off"
