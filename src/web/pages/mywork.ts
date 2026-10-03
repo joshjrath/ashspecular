@@ -502,9 +502,12 @@ export interface RecordingData {
   position: number;
   total: number;
   next: WorkItem[];
+  /** This VO's own timer, when it's the one running. */
   running: TimerState | null;
   skipped: number[];
   brief: string | null;
+  /** Start this VO's timer as soon as the page is shown (by a POST from the page). */
+  autoStart: boolean;
 }
 
 /** Recording mode: one VO at a time, timed, and on to the next when it's done. */
@@ -537,24 +540,28 @@ export function renderRecording(shell: Shell, d: RecordingData): string {
       </div>
       ${hit ? `<a class="clear secondary recscript" href="${esc(safeHref(hit.href))}"${hit.href.startsWith("http") ? ' target="_blank" rel="noreferrer"' : ""}>${SCRIPT_ICON} Open the script <small>(${esc(hit.where.join(" · "))})</small></a>` : `<p class="hint" style="padding:0">No script found for it — not attached, not in Story Lab, not on the Scripts tab.</p>`}
       ${d.brief ? `<details class="recbrief"><summary>Story brief</summary><div class="brief">${esc(d.brief)}</div></details>` : ""}
-      <div class="recclock"><span class="tclock" data-start="${d.running?.startedAt.getTime() ?? Date.now()}" data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${c.est} min</small></div>
+      <div class="recclock"><span class="tclock"${d.running ? ` data-start="${d.running.startedAt.getTime()}"` : ""} data-before="${Math.round((d.running?.spentBefore ?? c.spent) * 60)}">0:00</span><small>of ${c.est} min</small></div>
       <div class="recacts">
         <form method="post" action="/vo/record/done"><input type="hidden" name="id" value="${c.id}"><input type="hidden" name="skip" value="${esc(skip)}"><button class="clear recbig">✓ Recorded — next</button></form>
         <a class="clear secondary" href="/vo/record?skip=${esc([...d.skipped, c.id].join(","))}">Skip for now</a>
-        <form method="post" action="/timer/stop"><input type="hidden" name="back" value="/vo"><button class="clear secondary">Stop</button></form>
+        ${d.running
+          ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="/vo"><button class="clear secondary">Stop</button></form>`
+          : `<form method="post" action="/timer/start" class="recstart"><input type="hidden" name="id" value="${c.id}"><input type="hidden" name="kind" value="record"><input type="hidden" name="back" value="/vo/record?${skip ? `skip=${esc(skip)}&amp;` : ""}started=${c.id}"><button class="clear secondary">Start timer</button></form>`}
       </div>
     </section>
     ${d.next.length ? `<section class="panel"><h2>Up next</h2><div class="wlist">${d.next.map((i) => workRow(i, d.now, null, "/vo")).join("")}</div></section>` : ""}
     <script>
     (function () {
+      ${d.autoStart && !d.running ? `var go = document.querySelector("form.recstart"); if (go) { go.submit(); return; }` : ""}
       var el = document.querySelector(".recclock .tclock");
-      var start = Number(el.getAttribute("data-start")), before = Number(el.getAttribute("data-before"));
+      // Without a timer running the clock shows the time so far and stands still.
+      var start = el.hasAttribute("data-start") ? Number(el.getAttribute("data-start")) : null, before = Number(el.getAttribute("data-before"));
       function tick() {
-        var s = Math.max(0, Math.floor((Date.now() - start) / 1000) + before);
+        var s = Math.max(0, (start === null ? 0 : Math.floor((Date.now() - start) / 1000)) + before);
         el.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
       }
       tick();
-      setInterval(tick, 1000);
+      if (start !== null) setInterval(tick, 1000);
     })();
     </script>`,
   );

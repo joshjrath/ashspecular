@@ -116,22 +116,22 @@ export function registerMyWork(app: FastifyInstance): void {
   });
 
   // Recording mode: the first VO not skipped, timed from the moment it's shown.
-  app.get<{ Querystring: { skip?: string } }>("/vo/record", async (request, reply) => {
+  // Opening it changes nothing: the page starts the VO's timer itself with a
+  // POST, so a reload, the back button or a browser's prefetch can't.
+  app.get<{ Querystring: { skip?: string; started?: string } }>("/vo/record", async (request, reply) => {
     const now = new Date();
     const skipped = (request.query.skip ?? "").split(",").map(Number).filter((n) => n > 0);
     const [s, work] = await Promise.all([shell("vo"), loadWork(now)]);
     const queue = voQueue(work.items, now);
     const left = queue.filter((i) => !skipped.includes(i.id!));
     const current = left[0] ?? null;
-    let running = work.timer;
-    if (current?.id && hasDatabase && running?.recordId !== current.id) {
-      await startTimer(current.id);
-      running = { recordId: current.id, startedAt: new Date(), title: current.title, est: current.est, spentBefore: current.spent };
-    }
+    const running = current?.id && work.timer?.recordId === current.id ? work.timer : null;
     return reply.type("text/html").send(
       renderRecording(s, {
         now, current, position: current ? queue.indexOf(current) + 1 : 0, total: queue.length,
         next: left.slice(1, 4), running, skipped, brief: current?.record?.brief ?? null,
+        // Start it on arrival, once: back here with started=<id> and still not running means it didn't take.
+        autoStart: hasDatabase && Boolean(current?.id) && !running && request.query.started !== String(current?.id),
       }),
     );
   });

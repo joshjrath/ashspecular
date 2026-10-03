@@ -1711,8 +1711,15 @@ t("…six pieces over four days: two days take two, the lightest ones, and VOs g
 t("…nowhere to spread: nothing moves", spreadDayOff(spreadVos, []).size, 0);
 const voPage = renderVoQueue(shellFix, { now: wNow, queue: voQueue(wItems, wNow), running: null });
 t("VO Queue: count, time left, words and reading time, and recording mode", [voPage.includes("VOs to record"), voPage.includes("7,500"), voPage.includes('href="/vo/record"'), voPage.includes("4,500 words · ~30m read")], [true, true, true, true]);
-const wRec = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [toItem(todayVo)!], running: null, skipped: [], brief: "A brief." });
+const wRec = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [toItem(todayVo)!], running: null, skipped: [], brief: "A brief.", autoStart: true });
 t("recording mode: one VO, a clock, Recorded — next, and Skip", [wRec.includes("VO 1 of 3"), wRec.includes('action="/vo/record/done"'), wRec.includes('href="/vo/record?skip=201"'), wRec.includes("Up next")], [true, true, true, true]);
+const wRecRunning = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [], running: { recordId: 201, startedAt: wNow, title: "x", est: 30, spentBefore: 0 }, skipped: [], brief: null, autoStart: false });
+const wRecFailed = renderRecording(shellFix, { now: wNow, current: toItem(lateVo)!, position: 1, total: 3, next: [], running: null, skipped: [7], brief: null, autoStart: false });
+t("…its timer starts by a POST from the page (once), never by opening it; running, it offers Stop", [
+  wRec.includes('action="/timer/start"'), wRec.includes("go.submit()"), wRec.includes('value="/vo/record?started=201"'),
+  wRecFailed.includes('action="/timer/start"'), wRecFailed.includes("go.submit()"), wRecFailed.includes('value="/vo/record?skip=7&amp;started=201"'),
+  wRecRunning.includes('action="/timer/start"'), wRecRunning.includes('action="/timer/stop"'), wRecRunning.includes("data-start="),
+], [true, true, true, true, false, true, false, true, true]);
 
 section("Forgotten work");
 const soonNoScript = mk({ id: 210, category: "stories", title: "Airs Soon Unwritten", airDate: "2026-09-30" });
