@@ -66,7 +66,8 @@ than a fact. Full reasoning in [PARSER.md](PARSER.md).
 ```bash
 npm run doctor        # preflight: Node, .env, both API keys, one real parse
 npm run bot           # run the Discord bot
-npm run test:rules    # ~860 deterministic checks — no API key or database needed
+npm run test:rules    # ~870 deterministic checks — no API key or database needed
+npm run test:db       # the board on a throwaway Postgres (DATABASE_URL to a db named *test*)
 npm run typecheck     # strict TypeScript
 npm run build         # what Railway runs
 npm run eval          # score the parser against evals/cases/

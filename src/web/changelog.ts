@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-03-sign-out",
+    title: "Sign out, and sign out everywhere else",
+    changes: [
+      { text: "Settings → Login password now has Sign out, and Sign out everywhere else: it ends every other browser and phone's sign-in and keeps yours, without changing the password. Handy for a lost phone.", href: "/settings#signout" },
+      { text: "Recording mode starts the VO's timer as the page opens, the same as before, but a reload or the back button no longer starts a second one." , href: "/vo" },
+      { text: "The slow-down after wrong passwords now survives a restart or a deploy." },
+    ],
+  },
+  {
     id: "2026-10-02-lighter",
     title: "Pages load lighter, and a few rough edges filed down",
     changes: [

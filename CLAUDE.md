@@ -41,6 +41,8 @@ Features are described for the studio in [BOARD.md](BOARD.md).
   `safeUrl()`/`safeHref()`. Values inside inline `<script>` go through
   `jsonForScript()`. CSV downloads go through `toCsv()` (it stops a typed cell
   from running as a spreadsheet formula).
+- A GET only reads. Anything that starts, saves or deletes is a POST, even when
+  the page does it by itself on opening (see recording mode in routes/mywork.ts).
 - Every route is behind the session cookie (the global hook in `server.ts`).
   Don't add to the public list without a reason written beside it. The test
   `Every route is behind the sign-in` must keep passing.
@@ -71,6 +73,7 @@ Features are described for the studio in [BOARD.md](BOARD.md).
 ```bash
 npm run typecheck     # strict, with noUnusedLocals/noUnusedParameters
 npm run test:rules    # must stay at 0 failed
+npm run test:db       # with DATABASE_URL to a local db named *_test: migrations, every page, the main actions
 npm run build
 ```
 

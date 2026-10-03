@@ -54,6 +54,7 @@ src/
   competitors/ finance/ ideas/ revisions/ tasks/ compilations/   each area's pure logic
 scripts/
   test-rules.ts       the test suite (npm run test:rules) — no API key or database needed
+  test-db.ts          the board on a real Postgres (npm run test:db): every migration, every page, the main actions
   eval.ts             scores the parser against evals/cases/ (needs ANTHROPIC_API_KEY)
   doctor.ts           preflight checks for a new setup
 ```
@@ -95,11 +96,17 @@ card actions).
 
 - **One shared password**, no accounts. `DASHBOARD_PASSWORD`, or the one set in
   Settings (stored as a salted scrypt hash in `board_password`).
-- **Session**: cookie `specular_session` = `expiry.HMAC(SESSION_SECRET, expiry|generation)`,
+- **Session**: cookie `specular_session` = `expiry.HMAC(SESSION_SECRET, expiry|generation|e:epoch)`,
   30 days, `httpOnly`, `SameSite=Lax`, `Secure` over https. Changing the
-  password changes the generation, which signs every other browser out.
+  password changes the generation; Settings → Sign out everywhere else changes
+  the epoch (`app_settings.session_epoch`). Either signs every other browser
+  out. `POST /logout` clears this browser's cookie.
 - **Throttling**: 10 wrong passwords per address in 15 minutes, 200 across all
-  addresses (X-Forwarded-For can be forged).
+  addresses (X-Forwarded-For can be forged). Counted in memory, kept in
+  `login_failures` and read back at start, so a restart doesn't reset it.
+- **GET never changes anything** that matters (a page may remember what it
+  showed, like Story Lab's cards). Recording mode starts its timer with a POST
+  from the page, not on opening.
 - **Authorization**: signed in = allowed everything; there are no roles. The
   only other door is the calendar feed, checked by its own key
   (`CALENDAR_FEED_KEY` or one derived from `SESSION_SECRET`).
@@ -184,7 +191,8 @@ npm run bot                 # the bot
 npm start                   # both, as deployed (after npm run build)
 
 npm run typecheck           # tsc, strict, no unused locals/parameters
-npm run test:rules          # the whole suite, ~860 checks, no keys or database needed
+npm run test:rules          # the whole suite, ~870 checks, no keys or database needed
+npm run test:db             # needs DATABASE_URL to a database named *test*: migrations, pages, actions
 npm run build               # dist/ (tsc + migrations + the story corpus)
 npm run eval                # parser accuracy against evals/cases/ (uses the API)
 ```

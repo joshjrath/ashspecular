@@ -704,7 +704,9 @@ reading time. **Recording mode** takes them one at a time:
 - the title, channel, how late or soon, air date, words and reading time
 - **Open the script** when one is found (attached, Story Lab or the Scripts
   tab), and the story brief
-- a big clock, started when the VO comes up
+- a big clock, started when the VO comes up (the page starts it as it opens;
+  a reload or the back button doesn't start a second one, and a browser
+  without JavaScript shows a **Start timer** button instead)
 - **✓ Recorded — next** clears it and moves on, **Skip for now** moves on
   without clearing it, and *Up next* shows the three after it
 
@@ -1934,7 +1936,13 @@ every restart.
 fifteen minutes and the sign-in page asks it to wait (it says how long);
 two hundred from anywhere and sign-ins pause for everyone until the oldest
 are fifteen minutes old. Anyone already signed in carries on — a sign-in
-lasts thirty days.
+lasts thirty days. The count is kept in the database, so a restart or a
+deploy doesn't reset it.
+
+**Signing out.** Settings → Login password → **Signed in** has **Sign out**
+(this browser) and **Sign out everywhere else**: every other browser and phone
+is signed out and this one stays in, without changing the password. Use it
+for a lost phone or a computer that isn't yours.
 
 **Set `SESSION_SECRET` on Railway** (a long random value). Without it the
 password itself signs sign-ins and encrypts the API keys saved in Settings, so
