@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-03-pushed-deadlines",
+    title: "A pushed video pushes its deadlines",
+    changes: [
+      { text: "When a video's air date moves, its VO, script and other deadlines move the same number of days, at the same time of day. That now includes a VO time written in the assignment post, which used to stay put.", href: "/calendar" },
+      { text: "The rest of the channel follows as before, deadlines included: push a video two days and the next VOs on that channel are due two days later too. Undo puts every date back." },
+    ],
+  },
+  {
     id: "2026-10-03-sign-out",
     title: "Sign out, and sign out everywhere else",
     changes: [

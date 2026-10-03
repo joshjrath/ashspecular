@@ -270,16 +270,20 @@ Two modes, switched top right: **Posting** plots the air date, **Deadlines**
 plots the day the work is due.
 
 - **Drag** anything to another day to move it. In Posting that moves the air
-  date; in Deadlines it moves the deadline and keeps its time of day. A VO
-  deadline that was worked out from the air date follows it; one someone
-  stated stays put.
+  date; in Deadlines it moves the deadline and keeps its time of day. In
+  Posting the video's deadlines go with it: pushed two days, its VO, script
+  due and any other deadline are due two days later, at the same time of day
+  (a VO worked out from the air date is simply worked out again). That
+  includes a VO time stated in the post.
 - **The rest of the channel follows.** Move a video later and every video
   after it on the same channel goes later by the same number of days; move
   it earlier and they come earlier, keeping their spacing. Nothing dated
   before today moves — that's the post history — and nothing is pulled back
   past today: a backward move stops where the first of the rest lands on
-  today. The videos before the one you moved stay where they are. A note at
-  the bottom names what else moved, with **Undo** (good for 15 minutes).
+  today. Their deadlines move with them, the same number of days, so the VOs
+  on your to-do list for that channel are pushed too. The videos before the
+  one you moved stay where they are. A note at the bottom names what else
+  moved, with **Undo** (good for 15 minutes), which puts every date back.
   **Hold Shift as you drop** to move just the one. Daily batches and paused
   videos never move with anything; in Deadlines only open work does.
   The date box on a record's page does the same, with a ticked *Move the N
