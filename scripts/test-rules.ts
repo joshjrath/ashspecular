@@ -109,7 +109,7 @@ import type { SourceRow } from "../src/db/ideas.js";
 import { channelStats, conceptGaps, emergingTopics, myPosition, rowsOf, whatsWorking } from "../src/competitors/analysis.js";
 import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
-import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, setStoredPassword, verifyToken } from "../src/web/auth.js";
+import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, restoreLoginFailures, setSessionEpoch, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { buildApp } from "../src/web/server.js";
 import { contentDisposition, formId, formText, localPath, refererPath, safeDate, toCsv } from "../src/web/http.js";
 import { gunzipSync } from "node:zlib";
@@ -2287,6 +2287,12 @@ t("a forged or expired sign-in is refused", [verifyToken(undefined), verifyToken
   // Two hundred wrong from many addresses (a forged X-Forwarded-For each time): everyone waits.
   for (let i = 0; i < 200; i++) noteLoginFailure(`10.0.${Math.floor(i / 250)}.${i % 250}`, t0 + i);
   t("…and a ceiling across every address, which a forged address can't get round", [loginWait("192.0.2.200", t0 + 300) > 0, loginWait("192.0.2.200", t0 + 15 * 60_000 + 300)], [true, 0]);
+  // A restart: the window's failures read back from the database count as before; older ones don't.
+  const t1 = t0 + 86_400_000;
+  restoreLoginFailures([{ ip: "203.0.113.50", at: t1 - 20 * 60_000 }, ...Array.from({ length: 10 }, (_, i) => ({ ip: "203.0.113.50", at: t1 + i })), ...Array.from({ length: 9 }, (_, i) => ({ ip: "203.0.113.51", at: t1 + i }))], t1 + 100);
+  t("…and a restart doesn't reset it: the last fifteen minutes' wrong passwords are read back", [loginWait("203.0.113.50", t1 + 100) > 0, loginWait("203.0.113.51", t1 + 100)], [true, 0]);
+  clearLoginFailures("203.0.113.50");
+  clearLoginFailures("203.0.113.51");
 }
 t("cookies are Secure over https, and only left off for plain http", [cookieOptions(true).secure, cookieOptions(false).secure === config.publicUrl.startsWith("https://"), cookieOptions(true).httpOnly, cookieOptions(true).sameSite], [true, true, true, "lax"]);
 
@@ -2521,6 +2527,15 @@ section("Every route is behind the sign-in");
     zipped.headers["content-encoding"], gunzipSync(zipped.rawPayload).toString() === plain.body, plain.headers["content-encoding"], plain.headers.vary,
     zipped.headers["x-content-type-options"], zipped.headers["x-frame-options"], plain.headers["referrer-policy"],
   ], ["gzip", true, undefined, "Accept-Encoding", "nosniff", "SAMEORIGIN", "same-origin"]);
+  const out = await app.inject({ method: "POST", url: "/logout", headers: { cookie } });
+  const outPage = await app.inject({ method: "GET", url: "/login?out=1" });
+  t("Sign out: the cookie is cleared and the sign-in page says so", [out.statusCode, out.headers.location, /specular_session=;.*(Max-Age=0|Expires=Thu, 01 Jan 1970)/.test(String(out.headers["set-cookie"])), outPage.body.includes("You&#39;re signed out.")], [302, "/login?out=1", true, true]);
+  const before = issueToken();
+  setSessionEpoch("ended-once");
+  const after = issueToken();
+  t("Sign out everywhere else: every earlier sign-in stops working, a new one works", [verifyToken(before), verifyToken(after)], [false, true]);
+  setSessionEpoch("");
+  t("…and with it never used, sign-ins are signed as before (nobody is signed out by the change)", verifyToken(before), true);
   await app.close();
 }
 

@@ -19,7 +19,7 @@ import { dailyCap } from "../stories/brainstorm.js";
 import { listOffShifted } from "../../db/records.js";
 import { renderSettings } from "../pages/settings.js";
 import { resetEstimates, saveEstimates } from "../../db/estimates.js";
-import { saveBoardPassword } from "../../db/password.js";
+import { endEverySession, saveBoardPassword } from "../../db/password.js";
 import { cookieList, shell } from "../shell.js";
 import type { FastifyInstance } from "fastify";
 
@@ -149,6 +149,13 @@ export function registerSettings(app: FastifyInstance): void {
     return reply.setCookie(COOKIE_NAME, issueToken(), cookieOptions(request.protocol === "https")).redirect("/settings?pw=changed#password");
   });
 
+  // Every other browser and phone signed out; this one gets a fresh sign-in.
+  app.post("/settings/sessions/end", async (request, reply) => {
+    if (!hasDatabase) return reply.redirect(`/settings?${new URLSearchParams({ pwerr: "Sign-ins can only be ended with the database connected." }).toString()}#signout`);
+    await endEverySession();
+    return reply.setCookie(COOKIE_NAME, issueToken(), cookieOptions(request.protocol === "https")).redirect("/settings?pw=ended#signout");
+  });
+
   app.get<{
     Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; pw?: string; pwerr?: string; key?: string; keymsg?: string; keyerr?: string; limits?: string };
   }>("/settings", async (request, reply) => {
@@ -180,7 +187,7 @@ export function registerSettings(app: FastifyInstance): void {
         }),
         newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
         estimatesSaved: request.query.estimates === "saved",
-        password: { changedAt: passwordChangedAt(), saved: request.query.pw === "changed", error: (request.query.pwerr ?? "").slice(0, 200) },
+        password: { changedAt: passwordChangedAt(), saved: request.query.pw === "changed", ended: request.query.pw === "ended", error: (request.query.pwerr ?? "").slice(0, 200) },
         keys: hasDatabase ? keysView(request.query) : undefined,
         limits: hasDatabase ? await limitsView(request.query.limits === "saved").catch(() => undefined) : undefined,
         coloursSaved:

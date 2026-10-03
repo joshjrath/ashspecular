@@ -16,7 +16,7 @@ import formbody from "@fastify/formbody";
 import { config, hasDatabase } from "../config.js";
 import { prepareDatabase } from "../db/prepare.js";
 import { onChannelsChanged } from "../db/channelsettings.js";
-import { loadBoardPassword } from "../db/password.js";
+import { forgetLoginFailures, loadBoardPassword, loadLoginFailures, recordLoginFailure } from "../db/password.js";
 import { listScripts } from "../db/scripts.js";
 import { listLabAdditions } from "../db/lab.js";
 import { markReleases } from "../db/releases.js";
@@ -73,6 +73,8 @@ export async function startWeb(): Promise<void> {
     applyAdditions(await listLabAdditions().catch((err) => (console.error("[lab] couldn't read the dice additions:", err), [])));
     // A login password changed in Settings takes over from DASHBOARD_PASSWORD.
     await loadBoardPassword().catch((err) => console.error("[auth] couldn't read the stored password:", err));
+    // Wrong passwords from the last fifteen minutes still count after a restart.
+    await loadLoginFailures().catch((err) => console.error("[auth] couldn't read failed sign-ins:", err));
     // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
     setBoardScripts(await listScripts().catch((err) => (console.error("[scripts] couldn't read them:", err), [])));
     // What's new: each change is announced from the first start that ships it.
@@ -183,7 +185,9 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
     registerCompetitors(app, shell);
   }
 
-  app.get("/login", async (_req, reply) => reply.type("text/html").send(renderLogin()));
+  app.get<{ Querystring: { out?: string } }>("/login", async (request, reply) =>
+    reply.type("text/html").send(renderLogin("", request.query.out === "1" ? "You're signed out." : "")),
+  );
 
   app.post<{ Body: { password?: string } }>("/login", async (request, reply) => {
     const wait = loginWait(request.ip);
@@ -191,12 +195,20 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
       return reply.code(429).type("text/html").send(renderLogin(`Too many wrong passwords. Try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? "s" : ""}.`));
     }
     if (!(await checkPassword(request.body?.password ?? ""))) {
-      noteLoginFailure(request.ip);
+      // Counted in memory first; kept in the database so a restart doesn't reset the slow-down.
+      if (hasDatabase) await recordLoginFailure(request.ip).catch((err) => console.error("[auth] couldn't keep a failed sign-in:", err));
+      else noteLoginFailure(request.ip);
       return reply.code(401).type("text/html").send(renderLogin("Wrong password."));
     }
-    clearLoginFailures(request.ip);
+    if (hasDatabase) await forgetLoginFailures(request.ip).catch((err) => console.error("[auth] couldn't clear failed sign-ins:", err));
+    else clearLoginFailures(request.ip);
     return reply.setCookie(COOKIE_NAME, issueToken(), cookieOptions(request.protocol === "https")).redirect("/");
   });
+
+  // Signing out: this browser's cookie goes. (Ending every sign-in is in Settings.)
+  app.post("/logout", async (request, reply) =>
+    reply.clearCookie(COOKIE_NAME, { path: "/", secure: cookieOptions(request.protocol === "https").secure, sameSite: "lax", httpOnly: true }).redirect("/login?out=1"),
+  );
 
   // Every page of the board, one module per area.
   registerDashboard(app);

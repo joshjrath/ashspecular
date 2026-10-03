@@ -44,8 +44,8 @@ export function renderSettings(
     newColour?: string;
     /** Why a rename or an addition didn't go through. */
     channelError?: string;
-    /** The login password: when it was last changed here, and how the last change went. */
-    password?: { changedAt: Date | null; saved: boolean; error: string };
+    /** The login password: when it was last changed here, and how the last change went; `ended` after Sign out everywhere else. */
+    password?: { changedAt: Date | null; saved: boolean; error: string; ended?: boolean };
     /** API keys and daily limits set here instead of on Railway. */
     keys?: KeysView;
     limits?: LimitsView;
@@ -211,7 +211,7 @@ function limitsSettings(l: LimitsView): string {
  * twice. Everyone else is signed out; DASHBOARD_PASSWORD_RESET on the server
  * goes back to DASHBOARD_PASSWORD if it's forgotten.
  */
-function passwordSettings(p: { changedAt: Date | null; saved: boolean; error: string }): string {
+function passwordSettings(p: { changedAt: Date | null; saved: boolean; error: string; ended?: boolean }): string {
   return `<form class="panel setgroup settings pwset" id="password" method="post" action="/settings/password" style="margin-top:14px">
     <h2>Login password <span class="sub">— ${
       p.changedAt ? `last changed here ${esc(usDate(dayOf(p.changedAt)))}` : "still the one set on Railway (DASHBOARD_PASSWORD)"
@@ -226,7 +226,16 @@ function passwordSettings(p: { changedAt: Date | null; saved: boolean; error: st
       the password goes back to <code>DASHBOARD_PASSWORD</code>. Then remove that variable.</p>
     ${p.saved ? `<p class="saved" role="status">Password changed. Every other sign-in has ended.</p>` : ""}
     ${p.error ? `<p class="seterr" role="alert">${esc(p.error)}</p>` : ""}
-  </form>`;
+  </form>
+  <section class="panel setgroup" id="signout" style="margin-top:14px">
+    <h2>Signed in <span class="sub">— a sign-in lasts 30 days on each browser or phone.</span></h2>
+    <div class="signacts">
+      <form method="post" action="/logout"><button class="clear secondary">Sign out</button></form>
+      <form method="post" action="/settings/sessions/end"><button class="clear secondary">Sign out everywhere else</button></form>
+    </div>
+    <p class="hint">Lost a phone, or signed in on a computer that isn't yours? Sign out everywhere else ends every other sign-in and keeps this one. The password stays the same.</p>
+    ${p.ended ? `<p class="saved" role="status">Every other sign-in has ended.</p>` : ""}
+  </section>`;
 }
 
 /**

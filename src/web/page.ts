@@ -953,7 +953,7 @@ export function scriptForm(action: string, opts: { title?: boolean; url?: string
     </form>`;
 }
 
-export function renderLogin(error = ""): string {
+export function renderLogin(error = "", note = ""): string {
   return layout(
     "Sign in",
     null,
@@ -962,6 +962,7 @@ export function renderLogin(error = ""): string {
       <p>Everything the studio has going out.</p>
       <form method="post" action="/login">
         ${error ? `<div class="err">${esc(error)}</div>` : ""}
+        ${note ? `<div class="note" role="status">${esc(note)}</div>` : ""}
         <input type="password" name="password" placeholder="Password" autofocus>
         <button type="submit">Sign in</button>
       </form>

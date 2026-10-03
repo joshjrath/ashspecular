@@ -846,6 +846,10 @@ button.nav { border: 0; cursor: pointer; font-family: var(--ui); }
 }
 .login button:hover { filter: brightness(1.06); }
 .err { color: var(--late); font-size: 13px; margin-bottom: 10px; }
+/* sign-out: the note on the sign-in page after signing out */
+.login .note { color: var(--dim); font-size: 13px; margin-bottom: 10px; }
+.signacts { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.signacts form { margin: 0; }
 
 .acts { display: grid; grid-template-columns: repeat(2, auto); gap: 5px 6px; align-items: center; justify-content: end; flex: none; }
 .tick svg { width: 12px; height: 12px; display: block; margin: auto; }

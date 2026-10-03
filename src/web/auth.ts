@@ -20,6 +20,16 @@ export function setStoredPassword(p: StoredPassword | null): void {
 }
 export const passwordChangedAt = () => stored?.changedAt ?? null;
 
+/**
+ * Set by "Sign out everywhere else" (db/password.ts): new each time, and part
+ * of every sign-in's signature like the password's generation. Empty until
+ * first used, so it changes nothing for anyone signed in before then.
+ */
+let epoch = "";
+export function setSessionEpoch(value: string): void {
+  epoch = value;
+}
+
 /** Off the event loop: scrypt takes tens of milliseconds, and the bot and every page share this process. */
 export async function hashPassword(password: string, salt: string): Promise<string> {
   return (await scryptAsync(password, salt, 64)).toString("base64");
@@ -27,7 +37,8 @@ export async function hashPassword(password: string, salt: string): Promise<stri
 
 function sign(payload: string): string {
   // Until a password is set in Settings, sign-ins are signed exactly as before (nobody is signed out by this).
-  return createHmac("sha256", config.sessionSecret).update(stored ? `${payload}|${stored.generation}` : payload).digest("base64url");
+  const signed = `${stored ? `${payload}|${stored.generation}` : payload}${epoch ? `|e:${epoch}` : ""}`;
+  return createHmac("sha256", config.sessionSecret).update(signed).digest("base64url");
 }
 
 export function issueToken(): string {
@@ -119,4 +130,9 @@ export function noteLoginFailure(ip: string, now = Date.now()): void {
 
 export function clearLoginFailures(ip: string): void {
   failures.delete(ip);
+}
+
+/** The window's failures read back after a restart (db/password.ts), oldest first. */
+export function restoreLoginFailures(list: Array<{ ip: string; at: number }>, now = Date.now()): void {
+  for (const f of list) if (now - f.at < FAIL_WINDOW_MS) noteLoginFailure(f.ip, f.at);
 }
