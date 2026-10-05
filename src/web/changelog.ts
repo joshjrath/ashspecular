@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-05-posting-catch-up",
+    title: "Missed days caught up, so VOs stop counting up overdue",
+    changes: [
+      { text: "The posting check used to look at yesterday only. If a channel couldn't be read that day, the video stayed on its old date and every VO after it on that channel kept counting up as overdue. Now a day it missed is checked as soon as it can be, up to two weeks back.", href: "/vo" },
+      { text: "The missed video moves to today and the rest of the channel moves the same number of days, in order, VO deadlines included. Videos that did go up in between are cleared and stay put." },
+    ],
+  },
+  {
     id: "2026-10-03-pushed-deadlines",
     title: "A pushed video pushes its deadlines",
     changes: [

@@ -328,15 +328,27 @@ once.
   linked to the upload it matched. Matching goes by title first. If the title
   changed at upload, any unclaimed upload from that day stands in for it.
 - **It didn't.** It's pushed to today, and the rest of that channel's schedule
-  moves a day with it (the same cascade as dragging it on the calendar). You
+  moves the same number of days with it, VO and script deadlines included
+  (the same cascade as dragging it on the calendar). You
   get a **Not posted** item in the bell and a message in the digest channel on
   Discord. If the video was actually posted, **It was posted** on its page puts
   the schedule back exactly as it was and marks it uploaded.
 - A video still missing the next day is pushed again, one day at a time.
+- **A day it couldn't check is caught up.** If a channel can't be read the
+  day after a video was due (YouTube quota out, YouTube down, the board
+  redeploying), that day is judged as soon as the channel can be read again,
+  up to two weeks back. Before, it was skipped for good: the video stayed on
+  its old date, and its VO and every later VO on the channel counted up as
+  overdue. Now the missed video goes to today and everything after it on the
+  channel moves the same number of days, in order, as if it had been checked
+  every day. Videos that did go up in between are cleared and stay put.
+- **Pushed to today, a VO not done is still late.** The VO is due 6 days
+  before the air date, so a video pushed to today has its VO due 6 days ago.
+  If you've recorded it, tick it done. The later videos on the channel keep
+  their full 6 days.
 - Daily batches (Bits, Reading, the Specular movie) aren't checked. Nor are
   channels with no YouTube link on the Uploads page, or paused and removed
-  videos. Only yesterday is ever judged, so switching this on didn't push any
-  history.
+  videos.
 
 **Staying in place.** Anything that reloads the page (✓, ▶, a switch, Save)
 brings you back to where you were on it instead of the top, unless it was
