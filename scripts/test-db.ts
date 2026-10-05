@@ -173,42 +173,83 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and Undo puts every date back", await state(), before);
 }
 
-// ── the posting check catches up on days it couldn't judge ──────────────────
-// Specular Horror, four videos: one missed four days ago, one that did go up
-// two days ago, one missed yesterday, one next week. A check that couldn't
-// read the channel for days now can: the missed one goes to today and the
-// rest of the channel moves the same four days (the one already up stays),
-// so their VO deadlines are four days later too — not counting up overdue.
+// ── the posting check: yesterday, and days it couldn't read, never history ──
 {
-  const { checkPosts } = await import("../src/jobs/postcheck.js");
+  const { checkPosts, repairCatchUpPushes } = await import("../src/jobs/postcheck.js");
   const { moveWithRest, voFor } = await import("../src/web/moves.js");
   const { instantIn } = await import("../src/parse/derive.js");
+  const { getRecord, restoreMoves, snapshotMoves } = await import("../src/db/records.js");
   const day = (n: number) => shiftDate(today, n);
-  const make = async (code: string, title: string, air: string) => {
+  const make = async (channel: string, code: string, title: string, air: string) => {
     const record = derive({
-      kind: "assignment", code, title, category: "stories", channel: "Specular Horror", tag: null, air_date: air, stage: "script",
+      kind: "assignment", code, title, category: "stories", channel, tag: null, air_date: air, stage: "script",
       word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
     } as never, "", new Date());
-    return Number(await saveRecord(record, { messageId: `h-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+    return Number(await saveRecord(record, { messageId: `pc-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
   };
-  const a = await make("h-a", "The Backrooms Level 0 Explained", day(-4));
-  const b = await make("h-b", "Every SCP Keter Ranked", day(-2));
-  const c = await make("h-c", "The Mimic Is Watching", day(-1));
-  const d = await make("h-d", "Skinwalker Ranch Files", day(3));
+  const link = (channel: string, readAt: Date) =>
+    pool.query(
+      `INSERT INTO youtube_channels (channel, input, youtube_id, checked_at) VALUES ($1, $1, $2, $3)
+       ON CONFLICT (channel) DO UPDATE SET youtube_id = $2, error = NULL, checked_at = $3`,
+      [channel, `UC-${channel}`, readAt],
+    );
+  const airs = async (ids: number[]) =>
+    (await pool.query("SELECT to_char(air_date, 'YYYY-MM-DD') AS air FROM records WHERE id = ANY($1::bigint[]) ORDER BY id", [ids])).rows.map((r) => r.air);
   const now = instantIn(today, "12:00", ORG_TZ)!;
-  await pool.query(
-    `INSERT INTO youtube_channels (channel, input, youtube_id, checked_at) VALUES ('Specular Horror', '@specularhorror', 'UChorror', $1)
-     ON CONFLICT (channel) DO UPDATE SET youtube_id = 'UChorror', error = NULL, checked_at = $1`,
-    [instantIn(today, "01:30", ORG_TZ)],
-  );
-  await pool.query(
-    `INSERT INTO uploads (video_id, channel, title, published_at, url) VALUES ('vid-scp', 'Specular Horror', 'Every SCP Keter Ranked (Part 1)', $1, 'https://www.youtube.com/watch?v=vid-scp')`,
-    [instantIn(day(-2), "15:00", ORG_TZ)],
-  );
+  const readToday = instantIn(today, "01:30", ORG_TZ)!;
   const push = async (record: Parameters<typeof moveWithRest>[0], to: string, alone: boolean, from: string) => {
     const m = await moveWithRest(record, to, "posting", alone, from);
     return { ok: m.ok, moved: m.plan.moves.length };
   };
+
+  // The first catch-up's damage, put back once at start: a push of days that
+  // nothing has touched since is restored; one changed since is left alone.
+  const pushLikeBefore = async (channel: string, ids: number[], from: string) => {
+    const snaps = await snapshotMoves(ids);
+    await moveWithRest((await getRecord(ids[0]!))!, today, "posting", false, from);
+    await pool.query(
+      `INSERT INTO missed_posts (record_id, channel, day, pushed_to, moved, snapshot, at) VALUES ($1, $2, $3, $4, $5, $6, now() + interval '1 second')`,
+      [ids[0], channel, from, today, ids.length - 1, JSON.stringify(snaps)],
+    );
+  };
+  const v = [await make("Specular Documentaries", "rv-1", "An Old One That Went Up Retitled", day(-5)), await make("Specular Documentaries", "rv-2", "Next Week's", day(4)), await make("Specular Documentaries", "rv-3", "The One After", day(8))];
+  await pushLikeBefore("Specular Documentaries", v, day(-5));
+  const w = [await make("Specular YOU", "rw-1", "Old Miss", day(-6)), await make("Specular YOU", "rw-2", "Soon", day(2))];
+  await pushLikeBefore("Specular YOU", w, day(-6));
+  t("(the old catch-up pushed a channel five days on)", await airs(v), [today, day(9), day(13)]);
+  await pool.query("UPDATE records SET updated_at = now() + interval '1 minute' WHERE id = $1", [w[1]]);
+  const repaired = await repairCatchUpPushes(restoreMoves);
+  t("repair: an untouched catch-up push is put back exactly", await airs(v), [day(-5), day(4), day(8)]);
+  t("…one changed since is left for It was posted, and it's said which", [await airs(w), repaired?.restored.length, repaired?.left.length], [[today, day(8)], 1, 1]);
+  t("…and it only ever runs once", await repairCatchUpPushes(restoreMoves), null);
+
+  // The Verse case: an old video never judged (it had gone up under another
+  // title, been dropped or been paused) is history now — nothing is pushed.
+  const old = [await make("Specular Verse", "vv-1", "Could The Death Note Kill Deadpool?", day(-5)), await make("Specular Verse", "vv-2", "Next Verse", day(4)), await make("Specular Verse", "vv-3", "Verse After", day(8))];
+  await link("Specular Verse", readToday);
+  const first = await checkPosts(push, now);
+  t("an old day the check never tried isn't judged after the fact: the channel stays put", [await airs(old), first.missed.length], [[day(-5), day(4), day(8)], 0]);
+
+  // A day it couldn't read the channel on is remembered, and caught up later.
+  const sleep = await make("Specular Sleep", "ss-1", "Yesterday's Sleep Video", day(-1));
+  await link("Specular Sleep", instantIn(day(-2), "12:00", ORG_TZ)!);
+  const blocked = await checkPosts(push, now);
+  const waits = (await pool.query("SELECT to_char(day, 'YYYY-MM-DD') AS d FROM post_check_waits WHERE channel = 'Specular Sleep'")).rows.map((r) => r.d);
+  t("a channel it can't read yet: left alone, and yesterday kept to judge later", [await airs([sleep]), blocked.waiting.includes("Specular Sleep"), waits], [[day(-1)], true, [day(-1)]]);
+
+  // Specular Horror couldn't be read four and two days ago; now it can. The
+  // video missed four days ago goes to today, the one that went up two days
+  // ago is cleared and stays, yesterday's and next week's move four days.
+  const a = await make("Specular Horror", "h-a", "The Backrooms Level 0 Explained", day(-4));
+  const b = await make("Specular Horror", "h-b", "Every SCP Keter Ranked", day(-2));
+  const c = await make("Specular Horror", "h-c", "The Mimic Is Watching", day(-1));
+  const d = await make("Specular Horror", "h-d", "Skinwalker Ranch Files", day(3));
+  await link("Specular Horror", readToday);
+  await pool.query("INSERT INTO post_check_waits (channel, day) VALUES ('Specular Horror', $1), ('Specular Horror', $2)", [day(-4), day(-2)]);
+  await pool.query(
+    `INSERT INTO uploads (video_id, channel, title, published_at, url) VALUES ('vid-scp', 'Specular Horror', 'Every SCP Keter Ranked (Part 1)', $1, 'https://www.youtube.com/watch?v=vid-scp')`,
+    [instantIn(day(-2), "15:00", ORG_TZ)],
+  );
   const result = await checkPosts(push, now);
   const rows = async () =>
     (await pool.query(
@@ -218,14 +259,14 @@ t("every page opens with a little of everything in it", await crawl(), []);
     )).rows;
   const after = await rows();
   const vo = (air: string) => dateIn(ORG_TZ, voFor(air)!);
-  t("catch-up: the video missed four days ago goes to today, its VO with it", after[0], { code: "H-A", air: today, vo: vo(today), up: false });
+  t("catch-up of days it couldn't read: the video missed four days ago goes to today, its VO with it", after[0], { code: "H-A", air: today, vo: vo(today), up: false });
   t("…the one that went up two days ago is cleared and stays put", after[1], { code: "H-B", air: day(-2), vo: vo(day(-2)), up: true });
   t("…the one missed yesterday moves the same four days, in order behind it", after[2], { code: "H-C", air: day(3), vo: vo(day(3)), up: false });
   t("…and next week's moves four days too", after[3], { code: "H-D", air: day(7), vo: vo(day(7)), up: false });
-  t("…told once: one push, three days judged, nothing left waiting", [result.missed.length, result.missed[0]?.moved, result.posted.length,
-    Number((await pool.query("SELECT count(*) FROM post_checks WHERE channel = 'Specular Horror'")).rows[0].count)], [1, 2, 1, 3]);
+  t("…told once: one push, three days judged", [result.missed.filter((m) => m.channel === "Specular Horror").length, result.missed.find((m) => m.channel === "Specular Horror")?.moved,
+    Number((await pool.query("SELECT count(*) FROM post_checks WHERE channel = 'Specular Horror'")).rows[0].count)], [1, 2, 3]);
   const again = await checkPosts(push, now);
-  t("…and running it again changes nothing", [again.checked, again.missed.length, await rows()], [[], 0, after]);
+  t("…and running it again changes nothing", [again.missed.length, await rows(), await airs(old)], [0, after, [day(-5), day(4), day(8)]]);
 }
 
 await app.close();

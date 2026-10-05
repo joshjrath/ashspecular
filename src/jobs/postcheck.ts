@@ -14,12 +14,14 @@
  * feed). A channel that can't be read is left alone and tried again next
  * hour, never pushed on a guess. Each channel's day is judged once.
  *
- * Normally that's yesterday. But a day the channel couldn't be read on (a
- * quota out, YouTube down, the board redeploying) is judged when it next can
- * be, up to CATCH_UP_DAYS back: before, it was skipped for good, and the
- * video's air date, and every VO deadline after it on the channel, stayed in
- * the past and counted up as overdue. Oldest first: pushing it to today moves
- * the channel's later videos too, so they're usually no longer behind.
+ * Normally that's yesterday. A day the check tried to judge but couldn't read
+ * the channel on (a quota out, YouTube down, the board redeploying) is kept in
+ * post_check_waits and judged when the channel can next be read, up to
+ * CATCH_UP_DAYS back. Only those: a day the check never tried — history from
+ * before it ran, a video that was paused, a date set by hand — is never judged
+ * after the fact. (Judging every unjudged day once pushed whole channels days
+ * on, for old videos that had gone up under another title or been dropped.)
+ * Oldest first: pushing it to today moves the channel's later videos too.
  * Daily batches (Bits, Reading, the Specular movie) aren't checked: they're
  * their own day's work.
  */
@@ -55,9 +57,10 @@ export interface CheckResult {
 export type Push = (record: StoredRecord, to: string, alone: boolean, from: string) => Promise<{ ok: boolean; moved: number }>;
 
 /**
- * Each channel's days still to judge, oldest first: a video due on it (from
- * CATCH_UP_DAYS ago to yesterday) not uploaded, and that day not judged yet.
- * Ready when the channel's linked and was read cleanly since `since`.
+ * Each channel's days still to judge, oldest first: yesterday, and any day
+ * from the last CATCH_UP_DAYS it waited on, with a video due not uploaded and
+ * the day not judged yet. Ready when the channel's linked and was read
+ * cleanly since `since`.
  */
 async function daysToJudge(today: string, since: Date): Promise<{ ready: Array<{ channel: string; days: string[] }>; waiting: string[] }> {
   const { rows } = await pool.query<{ channel: string; days: string[]; ok: boolean }>(
@@ -69,6 +72,7 @@ async function daysToJudge(today: string, since: Date): Promise<{ ready: Array<{
         AND r.batch_no IS NULL AND r.kind = 'assignment'
         AND r.status <> 'removed' AND r.paused_at IS NULL AND r.uploaded_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM post_checks p WHERE p.channel = r.channel AND p.day = r.air_date)
+        AND (r.air_date = $1::date - 1 OR EXISTS (SELECT 1 FROM post_check_waits w WHERE w.channel = r.channel AND w.day = r.air_date))
       GROUP BY r.channel`,
     [today, CATCH_UP_DAYS, since],
   );
@@ -90,6 +94,10 @@ export async function checkPosts(push: Push, now: Date = new Date()): Promise<Ch
   if (!since || now < since) return result;
   const { ready, waiting } = await daysToJudge(today, since);
   result.waiting = waiting;
+  // Can't read it yet: remember yesterday, so it's judged when it can be (even days later).
+  for (const channel of waiting) {
+    await pool.query("INSERT INTO post_check_waits (channel, day) VALUES ($1, $2::date) ON CONFLICT DO NOTHING", [channel, result.day]);
+  }
   for (const { channel, days } of ready) await judgeChannel(channel, days, today, push, result);
   return result;
 }
@@ -209,16 +217,57 @@ export async function undoMissed(id: number, restore: (snaps: MoveSnapshot[]) =>
   );
   const row = rows[0];
   if (!row) return null;
-  // JSON dates come back as strings.
-  const snaps = row.snapshot.map((s) => ({
+  await restore(snapsOf(row.snapshot));
+  await setUploaded(Number(row.record_id), true);
+  return Number(row.record_id);
+}
+
+/** A stored snapshot back as dates (JSON keeps them as strings). */
+const snapsOf = (stored: MoveSnapshot[]): MoveSnapshot[] =>
+  stored.map((s) => ({
     ...s,
     voDue: s.voDue ? new Date(s.voDue) : null,
     deadline: s.deadline ? new Date(s.deadline) : null,
     scriptDue: s.scriptDue ? new Date(s.scriptDue) : null,
   }));
-  await restore(snaps);
-  await setUploaded(Number(row.record_id), true);
-  return Number(row.record_id);
+
+const REPAIR_FLAG = "repair:posting-catch-up-2026-10";
+
+/**
+ * Once: put back what the first catch-up pushed. It judged every unjudged day
+ * up to two weeks back, so an old video that had gone up under another title,
+ * been dropped, or been paused took its whole channel days on. A daily check
+ * only ever pushes one day, so a push of more than a day was that catch-up.
+ * Each is restored from its snapshot (not marked uploaded) when none of the
+ * videos it moved has changed since; one that has is left, and logged, for
+ * It was posted on its page. Newest first.
+ */
+export async function repairCatchUpPushes(restore: (snaps: MoveSnapshot[]) => Promise<void>): Promise<{ restored: string[]; left: string[] } | null> {
+  const done = await pool.query("SELECT 1 FROM app_settings WHERE key = $1", [REPAIR_FLAG]);
+  if (done.rows.length) return null;
+  const { rows } = await pool.query<{ id: number; channel: string; day: string; pushed_to: string; at: Date; snapshot: MoveSnapshot[] }>(
+    `SELECT id, channel, to_char(day, 'YYYY-MM-DD') AS day, to_char(pushed_to, 'YYYY-MM-DD') AS pushed_to, at, snapshot
+       FROM missed_posts WHERE undone_at IS NULL AND pushed_to - day > 1 ORDER BY at DESC, id DESC`,
+  );
+  const restored: string[] = [];
+  const left: string[] = [];
+  for (const row of rows) {
+    const snaps = snapsOf(row.snapshot);
+    const label = `${row.channel} ${row.day} → ${row.pushed_to}`;
+    const { rows: touched } = await pool.query(
+      "SELECT 1 FROM records WHERE id = ANY($1::bigint[]) AND updated_at > $2 LIMIT 1",
+      [snaps.map((x) => x.id), row.at],
+    );
+    if (touched.length) {
+      left.push(label);
+      continue;
+    }
+    await restore(snaps);
+    await pool.query("UPDATE missed_posts SET undone_at = now() WHERE id = $1", [row.id]);
+    restored.push(label);
+  }
+  await pool.query("INSERT INTO app_settings (key, value, secret, updated_at) VALUES ($1, 'done', false, now()) ON CONFLICT (key) DO NOTHING", [REPAIR_FLAG]);
+  return { restored, left };
 }
 
 /** "X · Specular Anime — wasn't posted 9/29. Pushed to 9/30, with 3 later videos a day later too." */

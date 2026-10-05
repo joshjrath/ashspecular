@@ -31,6 +31,7 @@ export const NAME_COLUMNS: ReadonlyArray<[table: string, column: string, unique:
   ["gap_dismissals", "channel", true],
   ["revision_reviews", "channel", false],
   ["post_checks", "channel", true],
+  ["post_check_waits", "channel", true],
   ["missed_posts", "channel", false],
   ["lab_idea_marks", "channel", true],
   ["fin_channel_companies", "channel", true],

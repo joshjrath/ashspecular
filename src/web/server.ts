@@ -26,6 +26,8 @@ import { startIdeaJobs } from "../jobs/ideas.js";
 import { startCompetitorJobs } from "../jobs/competitors.js";
 import { startStoryIdeas } from "../jobs/storyideas.js";
 import { startHourlyRead } from "../jobs/hourly.js";
+import { repairCatchUpPushes } from "../jobs/postcheck.js";
+import { restoreMoves } from "../db/records.js";
 import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, issueToken, loginWait, noteLoginFailure, verifyToken } from "./auth.js";
 import { originIsThisBoard, wantsJson } from "./http.js";
 import { renderError, renderLogin } from "./page.js";
@@ -77,6 +79,13 @@ export async function startWeb(): Promise<void> {
     await loadLoginFailures().catch((err) => console.error("[auth] couldn't read failed sign-ins:", err));
     // Scripts pasted in or read from a doc: Story Lab and the idea hooks learn from them.
     setBoardScripts(await listScripts().catch((err) => (console.error("[scripts] couldn't read them:", err), [])));
+    // Once: undo the first posting catch-up's multi-day pushes (see jobs/postcheck.ts).
+    await repairCatchUpPushes(restoreMoves)
+      .then((r) => {
+        if (r?.restored.length) console.log(`[posts] put back ${r.restored.length} catch-up push(es): ${r.restored.join("; ")}`);
+        if (r?.left.length) console.warn(`[posts] left ${r.left.length} catch-up push(es) changed since, for It was posted: ${r.left.join("; ")}`);
+      })
+      .catch((err) => console.error("[posts] couldn't repair the catch-up pushes:", err));
     // What's new: each change is announced from the first start that ships it.
     setReleaseTimes(await markReleases(RELEASES).catch((err) => (console.error("[whats-new] couldn't mark the releases:", err), new Map())));
   }
