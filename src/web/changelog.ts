@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-06-catch-up-fixed",
+    title: "Channels pushed days on by mistake are put back",
+    changes: [
+      { text: "The posting check's catch-up judged any old day it had never checked, so a video left on an old date (posted under another title, dropped or paused) pushed its whole channel days on. Specular Verse moved 5 days. Those pushes are put back, as they were, if nothing on them has changed since.", href: "/calendar" },
+      { text: "Now only days the check tried and couldn't read the channel on are caught up. Old days are never judged after the fact." },
+      { text: "If a channel still looks pushed too far, open the first video it names in the bell's Not posted note and press It was posted to put the schedule back." },
+    ],
+  },
+  {
     id: "2026-10-05-posting-catch-up",
     title: "Missed days caught up, so VOs stop counting up overdue",
     changes: [

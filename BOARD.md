@@ -336,12 +336,16 @@ once.
 - A video still missing the next day is pushed again, one day at a time.
 - **A day it couldn't check is caught up.** If a channel can't be read the
   day after a video was due (YouTube quota out, YouTube down, the board
-  redeploying), that day is judged as soon as the channel can be read again,
-  up to two weeks back. Before, it was skipped for good: the video stayed on
-  its old date, and its VO and every later VO on the channel counted up as
-  overdue. Now the missed video goes to today and everything after it on the
-  channel moves the same number of days, in order, as if it had been checked
-  every day. Videos that did go up in between are cleared and stay put.
+  redeploying), the board notes that day and judges it as soon as the channel
+  can be read again, up to two weeks back. The missed video goes to today and
+  everything after it on the channel moves the same number of days, in order,
+  as if it had been checked every day. Videos that did go up in between are
+  cleared and stay put.
+- **Old days are never judged after the fact.** Only yesterday, and days the
+  check noted it couldn't read, are judged. A video left on an old date (one
+  that went up under another title, was dropped, was paused, or was dated by
+  hand) is left alone. If one is still on your list, mark it uploaded or
+  remove it.
 - **Pushed to today, a VO not done is still late.** The VO is due 6 days
   before the air date, so a video pushed to today has its VO due 6 days ago.
   If you've recorded it, tick it done. The later videos on the channel keep
