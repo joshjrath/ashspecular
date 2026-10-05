@@ -32,12 +32,13 @@ export function startHourlyRead(): void {
 
 /**
  * The daily posting check, after each hourly read: yesterday's scheduled
- * videos against what went up. Missed ones are pushed a day, the rest of
- * the channel with them, and posted to the digest channel on Discord.
+ * videos (and any day a channel couldn't be read on, up to two weeks back)
+ * against what went up. Missed ones are pushed to today, the rest of the
+ * channel with them, and posted to the digest channel on Discord.
  */
 async function runPostCheck(): Promise<void> {
-  const r = await checkPosts(async (record, to, alone) => {
-    const m = await moveWithRest(record, to, "posting", alone);
+  const r = await checkPosts(async (record, to, alone, from) => {
+    const m = await moveWithRest(record, to, "posting", alone, from);
     return { ok: m.ok, moved: m.plan.moves.length };
   });
   if (r.checked.length) {
@@ -58,7 +59,7 @@ async function runPostCheck(): Promise<void> {
       }),
     );
     await channel.send({
-      content: `📅 **Not posted yesterday** — ${r.missed.length === 1 ? "pushed a day" : `${r.missed.length} videos pushed a day`}\n${lines.join("\n")}\nPosted after all? Open it and press *It was posted* to put the schedule back.`,
+      content: `📅 **Not posted** — ${r.missed.length === 1 ? "pushed to today" : `${r.missed.length} videos pushed to today`}\n${lines.join("\n")}\nPosted after all? Open it and press *It was posted* to put the schedule back.`,
       allowedMentions: { parse: [] },
     });
   } catch (err) {

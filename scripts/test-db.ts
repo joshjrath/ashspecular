@@ -173,6 +173,61 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and Undo puts every date back", await state(), before);
 }
 
+// ── the posting check catches up on days it couldn't judge ──────────────────
+// Specular Horror, four videos: one missed four days ago, one that did go up
+// two days ago, one missed yesterday, one next week. A check that couldn't
+// read the channel for days now can: the missed one goes to today and the
+// rest of the channel moves the same four days (the one already up stays),
+// so their VO deadlines are four days later too — not counting up overdue.
+{
+  const { checkPosts } = await import("../src/jobs/postcheck.js");
+  const { moveWithRest, voFor } = await import("../src/web/moves.js");
+  const { instantIn } = await import("../src/parse/derive.js");
+  const day = (n: number) => shiftDate(today, n);
+  const make = async (code: string, title: string, air: string) => {
+    const record = derive({
+      kind: "assignment", code, title, category: "stories", channel: "Specular Horror", tag: null, air_date: air, stage: "script",
+      word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+    } as never, "", new Date());
+    return Number(await saveRecord(record, { messageId: `h-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  };
+  const a = await make("h-a", "The Backrooms Level 0 Explained", day(-4));
+  const b = await make("h-b", "Every SCP Keter Ranked", day(-2));
+  const c = await make("h-c", "The Mimic Is Watching", day(-1));
+  const d = await make("h-d", "Skinwalker Ranch Files", day(3));
+  const now = instantIn(today, "12:00", ORG_TZ)!;
+  await pool.query(
+    `INSERT INTO youtube_channels (channel, input, youtube_id, checked_at) VALUES ('Specular Horror', '@specularhorror', 'UChorror', $1)
+     ON CONFLICT (channel) DO UPDATE SET youtube_id = 'UChorror', error = NULL, checked_at = $1`,
+    [instantIn(today, "01:30", ORG_TZ)],
+  );
+  await pool.query(
+    `INSERT INTO uploads (video_id, channel, title, published_at, url) VALUES ('vid-scp', 'Specular Horror', 'Every SCP Keter Ranked (Part 1)', $1, 'https://www.youtube.com/watch?v=vid-scp')`,
+    [instantIn(day(-2), "15:00", ORG_TZ)],
+  );
+  const push = async (record: Parameters<typeof moveWithRest>[0], to: string, alone: boolean, from: string) => {
+    const m = await moveWithRest(record, to, "posting", alone, from);
+    return { ok: m.ok, moved: m.plan.moves.length };
+  };
+  const result = await checkPosts(push, now);
+  const rows = async () =>
+    (await pool.query(
+      `SELECT code, to_char(air_date, 'YYYY-MM-DD') AS air, to_char(vo_due AT TIME ZONE $2, 'YYYY-MM-DD') AS vo, uploaded_at IS NOT NULL AS up
+         FROM records WHERE id = ANY($1::bigint[]) ORDER BY id`,
+      [[a, b, c, d], ORG_TZ],
+    )).rows;
+  const after = await rows();
+  const vo = (air: string) => dateIn(ORG_TZ, voFor(air)!);
+  t("catch-up: the video missed four days ago goes to today, its VO with it", after[0], { code: "H-A", air: today, vo: vo(today), up: false });
+  t("…the one that went up two days ago is cleared and stays put", after[1], { code: "H-B", air: day(-2), vo: vo(day(-2)), up: true });
+  t("…the one missed yesterday moves the same four days, in order behind it", after[2], { code: "H-C", air: day(3), vo: vo(day(3)), up: false });
+  t("…and next week's moves four days too", after[3], { code: "H-D", air: day(7), vo: vo(day(7)), up: false });
+  t("…told once: one push, three days judged, nothing left waiting", [result.missed.length, result.missed[0]?.moved, result.posted.length,
+    Number((await pool.query("SELECT count(*) FROM post_checks WHERE channel = 'Specular Horror'")).rows[0].count)], [1, 2, 1, 3]);
+  const again = await checkPosts(push, now);
+  t("…and running it again changes nothing", [again.checked, again.missed.length, await rows()], [[], 0, after]);
+}
+
 await app.close();
 await pool.end().catch(() => undefined);
 console.log(`\n${pass} passed, ${fail} failed\n`);

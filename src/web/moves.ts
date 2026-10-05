@@ -76,25 +76,32 @@ function keepUndo(snaps: MoveSnapshot[], text: string): string {
  * Move one record and, unless told otherwise, the rest of its channel's
  * schedule after it. Daily batches, paused videos and records with no
  * channel only ever move themselves.
+ *
+ * Normally nothing dated before today moves with it (that's history). The
+ * posting check catching up on a video missed days ago passes `catchUpFrom`,
+ * the day it was missed: then the channel's videos from that day on move too,
+ * all but ones already up, as they would have had it been pushed each day.
  */
 export async function moveWithRest(
   record: StoredRecord,
   date: string,
   mode: CalendarMode,
   alone: boolean,
+  catchUpFrom?: string,
 ): Promise<{ ok: boolean; plan: Cascade; undo: string | null; text: string }> {
   const none: Cascade = { days: 0, asked: 0, moves: [] };
   const from = dayIn(record, mode);
   const today = dateIn(ORG_TZ);
+  const start = catchUpFrom && catchUpFrom < today ? catchUpFrom : today;
   const schedule =
     alone || !from || !record.channel || record.batchNo !== null || record.pausedAt
       ? []
-      : await channelSchedule(record.channel, mode, today);
+      : (await channelSchedule(record.channel, mode, start)).filter((r) => start === today || !(r.uploadedAt && (dayIn(r, mode) ?? "") < today));
   const plan = from && schedule.length
     ? planCascade(
         { id: record.id, from, to: date },
         schedule.map((r) => ({ id: r.id, date: dayIn(r, mode)!, label: r.code ?? displayTitle(r) })),
-        today,
+        start,
       )
     : none;
   const snaps = plan.moves.length ? await snapshotMoves([record.id, ...plan.moves.map((m) => m.id)]) : [];
