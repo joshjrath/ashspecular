@@ -36,7 +36,8 @@ src/
   db/                 every SQL query, one file per area; pool.ts (inTransaction), migrate.ts, prepare.ts
     migrations/       NNN_name.sql, applied in order at start, each in a transaction
   jobs/               background work: schedule (batches, digest, nudge), hourly (YouTube + posting check),
-                      ideas, competitors, storyideas, youtube, avatars, breakouts, postcheck
+                      ideas, competitors, storyideas, youtube, avatars, breakouts, postcheck,
+                      network (channel totals, every video's views, the daily alerts)
   web/
     server.ts         buildApp(): the app, its guards and every route module; startWeb(): jobs + listen
     routes/           one module per area: registerX(app) — the HTTP handlers
@@ -52,6 +53,9 @@ src/
     finance/ bitsfeed/ competitors/   larger areas with their own routes.ts + pages.ts
     stories/          Story Lab's lore, dice, blueprints, idea scoring
   competitors/ finance/ ideas/ revisions/ tasks/ compilations/   each area's pure logic
+  network/            Network Overview: periods, day figures and estimated revenue (compute.ts),
+                      movers/momentum/health/milestones (insights.ts), alerts, the page's model
+                      (overview.ts: readQuery → buildOverview), CSV exports; dataset.ts loads it all
 scripts/
   test-rules.ts       the test suite (npm run test:rules) — no API key or database needed
   test-db.ts          the board on a real Postgres (npm run test:db): every migration, every page, the main actions
@@ -125,6 +129,9 @@ card actions).
 | Daily limits | `IDEA_BOUNDS` (`db/ideas.ts`), `COMP_BOUNDS` (`db/competitors.ts`), `LIMIT_DEFS` (`db/keys.ts`) | The ranges every form and Settings → Limits use. |
 | Dates and deadlines | `parse/derive.ts` (`ORG_TZ`, VO buffer, deadline time) | Everything is stored UTC and shown in `ORG_TZ`. Dates are `YYYY-MM-DD` strings in that zone. |
 | Time estimates | `work_estimates` + defaults in `web/work.ts` | |
+| Divisions (Network Overview's grouping) | `network_divisions` + `network_channels` (`db/network.ts`) | Seeded from the categories, then edited in Settings → Network & revenue. Separate from categories: nothing but Network Overview reads them. One division per channel. |
+| RPM assumptions | `network_rpm`, one row per channel per `effective_from` | `rpmOn()` picks the row in force each day, so a new rate never rewrites earlier estimates. Revenue is always an estimate; Finance holds actuals. |
+| Which videos the board sees | `uploads.board` | Network Overview also reads each channel's other format (`board = false`). Every board query on `uploads` filters `AND board`; add it to a new one. |
 | One running timer | `time_entries` with a unique index on the running row | Starting one stops the last in one locked transaction (`db/timers.ts`). |
 
 ## Database
@@ -148,7 +155,7 @@ card actions).
 |---|---|---|
 | Open daily batches | `jobs/schedule.ts` → `jobs/batches.ts` | each recurring channel's `opensAt` (ORG_TZ), and at boot |
 | Morning digest, overdue nudge | `jobs/schedule.ts` | `DIGEST_CRON`, `NUDGE_CRON` (needs `DIGEST_CHANNEL_ID`) |
-| YouTube read → posting check → breakouts → avatars | `jobs/hourly.ts` | :07 every hour, and 20 s after boot |
+| YouTube read → posting check → breakouts → avatars → network read | `jobs/hourly.ts` (`runNetworkRead` in `jobs/network.ts`) | :07 every hour, and 20 s after boot; every video's views and the network alerts once a day (ET) |
 | Idea Feed (Tumblr + Claude) | `jobs/ideas.ts` | every minute (paced to the daily caps) |
 | Competitors | `jobs/competitors.ts` | every 10 minutes (quota-budgeted) |
 | Claude's Story Lab ideas | `jobs/storyideas.ts` | every 5 minutes, ≤ `STORYLAB_AI_DAILY` calls/day |
@@ -191,7 +198,7 @@ npm run bot                 # the bot
 npm start                   # both, as deployed (after npm run build)
 
 npm run typecheck           # tsc, strict, no unused locals/parameters
-npm run test:rules          # the whole suite, ~870 checks, no keys or database needed
+npm run test:rules          # the whole suite, ~900 checks, no keys or database needed
 npm run test:db             # needs DATABASE_URL to a database named *test*: migrations, pages, actions
 npm run build               # dist/ (tsc + migrations + the story corpus)
 npm run eval                # parser accuracy against evals/cases/ (uses the API)

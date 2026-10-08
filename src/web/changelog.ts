@@ -19,6 +19,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-08-network-overview",
+    title: "Network Overview: the whole network on one page",
+    changes: [
+      { text: "Network, near the top of the sidebar: views, estimated revenue, net subscribers, uploads, active channels and network RPM for any dates, by division, channel and format, compared with the period before.", href: "/network" },
+      { text: "A daily chart, divisions, a channel leaderboard, top gainers and channels that need attention (with the reason), momentum, network health, top videos, when uploads go up and how much each brings, milestones and a revenue scenario. Every section exports to CSV." },
+      { text: "Revenue is an estimate from RPMs you set per channel (long-form, Shorts, and a blended fallback), each from a date on. A channel with no RPM is left out and named, never counted as $0. Set them in Settings → Network & revenue, where divisions and channels are edited too.", href: "/settings/network" },
+      { text: "History starts now: YouTube's public data has no past days, so the page fills in as it's read each hour. A day without a reading is shown blank, not zero." },
+      { text: "Network alerts (a channel falling off, a video far above its channel's usual, a channel gone quiet, the network down, a division surging) arrive in the bell under Network." },
+    ],
+  },
+  {
     id: "2026-10-06-catch-up-fixed",
     title: "Channels pushed days on by mistake are put back",
     changes: [

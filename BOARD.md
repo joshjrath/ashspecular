@@ -1882,11 +1882,141 @@ To split them later — a worker for the bot, a web service for the board —
 set `SERVICE=bot` on one and `SERVICE=web` on the other. Nothing else
 changes.
 
+## Network Overview — the whole network on one page
+
+**Network** sits near the top of the sidebar. It answers, for any stretch of
+days: how is the network doing, which divisions and channels are driving it,
+what's growing or slipping, and roughly what it's earning. The homepage is
+unchanged.
+
+### Filters
+
+One row at the top; every section below follows it, and the address keeps
+it, so a view can be bookmarked or sent.
+
+- **Divisions**: chips, pick any (none = the whole network).
+- **Channels**: pick one or several; it overrides the division chips.
+- **Format**: All, Long-form or Shorts.
+- **Range**: today, yesterday, last 7 / 28 / 30 / 90 days, this month, last
+  month, this year, all time, or custom dates. Whole-day ranges end
+  yesterday, because today isn't over; "today" says it's partial.
+- **Compare**: against the same number of days just before. **Like for like**
+  (the default) compares only channels with readings in both periods, so a
+  channel added last week doesn't look like growth; **Current network**
+  compares everything selected. Today and All time have no comparison, and
+  say why.
+
+### The cards
+
+Views, **estimated revenue**, net subscribers, uploads, active channels and
+network RPM, each with its change against the comparison and a small
+sparkline. Network RPM is total estimated revenue ÷ the views it was
+estimated from × 1,000 — never an average of channel RPMs. A change is
+shown only when at least 80% of the days have readings in both periods;
+otherwise the card says there isn't enough to compare.
+
+### Revenue is an estimate
+
+Revenue is **ESTIMATED** everywhere it appears: views ÷ 1,000 × the RPM set
+for that channel in Settings → Network & revenue, as it stood on each day.
+Long-form views use the long-form RPM, Shorts the Shorts RPM, and views
+that can't be told apart (or a format with no RPM of its own) the blended
+one. A channel with no RPM is **left out and named** ("needs an RPM") —
+it's never counted as $0. It isn't what YouTube paid; Finance still holds
+the real money.
+
+### The sections
+
+- **Performance over time**: daily views, revenue, subscribers or uploads,
+  as a total, by division or by channel (top 8, the rest as "Other
+  channels"). Point at a bar for the day's figures. A day with no reading is
+  a gap, not a zero. Ranges over 120 days show weeks.
+- **Divisions**: a sortable table (click a row to filter to it) and each
+  division's share of the total; subscriber changes are shown either side of
+  zero, since a division can lose them.
+- **Channel leaderboard**: sortable by views, estimated revenue, subscriber
+  growth, subscribers, uploads, first-week views per upload, the median
+  recent video, RPM, growth, 7-day momentum or outlier rate; **Absolute** or
+  **Relative** (each channel against its own previous period, so a small
+  channel doubling shows).
+- **Top gainers and needs attention**: the biggest risers and fallers, each
+  with the reason in words (views up 40% with 3 uploads against 1, and so
+  on). Channels with too little history or fewer than 1,000 views aren't
+  ranked.
+- **Network momentum**: fixed windows ending yesterday, whatever the dates
+  above: the last 7 days against the 7 before (5% or more up is
+  accelerating, 5% or more down declining, otherwise stable), the last 30
+  days of views, revenue, subscribers and uploads, and a line saying how
+  much of a change came from uploading more or less and how much from how
+  each video did.
+- **Network health**: counts, each saying what it counts: channels growing
+  or declining (views 10% or more either way), behind their usual cadence
+  (last upload more than twice their usual gap ago), with no upload in 14
+  days, outliers this week, and the division leading growth; then the
+  alerts from the last two weeks.
+- **Top videos**: the period's best videos by the board's own outlier scoring
+  (Uploads' breakout score for long-form, the Shorts tiers for Shorts), with
+  the outliers marked.
+- **Uploads**: a day-of-week × hour heatmap of when videos went up, and per
+  channel how much each upload brings: median views in its first 7 days,
+  estimated revenue per upload, and how often one beats the channel's
+  median. Every video is judged over the same window, so new uploads aren't
+  compared with old ones.
+- **Next milestones**: the next round number (1, 2.5, 5, 10…) for combined
+  subscribers, total views, tracked uploads, this month's estimated revenue
+  and the best day's views, with how far there is to go.
+- **Revenue scenario**: type a network RPM to see what the same views would
+  earn at it. Nothing is saved.
+
+**Export CSV** downloads channels, divisions, daily figures, the revenue
+working (views and RPM per channel per day), or the uploads, for the same
+filters and dates. Each file starts with what it covers, when it was read,
+and how revenue was estimated.
+
+### Alerts
+
+Once a day the board looks for: a channel whose views fell 30% or more over
+two weeks, a video 5× its channel's usual, a channel gone quiet, the whole
+network down 25%, and a division up 50%. Each lands in the bell under
+**Network**, with the reason, and in Network health.
+
+### Where the numbers come from, and their limits
+
+- Views and subscribers are YouTube's public counts, read every hour with the
+  YouTube key (Settings → Connections). Without a key nothing is read and
+  the page says so.
+- **History starts when the board starts reading.** YouTube's public data has
+  no past daily figures, so nothing before the first reading is invented.
+  Days before a channel's first reading, or a day the read failed, are blank
+  and say so, never zero; each section notes how many days it covers.
+- Long-form and Shorts views are split by recording each video's views every
+  day. A channel's other format (Shorts for a long-form channel and the other
+  way round) is read for Network Overview only: Uploads, the posting check,
+  Finance, compilations and the rest of the board see what they did before.
+- The page shows when it was last read, and marks it stale after 3 hours.
+
+### Settings → Network & revenue
+
+The Settings menu has a **Network & revenue** tile:
+
+- **Divisions**: rename, recolour, reorder, add and delete (a division with
+  channels in it can't be deleted). They start as the board's five
+  categories but are separate from them: changing a division never changes
+  what the bot or the daily batches do with a channel.
+- **Channels**: each channel's division (one each, so nothing is counted
+  twice), whether it's in Network Overview, its YouTube link, its order,
+  and how much history it has. **Add a channel** adds it to the whole board.
+- **RPM settings**: per channel, long-form, Shorts and an optional blended RPM,
+  with currency and a note, **from a date on**. A new rate starts on its
+  date and leaves earlier estimates as they were; the history is listed, and
+  an entry can be deleted (the one before it applies again). Shown with when
+  it was last changed.
+
 ## Settings — like a phone's
 
 **Settings** opens on a menu of every section, each with how it stands:
-Connections & API keys, Limits & spending, Login password, Channels, Time
-estimates, Days off, and Sidebar & dashboard. Tap one to jump to it.
+Connections & API keys, Limits & spending, Login password, Channels, Network
+& revenue, Time estimates, Days off, and Sidebar & dashboard. Tap one to jump to it.
 
 ### Connections & API keys
 
