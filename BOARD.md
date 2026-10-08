@@ -1897,9 +1897,12 @@ it, so a view can be bookmarked or sent.
 - **Divisions**: chips, pick any (none = the whole network).
 - **Channels**: pick one or several; it overrides the division chips.
 - **Format**: All, Long-form or Shorts.
-- **Range**: today, yesterday, last 7 / 28 / 30 / 90 days, this month, last
-  month, this year, all time, or custom dates. Whole-day ranges end
-  yesterday, because today isn't over; "today" says it's partial.
+- **Range**: since the first reading, today, yesterday, last 7 / 28 / 30 / 90
+  days, this month, last month, this year, all time, or custom dates.
+  Whole-day ranges end yesterday, because today isn't over; ranges that run
+  to today say they're partial. Until there are four weeks of readings the
+  page opens on **Since the first reading**, so the views are there from the
+  first hour; after that it opens on the last 28 days.
 - **Compare**: against the same number of days just before. **Like for like**
   (the default) compares only channels with readings in both periods, so a
   channel added last week doesn't look like growth; **Current network**
@@ -1987,6 +1990,8 @@ network down 25%, and a division up 50%. Each lands in the bell under
   the page says so.
 - **History starts when the board starts reading.** YouTube's public data has
   no past daily figures, so nothing before the first reading is invented.
+  A channel's first day counts from its first reading (the page says when
+  that was); every day after counts from the day before.
   Days before a channel's first reading, or a day the read failed, are blank
   and say so, never zero; each section notes how many days it covers.
 - Long-form and Shorts views are split by recording each video's views every
@@ -2010,7 +2015,8 @@ The Settings menu has a **Network & revenue** tile:
   with currency and a note, **from a date on**. A new rate starts on its
   date and leaves earlier estimates as they were; the history is listed, and
   an entry can be deleted (the one before it applies again). Shown with when
-  it was last changed.
+  it was last changed. Each channel's real RPM is in YouTube Studio →
+  Analytics → Revenue; the page says so beside the forms.
 
 ## Settings — like a phone's
 

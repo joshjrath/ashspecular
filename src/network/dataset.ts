@@ -3,7 +3,7 @@
  * run): channels and divisions, RPM assumptions, the readings from a day on,
  * every upload, and the recent ones' outlier scores.
  */
-import { listDivisions, listNetChannels, listRpm, loadReadings, loadVideos } from "../db/network.js";
+import { firstReading, listDivisions, listNetChannels, listRpm, loadReadings, loadVideos } from "../db/network.js";
 import { listSnapshots } from "../jobs/youtube.js";
 import { ORG_TZ, dateIn } from "../parse/derive.js";
 import { buildIndex, type Index } from "./compute.js";
@@ -18,6 +18,8 @@ export interface Dataset {
   ix: Index;
   videos: NetVideo[];
   scores: Map<string, VideoScore>;
+  /** The first day any channel was read, or null before the first read. */
+  firstRead: string | null;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface Dataset {
  */
 export async function loadDataset(o: { from: string; scoreSince: number; now?: Date }): Promise<Dataset> {
   const now = o.now ?? new Date();
-  const [channels, divisions, rpm] = await Promise.all([listNetChannels(), listDivisions(), listRpm()]);
+  const [channels, divisions, rpm, firstRead] = await Promise.all([listNetChannels(), listDivisions(), listRpm(), firstReading()]);
   const names = channels.map((c) => c.name);
   const [readings, videos] = await Promise.all([loadReadings(names, o.from), loadVideos(names)]);
   const ix = buildIndex(readings.days, readings.formats, videos, rpm);
@@ -36,5 +38,5 @@ export async function loadDataset(o: { from: string; scoreSince: number; now?: D
   const recent = videos.filter((v) => v.publishedAt.getTime() >= since);
   const snaps = await listSnapshots(recent.map((v) => v.videoId));
   const scores = scoreVideos(recent, snaps, now);
-  return { today: dateIn(ORG_TZ, now), channels, divisions, rpm, ix, videos, scores };
+  return { today: dateIn(ORG_TZ, now), channels, divisions, rpm, ix, videos, scores, firstRead };
 }

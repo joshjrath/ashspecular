@@ -6,14 +6,14 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { CATEGORIES } from "../../catalog.js";
 import { addChannel } from "../../db/channelsettings.js";
 import {
-  CURRENCIES, addDivision, deleteDivision, deleteRpm, listDivisions, listNetChannels, listRpm, moveChannel, moveDivision, readStatus, readingCoverage,
+  CURRENCIES, addDivision, deleteDivision, deleteRpm, firstReading, listDivisions, listNetChannels, listRpm, moveChannel, moveDivision, readStatus, readingCoverage,
   recentAlerts, renameDivision, rpmValue, saveRpm, setChannelPlace,
 } from "../../db/network.js";
 import { listChannelLinks, setChannelLink } from "../../jobs/youtube.js";
 import { loadDataset } from "../../network/dataset.js";
 import { EXPORTS, exportRows, type ExportKind } from "../../network/export.js";
 import { buildOverview, readQuery } from "../../network/overview.js";
-import { periodOf } from "../../network/period.js";
+import { defaultPreset, periodOf } from "../../network/period.js";
 import { ORG_TZ, dateIn, shiftDate } from "../../parse/derive.js";
 import { formText, safeDate, toCsv } from "../http.js";
 import { renderNetwork } from "../pages/network.js";
@@ -25,10 +25,11 @@ const STALE_HOURS = 3;
 
 async function overviewFor(query: Record<string, unknown>, now: Date) {
   const [channels, divisions] = await Promise.all([listNetChannels(), listDivisions()]);
-  const q = readQuery(query, { divisions: divisions.map((d) => d.id), channels: channels.map((c) => c.id) });
   const today = dateIn(ORG_TZ, now);
+  const firstRead = await firstReading();
+  const q = readQuery(query, { divisions: divisions.map((d) => d.id), channels: channels.map((c) => c.id) }, defaultPreset(firstRead, today));
   // Readings from the earliest day any section needs: the period's comparison, or two months for momentum.
-  const rough = periodOf(q.preset, today, { from: q.from, to: q.to, firstDay: shiftDate(today, -1095) });
+  const rough = periodOf(q.preset, today, { from: q.from, to: q.to, firstDay: shiftDate(today, -1095), firstRead });
   const from = [rough.prev?.from ?? rough.from, rough.from, shiftDate(today, -62)].sort()[0]!;
   const ds = await loadDataset({ from, scoreSince: Math.min(400, Math.max(30, rough.days + 30)), now });
   return { ds, overview: buildOverview(ds, q, now) };

@@ -5,9 +5,10 @@
  * number of days just before — or, for a month or year so far, the same days
  * of the last one.
  */
-import { isRealDate, shiftDate } from "../parse/derive.js";
+import { isRealDate, shiftDate, usDate } from "../parse/derive.js";
 
 export const PRESETS = [
+  { id: "since", label: "Since the first reading" },
   { id: "today", label: "Today" },
   { id: "yesterday", label: "Yesterday" },
   { id: "7d", label: "Last 7 days" },
@@ -64,13 +65,26 @@ function before(r: Range): Range & { label: string } {
   return { from: shiftDate(r.from, -n), to: shiftDate(r.from, -1), label: `previous ${n} day${n === 1 ? "" : "s"}` };
 }
 
-export function periodOf(preset: PresetId, today: string, opts: { from?: string; to?: string; firstDay?: string | null } = {}): Period {
+/** Until readings go back this far, the page opens on everything since the first one. */
+export const SINCE_DEFAULT_DAYS = 28;
+
+/** The range the page opens on: since the first reading while there's less than four weeks of it. */
+export function defaultPreset(firstRead: string | null, today: string): PresetId {
+  return firstRead && firstRead > shiftDate(today, -SINCE_DEFAULT_DAYS) ? "since" : "28d";
+}
+
+/** `firstDay`: the earliest upload or reading (All). `firstRead`: the earliest reading (Since the first reading). */
+export function periodOf(preset: PresetId, today: string, opts: { from?: string; to?: string; firstDay?: string | null; firstRead?: string | null } = {}): Period {
   const yesterday = shiftDate(today, -1);
   const last = (n: number): Range => ({ from: shiftDate(today, -n), to: yesterday });
   const make = (r: Range, label: string, partial: boolean, prev: Period["prev"], noPrevWhy: string | null = null): Period => ({
     ...r, preset, label, days: daysIn(r), partial, prev, noPrevWhy,
   });
   switch (preset) {
+    case "since": {
+      const from = opts.firstRead && opts.firstRead <= today ? opts.firstRead : today;
+      return make({ from, to: today }, "Since the first reading", true, null, "There's nothing read before the first reading to compare with.");
+    }
     case "today":
       return make({ from: today, to: today }, "Today", true, null, "Today isn't over, so there's nothing fair to compare it with yet.");
     case "yesterday":
@@ -109,7 +123,7 @@ export function periodOf(preset: PresetId, today: string, opts: { from?: string;
       // A custom range is capped at three years, so nothing walks forever.
       if (daysIn({ from, to }) > 1100) from = shiftDate(to, -1099);
       const r = { from, to };
-      return make(r, `${from} to ${to}`, to >= today, before(r));
+      return make(r, `${usDate(from)} to ${usDate(to)}`, to >= today, before(r));
     }
   }
 }

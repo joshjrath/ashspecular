@@ -54,13 +54,13 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T):
 const list = (v: unknown) => [...new Set(String(Array.isArray(v) ? v.join(",") : v ?? "").split(",").map((x) => x.trim()).filter(Boolean))].slice(0, 100);
 
 /** A query from the address, every value checked against what it may be. */
-export function readQuery(q: Record<string, unknown>, known: { divisions: string[]; channels: string[] }): NetQuery {
+export function readQuery(q: Record<string, unknown>, known: { divisions: string[]; channels: string[] }, fallback: PresetId = "28d"): NetQuery {
   const scenario = Number(q.scn);
   return {
     divisions: list(q.div).filter((d) => known.divisions.includes(d)),
     channels: list(q.ch).filter((c) => known.channels.includes(c)),
     fmt: pick(q.fmt, ["all", "long", "short"] as const, "all"),
-    preset: isPreset(q.range) ? q.range : "28d",
+    preset: isPreset(q.range) ? q.range : fallback,
     from: typeof q.from === "string" ? q.from : undefined,
     to: typeof q.to === "string" ? q.to : undefined,
     cmp: pick(q.cmp, ["lfl", "current"] as const, "lfl"),
@@ -82,7 +82,8 @@ export function queryString(q: NetQuery, change: Partial<NetQuery> = {}): string
   if (n.divisions.length) p.set("div", n.divisions.join(","));
   if (n.channels.length) p.set("ch", n.channels.join(","));
   if (n.fmt !== "all") p.set("fmt", n.fmt);
-  if (n.preset !== "28d") p.set("range", n.preset);
+  // Always written: the range a page opens on changes once there's history.
+  p.set("range", n.preset);
   if (n.preset === "custom") { if (n.from) p.set("from", n.from); if (n.to) p.set("to", n.to); }
   if (n.cmp !== "lfl") p.set("cmp", n.cmp);
   if (n.metric !== "views") p.set("metric", n.metric);
@@ -147,6 +148,8 @@ export interface Overview {
   /** The network RPM, and revenue at the scenario RPM (same views). */
   scenario: { rpm: number | null; at: number | null; revenue: number | null; scenarioRevenue: number | null };
   currency: string;
+  /** In the period, the earliest first reading a channel's figures count from; null when every day has the day before. */
+  startedAt: Date | null;
 }
 
 export interface Momentum {
@@ -200,7 +203,7 @@ export function firstDayOf(ds: Pick<Dataset, "ix" | "videos" | "today">): string
 }
 
 export function buildOverview(ds: Dataset, q: NetQuery, now: Date): Overview {
-  const period = periodOf(q.preset, ds.today, { from: q.from, to: q.to, firstDay: firstDayOf(ds) });
+  const period = periodOf(q.preset, ds.today, { from: q.from, to: q.to, firstDay: firstDayOf(ds), firstRead: ds.firstRead });
   const pool = ds.channels.filter((c) => c.active);
   const selected = selectChannels(ds.channels, q);
   const { ix } = ds;
@@ -374,9 +377,17 @@ export function buildOverview(ds: Dataset, q: NetQuery, now: Date): Overview {
     scenarioRevenue: q.scenario !== null && totals.pricedViews > 0 ? (totals.pricedViews / 1000) * q.scenario : null,
   };
 
+  // A channel's first day of readings in the period counts from its first reading.
+  let startedAt: Date | null = null;
+  for (const c of selected) {
+    for (const [day, r] of ix.totals.get(c.name) ?? []) {
+      if (r.first && day >= period.from && day <= period.to && (!startedAt || r.first.at < startedAt)) startedAt = r.first.at;
+    }
+  }
+
   return {
     q, period, today: ds.today, divisions: ds.divisions, pool, selected, cur, totals, prevTotals, changes, sparks, chart, divisionRows, leaders,
     movers: { ...mv, range: { ...mw.cur, label: widened ? "Last 28 days" : period.label }, prevLabel: mLabel, widened },
-    momentum, health, top, uploads, milestones, scenario, currency: ix.currency,
+    momentum, health, top, uploads, milestones, scenario, currency: ix.currency, startedAt,
   };
 }

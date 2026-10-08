@@ -298,6 +298,14 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const page = await app.inject({ method: "GET", url: `/network?ch=${anime.id}&range=today`, headers: { cookie } });
   // 2,000 × $4 + 600 × $0.10 + (3,000 − 2,600) × $2, per 1,000 = $8 + $0.06 + $0.80 = $8.86.
   t("the page: today's views, and the estimate worked out by hand ($8.86), marked ESTIMATED", [page.statusCode, page.body.includes("3,000"), page.body.includes("$8.86"), page.body.includes("ESTIMATED")], [200, true, true, true]);
+  // A channel first read today, twice: it counts from its first reading, and the page opens on everything since.
+  await pool.query("INSERT INTO youtube_channels (channel, input, youtube_id, checked_at) VALUES ('Specular Comics', '@specularcomics', 'UCcomics000000000000000', now()) ON CONFLICT (channel) DO UPDATE SET youtube_id = 'UCcomics000000000000000'");
+  await saveChannelDay("Specular Comics", { views: 70_000, subscribers: 900, subsHidden: false, videos: 10 }, new Date(Date.now() - 1_000));
+  await saveChannelDay("Specular Comics", { views: 71_234, subscribers: 912, subsHidden: false, videos: 10 });
+  const kept = (await pool.query("SELECT first_views, views FROM network_channel_days WHERE channel = 'Specular Comics'")).rows.map((r) => [Number(r.first_views), Number(r.views)]);
+  const comics = (await listNetChannels()).find((c) => c.name === "Specular Comics")!;
+  const opened = await app.inject({ method: "GET", url: `/network?ch=${comics.id}`, headers: { cookie } });
+  t("first day of readings: the first reading is kept, and the page opens on Since the first reading with its views", [kept, opened.body.includes("Since the first reading"), opened.body.includes("1,234"), opened.body.includes("+12"), opened.body.includes("count from the first reading")], [[[70_000, 71_234]], true, true, true, true]);
   const short = await app.inject({ method: "GET", url: `/network?ch=${anime.id}&range=today&fmt=short`, headers: { cookie } });
   t("…Shorts only: the Short's 600 views at $0.10 ($0.06), and subscribers marked as not format-specific", [short.body.includes("$0.06"), short.body.includes("not format-specific")], [true, true]);
 

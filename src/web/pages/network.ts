@@ -141,6 +141,7 @@ function statusLine(o: Overview, s: { lastRead: Date | null; stale: boolean; lin
   notes.push(s.lastRead ? `Last updated ${esc(timeEt(s.lastRead))}${s.stale ? ` ${pill("stale", "warn")}` : ""}` : `${pill("no readings yet", "warn")} Daily figures start from the first hourly read with a YouTube key.`);
   if (!s.key) notes.push(`${pill("needs a key", "warn")} Views, subscribers and revenue need the YouTube key (<a href="/settings#keys">Settings → Connections</a>).`);
   if (o.period.partial) notes.push(`${pill("partial")} ${esc(o.period.label)} runs to today, which isn't over.`);
+  if (o.startedAt) notes.push(`Views and subscribers count from the first reading, ${esc(timeEt(o.startedAt))}. YouTube's public figures don't go back further.`);
   if (t.days > 0 && t.viewDays < t.days) notes.push(`Daily view history for ${t.viewDays} of ${t.days} day${t.days === 1 ? "" : "s"}${t.gappy ? ` (${t.gappy} channel${t.gappy === 1 ? "" : "s"} missing some)` : ""}.`);
   if (s.unlinked.length) notes.push(`${s.unlinked.length} channel${s.unlinked.length === 1 ? "" : "s"} not linked to YouTube: <a href="/settings/network#channels">link them</a>.`);
   if (s.errors.length) notes.push(`<span title="${esc(s.errors.map((e) => `${e.name}: ${e.error}`).join("\n"))}">${s.errors.length} channel${s.errors.length === 1 ? "" : "s"} failed the last read; their last good figures are shown.</span>`);

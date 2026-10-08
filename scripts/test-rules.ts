@@ -111,7 +111,7 @@ import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
 import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, restoreLoginFailures, setSessionEpoch, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { buildApp } from "../src/web/server.js";
-import { periodOf as netPeriodOf } from "../src/network/period.js";
+import { defaultPreset as netDefaultPreset, periodOf as netPeriodOf } from "../src/network/period.js";
 import { buildIndex as netBuildIndex, compareOn as netCompareOn, dayRevenue as netDayRevenue, daySubs as netDaySubs, dayViews as netDayViews, figuresOf as netFiguresOf, rpmOn as netRpmOn, seriesOf as netSeriesOf, totalsOf as netTotalsOf, viewCoverage as netViewCoverage } from "../src/network/compute.js";
 import { queryString as netQueryString, readQuery as netReadQuery, selectChannels as netSelect } from "../src/network/overview.js";
 import { explainChange as netExplain, moverReason as netMoverReason, moversOf as netMoversOf, nextMilestone as netNextMilestone, trendOf as netTrendOf, usualGapDays as netUsualGap } from "../src/network/insights.js";
@@ -2558,6 +2558,16 @@ section("Network Overview");
   const noRpm = netDayRevenue(ixA, "Chan B", "2026-10-02", "all");
   t("…no RPM at all: left out and flagged, not $0", [noRpm.value, noRpm.noRpm], [null, true]);
   t("subscribers: a hidden count is unknown", [netDaySubs(ixA, "Chan A", "2026-10-02"), netDaySubs(ixA, "Chan B", "2026-10-02")], [10, null]);
+  // The first day of readings has no day before it: it counts from that day's first reading.
+  const firstAt = new Date("2026-10-08T18:17:00Z"), lastAt = new Date("2026-10-08T20:07:00Z");
+  const ixFirst = netBuildIndex([{ ...day("New", "2026-10-08", 51_000, 2_030), readAt: lastAt, first: { views: 50_000, subscribers: 2_000, at: firstAt } }], [], [], []);
+  t("first day of readings: views and subscribers count from its first reading", [netDayViews(ixFirst, "New", "2026-10-08", "all"), netDaySubs(ixFirst, "New", "2026-10-08")], [1_000, 30]);
+  const ixOnce = netBuildIndex([{ ...day("New", "2026-10-08", 50_000, 2_000), readAt: firstAt, first: { views: 50_000, subscribers: 2_000, at: firstAt } }], [], [], []);
+  t("…read only once so far: unknown, not 0", netDayViews(ixOnce, "New", "2026-10-08", "all"), null);
+  t("…a later day still counts from the day before", netDayViews(netBuildIndex([{ ...day("New", "2026-10-08", 51_000, null), first: { views: 50_000, subscribers: null, at: firstAt } }, day("New", "2026-10-09", 58_000, null)], [], [], []), "New", "2026-10-09", "all"), 7_000);
+  t("…the page opens on Since the first reading until there are four weeks of readings", [netDefaultPreset("2026-10-08", "2026-10-08"), netDefaultPreset("2026-09-11", "2026-10-08"), netDefaultPreset("2026-09-10", "2026-10-08"), netDefaultPreset(null, "2026-10-08")], ["since", "since", "28d", "28d"]);
+  const since = netPeriodOf("since", "2026-10-10", { firstRead: "2026-10-08" });
+  t("…which runs from the first reading to today, with nothing to compare", [since.from, since.to, since.partial, since.prev, Boolean(since.noPrevWhy)], ["2026-10-08", "2026-10-10", true, null, true]);
 
   // Network RPM is revenue ÷ the views priced, never the average of channel RPMs.
   const ixR = netBuildIndex(
@@ -2595,6 +2605,8 @@ section("Network Overview");
   const rq = netReadQuery({ div: "stories,nope", ch: ["a", "zzz"], fmt: "bad", range: "90d", scn: "500", lsort: "growth" }, { divisions: ["stories"], channels: ["a"] });
   t("the address: unknown values are dropped, out-of-range ones ignored", [rq.divisions, rq.channels, rq.fmt, rq.preset, rq.scenario, rq.lsort], [["stories"], ["a"], "all", "90d", null, "growth"]);
   t("…and written back the same way", netQueryString(rq, { fmt: "short" }), "?div=stories&ch=a&fmt=short&range=90d&lsort=growth");
+  const opened = netReadQuery({}, { divisions: [], channels: [] }, "since");
+  t("…no range: the one the page opens on; a range picked is always written, so a link keeps it", [opened.preset, netQueryString(opened, { preset: "28d" }), netReadQuery({ range: "28d" }, { divisions: [], channels: [] }, "since").preset], ["since", "?range=28d", "28d"]);
 
   // A view gain is only counted against a recent reading.
   const at = new Date("2026-10-08T12:00:00Z");

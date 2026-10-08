@@ -167,8 +167,11 @@ export async function deleteRpm(id: number): Promise<void> {
 export async function loadReadings(channels: string[], from: string): Promise<{ days: ChannelDay[]; formats: FormatDay[] }> {
   const [days, formats] = await Promise.all([
     pool.query(
-      `SELECT channel, to_char(day, 'YYYY-MM-DD') AS day, views, subscribers, subs_hidden, videos, read_at
-         FROM network_channel_days WHERE channel = ANY($1) AND day >= $2::date - 1 ORDER BY day`,
+      `SELECT * FROM (
+         SELECT channel, day, to_char(day, 'YYYY-MM-DD') AS d, views, subscribers, subs_hidden, videos, read_at, first_views, first_subs, first_at,
+                day = min(day) OVER (PARTITION BY channel) AS first_day
+           FROM network_channel_days WHERE channel = ANY($1)
+       ) x WHERE day >= $2::date - 1 ORDER BY day`,
       [channels, from],
     ),
     pool.query(
@@ -180,8 +183,9 @@ export async function loadReadings(channels: string[], from: string): Promise<{ 
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
     days: days.rows.map((r) => ({
-      channel: String(r.channel), day: String(r.day), views: n(r.views), subscribers: r.subs_hidden ? null : n(r.subscribers), subsHidden: Boolean(r.subs_hidden),
+      channel: String(r.channel), day: String(r.d), views: n(r.views), subscribers: r.subs_hidden ? null : n(r.subscribers), subsHidden: Boolean(r.subs_hidden),
       videos: n(r.videos), readAt: r.read_at as Date,
+      first: r.first_day && r.first_at ? { views: n(r.first_views), subscribers: r.subs_hidden ? null : n(r.first_subs), at: r.first_at as Date } : null,
     })),
     formats: formats.rows.map((r) => ({ channel: String(r.channel), day: String(r.day), format: r.format as VideoFormat, gained: Number(r.gained), videos: Number(r.videos) })),
   };
@@ -228,10 +232,13 @@ export async function readStatus(): Promise<{ lastRead: Date | null; lastFull: {
 /** Keep a channel's public totals as today's reading (the last read of a day stands for it). */
 export async function saveChannelDay(channel: string, s: { views: number | null; subscribers: number | null; subsHidden: boolean; videos: number | null }, now = new Date()): Promise<void> {
   await pool.query(
-    `INSERT INTO network_channel_days (channel, day, views, subscribers, subs_hidden, videos, read_at) VALUES ($1, $2, $3, $4, $5, $6, now())
+    `INSERT INTO network_channel_days (channel, day, views, subscribers, subs_hidden, videos, read_at, first_views, first_subs, first_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $3, $4, $7)
      ON CONFLICT (channel, day) DO UPDATE SET views = COALESCE($3, network_channel_days.views), subscribers = $4, subs_hidden = $5,
-       videos = COALESCE($6, network_channel_days.videos), read_at = now()`,
-    [channel, dateIn(ORG_TZ, now), s.views, s.subsHidden ? null : s.subscribers, s.subsHidden, s.videos],
+       videos = COALESCE($6, network_channel_days.videos), read_at = $7,
+       first_views = COALESCE(network_channel_days.first_views, $3), first_subs = COALESCE(network_channel_days.first_subs, $4),
+       first_at = COALESCE(network_channel_days.first_at, $7)`,
+    [channel, dateIn(ORG_TZ, now), s.views, s.subsHidden ? null : s.subscribers, s.subsHidden, s.videos, now],
   );
 }
 

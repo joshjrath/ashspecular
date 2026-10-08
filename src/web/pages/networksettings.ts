@@ -115,6 +115,7 @@ function rpmPanel(v: NetworkSettingsView): string {
   }).join("");
   return `<section class="panel setgroup" id="rpm" style="margin-top:14px">
     <h2>Revenue estimates / RPM settings <span class="sub">— per channel, revenue per 1,000 views, from a date on. Long-form views use the long-form RPM, Shorts the Shorts RPM, and views that can't be told apart (or a format with no RPM of its own) the blended one. A new entry starts on its date and leaves earlier estimates as they were. Between ${RPM_BOUNDS.min} and ${RPM_BOUNDS.max}. These are your assumptions, not YouTube's figures.</span></h2>
+    <p class="hint">Not sure what to put? Each channel's real RPM is in YouTube Studio → Analytics → Revenue (switch to the channel first; the Content tab splits long-form and Shorts). Use the last 28 or 90 days. Until a channel has one, its revenue is left out, never counted as $0; views and subscribers show either way.</p>
     ${blocks}
   </section>`;
 }

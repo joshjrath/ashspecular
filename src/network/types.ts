@@ -53,6 +53,11 @@ export interface ChannelDay {
   subsHidden: boolean;
   videos: number | null;
   readAt: Date;
+  /**
+   * On the channel's first day of readings only: the day's first reading.
+   * With no day before it, that day counts from here.
+   */
+  first?: { views: number | null; subscribers: number | null; at: Date } | null;
 }
 
 /** Views a channel's videos of one format gained on a day. */

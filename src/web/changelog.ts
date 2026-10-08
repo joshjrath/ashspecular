@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-08-network-views-now",
+    title: "Network Overview shows views from the first hour",
+    changes: [
+      { text: "The page opens on Since the first reading until there are four weeks of history, so views and subscriber changes show straight away instead of waiting for whole days. After that it opens on the last 28 days.", href: "/network" },
+      { text: "A channel's first day counts from its first reading, and the page says when that was. Every day after counts from the day before." },
+      { text: "Settings → Network & revenue says where to find each channel's RPM (YouTube Studio → Analytics → Revenue). Estimated revenue stays blank for a channel until it has one.", href: "/settings/network#rpm" },
+    ],
+  },
+  {
     id: "2026-10-08-network-overview",
     title: "Network Overview: the whole network on one page",
     changes: [

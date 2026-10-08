@@ -3,7 +3,8 @@
  *
  * Views
  *   A channel's views on a day are its public total that day less the day
- *   before's (both read). A format's views are what that format's videos
+ *   before's (both read); on its first day of readings, less that day's
+ *   first reading. A format's views are what that format's videos
  *   gained, read video by video. A day with no reading is unknown — never 0.
  *
  * Revenue (always an ESTIMATE)
@@ -82,12 +83,29 @@ export function rpmOn(rows: RpmRow[] | undefined, day: string): RpmRow | null {
   return found;
 }
 
-/** A channel's views on a day, split as far as the readings allow. */
-export function dayParts(ix: Index, channel: string, day: string): { total: number | null; long: number | null; short: number | null; unknown: number | null; read: boolean } {
+/**
+ * A day's change in one of a channel's totals: against the day before's last
+ * reading, or, on the channel's first day of readings, against that day's
+ * first reading (what it gained since the board started reading it).
+ */
+function dayChange(ix: Index, channel: string, day: string, pick: (r: { views: number | null; subscribers: number | null }) => number | null): number | null {
   const t = ix.totals.get(channel);
   const today = t?.get(day);
+  if (!today) return null;
+  const now = pick(today);
+  if (now === null) return null;
   const before = t?.get(shiftDate(day, -1));
-  const total = today?.views !== null && today?.views !== undefined && before?.views !== null && before?.views !== undefined ? today.views - before.views : null;
+  const prev = before ? pick(before) : null;
+  if (prev !== null) return now - prev;
+  const first = today.first;
+  const start = first ? pick(first) : null;
+  return first && start !== null && first.at.getTime() < today.readAt.getTime() ? now - start : null;
+}
+
+/** A channel's views on a day, split as far as the readings allow. */
+export function dayParts(ix: Index, channel: string, day: string): { total: number | null; long: number | null; short: number | null; unknown: number | null; read: boolean } {
+  const today = ix.totals.get(channel)?.get(day);
+  const total = dayChange(ix, channel, day, (r) => r.views);
   // A day the channel was read on, its videos were too: no gain recorded is a real 0.
   const read = Boolean(today);
   const g = ix.gains.get(channel)?.get(day);
@@ -101,10 +119,7 @@ export function dayViews(ix: Index, channel: string, day: string, fmt: FormatPic
 }
 
 export function daySubs(ix: Index, channel: string, day: string): number | null {
-  const t = ix.totals.get(channel);
-  const a = t?.get(day)?.subscribers;
-  const b = t?.get(shiftDate(day, -1))?.subscribers;
-  return a !== null && a !== undefined && b !== null && b !== undefined ? a - b : null;
+  return dayChange(ix, channel, day, (r) => r.subscribers);
 }
 
 export function dayUploads(ix: Index, channel: string, day: string, fmt: FormatPick): number {
