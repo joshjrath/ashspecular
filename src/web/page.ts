@@ -130,6 +130,7 @@ export function layout(title: string, shell: Shell | null, body: string): string
  */
 export const RAIL_ITEMS: Array<{ key: string; label: string; group: "Pages" | "Categories" | "Also" }> = [
   { key: "dashboard", label: "Dashboard", group: "Pages" },
+  { key: "network", label: "Network Overview", group: "Pages" },
   { key: "myday", label: "My Day", group: "Pages" },
   { key: "tasks", label: "Tasks", group: "Pages" },
   { key: "vo", label: "VO Queue", group: "Pages" },
@@ -186,6 +187,7 @@ function sidebar(s: Shell): string {
     }
     <nav>
       ${item("/", "Dashboard", null, "dashboard")}
+      ${item("/network", "Network Overview", null, "network")}
       ${item("/my-day", "My Day", null, "myday")}
       ${
         off.has("tasks")
@@ -320,6 +322,10 @@ const NOTICE_KINDS: Array<{ kind: NoticeKind; label: string; colour: string; ico
     icon: `<rect x="3.5" y="4.5" width="13" height="12" rx="2" stroke-dasharray="2.2 1.8"/><path d="M3.5 8.5h13M7 3v3M13 3v3"/><path d="M10 10.8v2.4"/><circle cx="10" cy="15" r=".5" fill="currentColor"/>`,
   },
   {
+    kind: "network", label: "Network", colour: "#4FB3BF",
+    icon: `<path d="M3.5 15.5 7.5 10l3 3 6-8"/><path d="M13 5h3.5v3.5"/>`,
+  },
+  {
     kind: "update", label: "What's new", colour: "#E8C547",
     icon: `<path d="m10 3.2 2 4.3 4.6.5-3.4 3.1 1 4.6L10 13.4l-4.2 2.3 1-4.6L3.4 8l4.6-.5z"/>`,
   },
@@ -343,6 +349,7 @@ export function bell(notices: Notice[], seen: number): string {
   const what = (n: Notice): string => {
     if (n.kind === "update") return `What's new · ${n.release.changes.length} change${n.release.changes.length === 1 ? "" : "s"}`;
     if (n.kind === "gap") return `Expected ${esc(relativeDay(n.gap.date))} · ${esc(n.gap.channel)}`;
+    if (n.kind === "network") return `Network Overview${n.alert.channel ? ` · ${esc(n.alert.channel)}` : ""}`;
     const r = n.record;
     switch (n.kind) {
       case "revision": return `Revision ready${r.version ? ` · v${r.version}` : ""}`;
@@ -374,6 +381,16 @@ export function bell(notices: Notice[], seen: number): string {
           <span class="ns">${what(n)}</span>
         </span>
         <span class="ago">${esc(n.gap.inDays === 0 ? "today" : `${n.gap.inDays}d`)}</span>
+      </a>`;
+      }
+      if (n.kind === "network") {
+        return `<a class="notice network${isNew ? " new-item" : ""}" data-kind="network" href="${esc(safeHref(n.alert.href ?? "") || "/network")}">
+        ${noticeIcon("network")}
+        <span class="body">
+          <span class="nt">${esc(n.alert.text)}</span>
+          <span class="ns">${what(n)}</span>
+        </span>
+        <span class="ago">${esc(timeAgo(n.at))}</span>
       </a>`;
       }
       if (n.kind === "update") {
@@ -1029,4 +1046,34 @@ export function fmtMin(m: number): string {
   const n = Math.max(0, Math.round(m));
   if (n < 60) return `${n}m`;
   return `${Math.floor(n / 60)}h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}m` : ""}`;
+}
+
+/** One tooltip for every element with data-tip ("title|line|line"). */
+export const TIP_SCRIPT = `<div class="ftip" id="ftip" hidden></div><script>
+(function () {
+  var tip = document.getElementById("ftip");
+  if (!tip) return;
+  function show(e) {
+    var t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.hidden = true; return; }
+    var parts = t.getAttribute("data-tip").split("|");
+    tip.innerHTML = "";
+    parts.forEach(function (p, i) { var d = document.createElement(i ? "div" : "b"); d.textContent = p; tip.appendChild(d); });
+    tip.hidden = false;
+    var x = e.clientX + 14, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  document.addEventListener("mousemove", show);
+  document.addEventListener("touchstart", function (e) { if (e.touches[0]) show({ target: e.target, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }); }, { passive: true });
+})();
+</script>`;
+
+/** A round step for a chart axis: 1, 2 or 5 of a power of ten. */
+export function niceStep(raw: number): number {
+  if (raw <= 0) return 10000;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const f = raw / mag;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
 }

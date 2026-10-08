@@ -6,7 +6,7 @@
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
 import { addMonths, fmtMoney, fmtPct, monthLabel } from "../../finance/money.js";
 import { FLAG, type Flag } from "../../finance/metrics.js";
-import { channelColour, layout, pageHeader, type Shell } from "../page.js";
+import { TIP_SCRIPT, channelColour, layout, niceStep, pageHeader, type Shell } from "../page.js";
 import { esc } from "../html.js";
 
 export const FIN_TABS = [
@@ -147,34 +147,7 @@ export function trendChart(points: Array<{ month: string; revenue: number; expen
   </figure>`;
 }
 
-function niceStep(raw: number): number {
-  if (raw <= 0) return 10000;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const f = raw / mag;
-  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
-}
 
-/** One tooltip for every element with data-tip ("title|line|line"). */
-const TIP_SCRIPT = `<div class="ftip" id="ftip" hidden></div><script>
-(function () {
-  var tip = document.getElementById("ftip");
-  if (!tip) return;
-  function show(e) {
-    var t = e.target.closest && e.target.closest("[data-tip]");
-    if (!t) { tip.hidden = true; return; }
-    var parts = t.getAttribute("data-tip").split("|");
-    tip.innerHTML = "";
-    parts.forEach(function (p, i) { var d = document.createElement(i ? "div" : "b"); d.textContent = p; tip.appendChild(d); });
-    tip.hidden = false;
-    var x = e.clientX + 14, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight;
-    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
-    if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
-    tip.style.left = x + "px"; tip.style.top = y + "px";
-  }
-  document.addEventListener("mousemove", show);
-  document.addEventListener("touchstart", function (e) { if (e.touches[0]) show({ target: e.target, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }); }, { passive: true });
-})();
-</script>`;
 
 // ── voice notes ────────────────────────────────────────────────────────────
 
@@ -458,18 +431,6 @@ const FIN_CSS = ALERT_CSS + `
 .fbt { height: 8px; border-radius: 999px; background: #26262C; overflow: hidden; }
 .fbt i { display: block; height: 100%; border-radius: 999px; background: var(--c); }
 .fba { text-align: right; font-weight: 700; } .fbp { text-align: right; color: var(--ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
-.fchart { margin: 0; }
-.fchart svg { width: 100%; height: auto; display: block; overflow: visible; }
-.fchart .grid { stroke: #2A2A31; stroke-width: 1; } .fchart .zero { stroke: #55555E; stroke-width: 1; }
-.fchart .ax { fill: var(--ink3); font-size: 10.5px; font-family: var(--ui); }
-.fchart .hit { fill: transparent; cursor: crosshair; } .fchart .hit:hover { fill: rgba(255,255,255,.04); }
-.flegend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink2); margin-bottom: 8px; }
-.flegend span { display: inline-flex; align-items: center; gap: 6px; }
-.flegend i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
-.flegend .ln i { height: 2px; width: 14px; border-radius: 1px; }
-.ftip { position: fixed; z-index: 50; pointer-events: none; padding: 8px 11px; border-radius: 10px; background: #2C2C33; color: var(--ink); font-size: 12px;
-  line-height: 1.5; box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 1px var(--line); font-variant-numeric: tabular-nums; }
-.ftip b { display: block; font-family: var(--display); font-size: 13px; }
 .ftable { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ftable th { text-align: right; font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .ftable th:first-child, .ftable td:first-child { text-align: left; }

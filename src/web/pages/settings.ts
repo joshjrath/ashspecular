@@ -127,6 +127,7 @@ function settingsMenu(data: { keys?: KeysView; limits?: LimitsView; password?: {
     ${data.limits ? tile("limits", "💸", "Limits & spending", "Daily caps on Claude, YouTube and Tumblr") : ""}
     ${data.password ? tile("password", "🔒", "Login password", data.password.changedAt ? `Changed ${usDate(dayOf(data.password.changedAt))}` : "Set on Railway") : ""}
     ${data.colours ? tile("colours", "📺", "Channels", `${data.colours.length} channels · names, colours, add`) : ""}
+    ${`<a class="setmenu-i" href="/settings/network"><span class="ic" aria-hidden="true">📈</span><span><b>Network &amp; revenue</b><em>Divisions, channels in Network Overview, RPMs</em></span></a>`}
     ${tile("estimates", "⏱", "Time estimates", "How long each kind of work takes")}
     ${tile("daysoff", "🌴", "Days off", data.daysOff.length ? `${data.daysOff.length} set` : "None set")}
     ${tile("layout", "🧭", "Sidebar & dashboard", "What shows, and where")}

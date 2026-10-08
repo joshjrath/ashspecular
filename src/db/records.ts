@@ -836,10 +836,10 @@ export async function listLate(limit = 300): Promise<StoredRecord[]> {
  * the last time the bell was opened. Recurring batches are left out: they
  * fall due every evening and would drown the rest.
  */
-export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "missed" | "gap" | "update";
+export type NoticeKind = "revision" | "overdue" | "upcoming" | "airing" | "new" | "dayoff" | "missed" | "gap" | "update" | "network";
 /** Something about one piece of work. */
 export interface RecordNotice {
-  kind: Exclude<NoticeKind, "update" | "gap">;
+  kind: Exclude<NoticeKind, "update" | "gap" | "network">;
   at: Date;
   record: StoredRecord;
   /** A "missed" notice: the day it was meant to post, and where it was pushed. */
@@ -857,7 +857,13 @@ export interface GapNotice {
   at: Date;
   gap: { channel: string; date: string; inDays: number; after: string };
 }
-export type Notice = RecordNotice | UpdateNotice | GapNotice;
+/** Network Overview noticed something: a sustained decline, an outlier, a channel gone quiet. */
+export interface NetworkNotice {
+  kind: "network";
+  at: Date;
+  alert: { key: string; text: string; href: string | null; channel: string | null };
+}
+export type Notice = RecordNotice | UpdateNotice | GapNotice | NetworkNotice;
 
 export async function listNotices(zone: string, limit = 60): Promise<RecordNotice[]> {
   const q = (where: string, order: string) =>

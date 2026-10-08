@@ -26,6 +26,7 @@ import { financeAlerts } from "./finance/routes.js";
 import { getTask, openTasks, tasksDoneToday } from "../db/tasks.js";
 import { latestUploads, listChannelLinks, listUploads } from "../jobs/youtube.js";
 import { listMissed } from "../jobs/postcheck.js";
+import { recentAlerts } from "../db/network.js";
 import { minutesSpent, runningTimer, taskMinutesSpent, untrackedKeys } from "../db/timers.js";
 import { monthOf } from "./pages/calendar.js";
 import { readEstimates } from "../db/estimates.js";
@@ -315,6 +316,13 @@ export async function withScores(list: StoredRecord[]): Promise<StoredRecord[]> 
 }
 
 /** The posting check's pushes from the last week, for the bell. */
+/** What Network Overview's daily look found, for a week. */
+async function networkNotices(): Promise<Notice[]> {
+  if (!hasDatabase) return [];
+  const alerts = await recentAlerts(7).catch((err) => (console.error("[network] couldn't read alerts:", err), []));
+  return alerts.map((a) => ({ kind: "network" as const, at: a.at, alert: { key: a.key, text: a.text, href: a.href, channel: a.channel } }));
+}
+
 async function missedNotices(): Promise<Notice[]> {
   if (!hasDatabase) return [];
   const list = (await listMissed({ days: 7 }).catch(() => [])).filter((m) => !m.undoneAt);
@@ -328,6 +336,6 @@ async function missedNotices(): Promise<Notice[]> {
 
 /** Everything for the bell, newest first. */
 export async function allNotices(): Promise<Notice[]> {
-  const [work, gaps, missed] = await Promise.all([listNotices(ORG_TZ), currentGaps(), missedNotices()]);
-  return [...work, ...missed, ...gapNotices(gaps), ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
+  const [work, gaps, missed, network] = await Promise.all([listNotices(ORG_TZ), currentGaps(), missedNotices(), networkNotices()]);
+  return [...work, ...missed, ...network, ...gapNotices(gaps), ...releaseNotices(releaseTimes)].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 60);
 }

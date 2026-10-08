@@ -111,6 +111,14 @@ import { conceptKey, ruleConcept } from "../src/competitors/concepts.js";
 import type { CompChannel, Concept, NicheVideo } from "../src/db/competitors.js";
 import { COOKIE_NAME, checkPassword, clearLoginFailures, cookieOptions, hashPassword, issueToken, loginWait, noteLoginFailure, restoreLoginFailures, setSessionEpoch, setStoredPassword, verifyToken } from "../src/web/auth.js";
 import { buildApp } from "../src/web/server.js";
+import { periodOf as netPeriodOf } from "../src/network/period.js";
+import { buildIndex as netBuildIndex, compareOn as netCompareOn, dayRevenue as netDayRevenue, daySubs as netDaySubs, dayViews as netDayViews, figuresOf as netFiguresOf, rpmOn as netRpmOn, seriesOf as netSeriesOf, totalsOf as netTotalsOf, viewCoverage as netViewCoverage } from "../src/network/compute.js";
+import { queryString as netQueryString, readQuery as netReadQuery, selectChannels as netSelect } from "../src/network/overview.js";
+import { explainChange as netExplain, moverReason as netMoverReason, moversOf as netMoversOf, nextMilestone as netNextMilestone, trendOf as netTrendOf, usualGapDays as netUsualGap } from "../src/network/insights.js";
+import { gainOf as netGainOf } from "../src/db/network.js";
+import { contribution as netContribution, fmtMoneyIn as netFmtMoney, fmtNum as netFmtNum } from "../src/web/pages/network.js";
+import type { ChannelDay as NetChannelDay, FormatDay as NetFormatDay, NetChannel, RpmRow as NetRpmRow } from "../src/network/types.js";
+
 import { contentDisposition, formId, formText, localPath, refererPath, safeDate, toCsv } from "../src/web/http.js";
 import { gunzipSync } from "node:zlib";
 import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
@@ -563,7 +571,7 @@ t("no separate pinned section", pages.dashboard.includes("group pinned"), false)
 t("a pinned row offers unpin, an unpinned one pin", [pages.dashboard.includes("/r/7/unpin"), pages.dashboard.includes("/r/8/pin")], [true, true]);
 t("pinned first survives any sort", sortRecords([plainRec, pinnedRec], "title", "asc").map((r) => r.id), [7, 8]);
 t("bell: only what came after the last look is new", (pages.dashboard.match(/class="notice [a-z]+ new-item"/g) ?? []).length, 1);
-t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 10);
+t("bell: a filter for every kind, plus All", (pages.dashboard.match(/class="nf[^"]*" data-f="/g) ?? []).length, 11);
 t("bell: kinds with nothing in them can't be picked", /data-f="upcoming"[^>]*disabled/.test(pages.dashboard), true);
 t("bell: each kind has its own icon colour",
   [...new Set([...pages.dashboard.matchAll(/class="ico" style="--nc:([^"]+)"/g)].map((m) => m[1]))].length, 2);
@@ -1073,7 +1081,7 @@ t("what's left stays", [slim.includes('href="/calendar"'), slim.includes('href="
 t("Settings is always there", slim.includes('href="/settings"'), true);
 const noCats = railOf(renderList({ ...shellFix, railHide: CATEGORIES.map((c) => `cat-${c.id}`) }, "Queue", "", []));
 t("no categories left, no Categories heading", noCats.includes("<h3>Categories</h3>"), false);
-t("every sidebar item can be switched off", RAIL_ITEMS.length, 15 + CATEGORIES.length + 5);
+t("every sidebar item can be switched off", RAIL_ITEMS.length, 16 + CATEGORIES.length + 5);
 const setPage = renderSettings({ ...shellFix, active: "settings" }, { railHide: ["queue"], dashHide: ["channels"], daysOff: [], shifted: [], saved: true, scripts: false });
 t("Settings shows each item, ticked unless it's off", [/value="queue">/.test(setPage), /value="calendar" checked>/.test(setPage)], [true, true]);
 t("…Scripts only when there's a Scripts tab", setPage.includes('value="scripts"'), false);
@@ -2495,6 +2503,128 @@ section("Hostile text never reaches a page raw");
   // Raw markup from the data, or a javascript: link anywhere a browser would follow it.
   const leaks = Object.entries(rendered).filter(([, html]) => html.includes("<img src=x") || html.includes("<svg onload") || html.includes("<b class=pwn") || /(href|src|action)="\s*javascript:/i.test(html)).map(([name]) => name);
   t("records full of markup and javascript: links render escaped on every page", leaks, []);
+}
+
+section("Network Overview");
+{
+  // Periods: whole days end yesterday; a month or year so far is partial and compared with the same days before.
+  const p7 = netPeriodOf("7d", "2026-10-08");
+  const pm = netPeriodOf("month", "2026-10-08");
+  const plm = netPeriodOf("lastmonth", "2026-10-08");
+  const py = netPeriodOf("year", "2026-10-08");
+  t("periods: last 7 days end yesterday, against the 7 before", [p7.from, p7.to, p7.days, p7.prev?.from, p7.prev?.to, p7.partial], ["2026-10-01", "2026-10-07", 7, "2026-09-24", "2026-09-30", false]);
+  t("…this month so far is partial, against the same days of last month", [pm.from, pm.to, pm.partial, pm.prev?.from, pm.prev?.to], ["2026-10-01", "2026-10-08", true, "2026-09-01", "2026-09-08"]);
+  t("…last month against the month before; this year against the same days last year", [plm.from, plm.to, plm.prev?.from, plm.prev?.to, py.prev?.from, py.prev?.to], ["2026-09-01", "2026-09-30", "2026-08-01", "2026-08-31", "2025-01-01", "2025-10-08"]);
+  t("…the 31st's month-so-far compares with the 28th of February", netPeriodOf("month", "2026-03-31").prev?.to, "2026-02-28");
+  t("…today has no comparison, and says why", [netPeriodOf("today", "2026-10-08").prev, Boolean(netPeriodOf("today", "2026-10-08").noPrevWhy)], [null, true]);
+  t("…a custom range given backwards is put the right way round", [netPeriodOf("custom", "2026-10-08", { from: "2026-09-20", to: "2026-09-10" }).from, netPeriodOf("custom", "2026-10-08", { from: "nope" }).from], ["2026-09-10", "2026-09-10"]);
+
+  // Two channels over four days. A: totals 1,000 → 1,500 → (no reading) → 2,600. B: hidden subscribers.
+  const ch = (id: string, name: string, divisionId: string, extra: Partial<NetChannel> = {}): NetChannel => ({
+    id, name, category: "stories", divisionId, active: true, position: 0, addedAt: null, youtubeId: `UC${id}`, title: null, avatarUrl: null, error: null, checkedAt: null, colour: "#4A5CD4", ...extra,
+  });
+  const A = ch("a", "Chan A", "stories"), B = ch("b", "Chan B", "bits");
+  const day = (channel: string, d: string, views: number | null, subscribers: number | null, subsHidden = false): NetChannelDay => ({ channel, day: d, views, subscribers, subsHidden, videos: null, readAt: new Date() });
+  const days = [
+    day("Chan A", "2026-10-01", 1000, 100), day("Chan A", "2026-10-02", 1500, 110), day("Chan A", "2026-10-04", 2600, 130),
+    day("Chan B", "2026-10-01", 5000, null, true), day("Chan B", "2026-10-02", 9000, null, true),
+  ];
+  const gains: NetFormatDay[] = [
+    { channel: "Chan A", day: "2026-10-02", format: "long", gained: 300, videos: 2 },
+    { channel: "Chan A", day: "2026-10-02", format: "short", gained: 150, videos: 5 },
+  ];
+  const rpm = (channel: string, from: string, long: number | null, short: number | null, blended: number | null, currency = "USD"): NetRpmRow =>
+    ({ id: 0, channel, from, long, short, blended, currency, notes: "", createdAt: new Date() });
+  const ixA = netBuildIndex(days, gains, [], [rpm("Chan A", "2026-01-01", 5, 0.12, 2)]);
+  t("views: a day is its total less the day before's", netDayViews(ixA, "Chan A", "2026-10-02", "all"), 500);
+  t("…a day without both readings is unknown, never 0", [netDayViews(ixA, "Chan A", "2026-10-03", "all"), netDayViews(ixA, "Chan A", "2026-10-04", "all")], [null, null]);
+  t("…by format: what that format's videos gained", [netDayViews(ixA, "Chan A", "2026-10-02", "long"), netDayViews(ixA, "Chan A", "2026-10-02", "short"), netDayViews(ixA, "Chan A", "2026-10-03", "long")], [300, 150, null]);
+  const rev = netDayRevenue(ixA, "Chan A", "2026-10-02", "all");
+  t("revenue: long at the long RPM, Shorts at the Shorts RPM, the rest at blended (300×$5 + 150×$0.12 + 50×$2, per 1,000)",
+    [Math.round(rev.value! * 1000) / 1000, Math.round(rev.byFormat * 1000) / 1000, Math.round(rev.byBlended * 1000) / 1000, rev.priced], [1.618, 1.518, 0.1, 500]);
+  // The spec's example: 1,000,000 long-form views at $5 and 2,000,000 Shorts views at $0.12 is $5,240.
+  const ixS = netBuildIndex(
+    [day("Specular Studios", "2026-10-01", 0, null), day("Specular Studios", "2026-10-02", 3_000_000, null)],
+    [{ channel: "Specular Studios", day: "2026-10-02", format: "long", gained: 1_000_000, videos: 1 }, { channel: "Specular Studios", day: "2026-10-02", format: "short", gained: 2_000_000, videos: 1 }],
+    [], [rpm("Specular Studios", "2026-01-01", 5, 0.12, null)],
+  );
+  t("…the spec's example: 1M long-form at $5 + 2M Shorts at $0.12 = $5,240", Math.round(netDayRevenue(ixS, "Specular Studios", "2026-10-02", "all").value! * 100) / 100, 5240);
+  t("…Shorts views never take the long-form RPM", Math.round(netDayRevenue(ixS, "Specular Studios", "2026-10-02", "short").value! * 100) / 100, 240);
+  const ixHist = netBuildIndex([], [], [], [rpm("X", "2026-01-01", 4.5, null, null), rpm("X", "2026-04-01", 5, null, null), rpm("X", "2026-07-01", 5.3, null, null)]);
+  t("RPM history: each day uses the assumption in force then", ["2025-12-31", "2026-03-31", "2026-04-01", "2026-06-30", "2026-07-01"].map((d) => netRpmOn(ixHist.rpm.get("X"), d)?.long ?? null), [null, 4.5, 5, 5, 5.3]);
+  const ixNoShortRpm = netBuildIndex(days, gains, [], [rpm("Chan A", "2026-01-01", 5, null, 1)]);
+  const r2 = netDayRevenue(ixNoShortRpm, "Chan A", "2026-10-02", "short");
+  t("…a format with no RPM of its own falls back to blended, and is counted as blended", [r2.byFormat, Math.round(r2.byBlended * 1000) / 1000], [0, 0.15]);
+  const noRpm = netDayRevenue(ixA, "Chan B", "2026-10-02", "all");
+  t("…no RPM at all: left out and flagged, not $0", [noRpm.value, noRpm.noRpm], [null, true]);
+  t("subscribers: a hidden count is unknown", [netDaySubs(ixA, "Chan A", "2026-10-02"), netDaySubs(ixA, "Chan B", "2026-10-02")], [10, null]);
+
+  // Network RPM is revenue ÷ the views priced, never the average of channel RPMs.
+  const ixR = netBuildIndex(
+    [day("X", "2026-10-01", 0, null), day("X", "2026-10-02", 1000, null), day("Y", "2026-10-01", 0, null), day("Y", "2026-10-02", 9000, null)],
+    [{ channel: "X", day: "2026-10-02", format: "long", gained: 1000, videos: 1 }, { channel: "Y", day: "2026-10-02", format: "long", gained: 9000, videos: 1 }],
+    [], [rpm("X", "2026-01-01", 5, null, null), rpm("Y", "2026-01-01", 1, null, null)],
+  );
+  const range2 = { from: "2026-10-02", to: "2026-10-02" };
+  const figs = [ch("x", "X", "stories"), ch("y", "Y", "stories")].map((c) => netFiguresOf(ixR, c, range2, "all"));
+  const tot = netTotalsOf(figs, ixR, range2, "all");
+  t("network RPM: $14 from 10,000 views is $1.40 (the average of $5 and $1 would wrongly say $3)", [tot.revenue, tot.rpm], [14, 1.4]);
+  const withB = netTotalsOf([...figs, netFiguresOf(ixA, B, range2, "all")], ixR, range2, "all");
+  t("…a channel without an RPM is named as needing one, and changes nothing else", [withB.needRpm, withB.revenue], [["Chan B"], 14]);
+
+  // Comparisons: like for like leaves out a channel without enough history in both periods.
+  const fig = (c: NetChannel, views: number | null, viewDays: number, d = 7) => ({ ...netFiguresOf(ixA, c, { from: "2030-01-01", to: "2030-01-07" }, "all"), views, viewDays, days: d });
+  const cur = [fig(A, 1200, 7), fig(B, 800, 7)];
+  const prev = [fig(A, 1000, 7), fig(B, null, 0)];
+  t("compare like for like: only channels with readings in both periods (A: 1,200 vs 1,000 = +20%)", netCompareOn(cur, prev, (f) => f.views, netViewCoverage, "lfl").change, 0.2);
+  t("…current network counts a channel new since as growth (2,000 vs 1,000)", netCompareOn(cur, prev, (f) => f.views, netViewCoverage, "current").change, 1);
+  t("…no history before: no percentage at all", netCompareOn(cur, [fig(A, null, 0), fig(B, null, 0)], (f) => f.views, netViewCoverage, "lfl").change, null);
+  t("…too few days read (5 of 7) isn't enough", netCompareOn([fig(A, 1200, 5)], [fig(A, 1000, 7)], (f) => f.views, netViewCoverage, "lfl").change, null);
+
+  // The chart: a day nobody has a reading for is a gap.
+  const s = netSeriesOf(ixA, [A], [{ id: "stories", name: "Stories", colour: "#4A5CD4", position: 0 }], { from: "2026-10-02", to: "2026-10-04" }, "all", "views", "total");
+  t("chart: missing days are gaps, not zero", s.series[0]!.values, [500, null, null]);
+
+  // Selection: picked channels win over divisions; switched-off channels never count.
+  const off = ch("c", "Chan C", "stories", { active: false });
+  t("selection: picked channels, else the divisions', else every active channel", [
+    netSelect([A, B, off], { divisions: ["bits"], channels: [] }).map((c) => c.id),
+    netSelect([A, B, off], { divisions: ["bits"], channels: ["a"] }).map((c) => c.id),
+    netSelect([A, B, off], { divisions: [], channels: [] }).map((c) => c.id),
+  ], [["b"], ["a"], ["a", "b"]]);
+  const rq = netReadQuery({ div: "stories,nope", ch: ["a", "zzz"], fmt: "bad", range: "90d", scn: "500", lsort: "growth" }, { divisions: ["stories"], channels: ["a"] });
+  t("the address: unknown values are dropped, out-of-range ones ignored", [rq.divisions, rq.channels, rq.fmt, rq.preset, rq.scenario, rq.lsort], [["stories"], ["a"], "all", "90d", null, "growth"]);
+  t("…and written back the same way", netQueryString(rq, { fmt: "short" }), "?div=stories&ch=a&fmt=short&range=90d&lsort=growth");
+
+  // A view gain is only counted against a recent reading.
+  const at = new Date("2026-10-08T12:00:00Z");
+  t("gains: against a reading under 36 hours old; a new video whole; otherwise only a baseline", [
+    netGainOf({ views: 100, at: new Date("2026-10-08T00:00:00Z") }, 160, new Date("2026-09-01"), at),
+    netGainOf({ views: 100, at: new Date("2026-10-05T00:00:00Z") }, 160, new Date("2026-09-01"), at),
+    netGainOf({ views: null, at: null }, 900, new Date("2026-10-07T20:00:00Z"), at),
+    netGainOf({ views: null, at: null }, 900, new Date("2026-08-01"), at),
+    netGainOf({ views: 500, at: new Date("2026-10-08T06:00:00Z") }, 480, new Date("2026-09-01"), at),
+  ], [60, null, 900, null, -20]);
+
+  // Insights: explainable rules.
+  t("momentum: 5% either way over the last 7 days", [netTrendOf(0.06), netTrendOf(0.02), netTrendOf(-0.08), netTrendOf(null)], ["accelerating", "stable", "declining", null]);
+  t("…a change explained by uploads and by each video's first week", netExplain(0.12, 12, 10, 950, 1000), "Views up 12%: uploads rose 20%, while each new video's first week fell 5% (median).");
+  t("movers: the reason says what upload frequency did", netMoverReason(-0.24, 10, 10, "the previous 28 days"), "Views fell 24% versus the previous 28 days, while upload frequency stayed similar (10 vs 10).");
+  const mv = netMoversOf(
+    [fig(A, 1500, 7), fig(B, 1050, 7), { ...fig(ch("d", "Chan D", "bits"), 700, 7) }],
+    [fig(A, 1000, 7), fig(B, 1000, 7), { ...fig(ch("d", "Chan D", "bits"), 1000, 7) }],
+    "the previous 7 days",
+  );
+  t("…only meaningful moves: +50% gains, -30% needs attention, +5% is neither", [mv.gainers.map((m) => m.channel.id), mv.attention.map((m) => m.channel.id)], [["a"], ["d"]]);
+  t("…one day isn't enough to name a channel", netMoversOf([fig(A, 3000, 1, 1)], [fig(A, 1000, 1, 1)], "the day before").gainers.length, 0);
+  t("milestones: the next round number above", [netNextMilestone(87_200_000), netNextMilestone(1200), netNextMilestone(250), netNextMilestone(0)], [100_000_000, 2500, 500, 1]);
+  t("usual gap: the median of the last ten gaps, in days", netUsualGap(["2026-10-01", "2026-10-03", "2026-10-05", "2026-10-07", "2026-10-09"].map((d) => new Date(`${d}T12:00:00Z`))), 2);
+
+  // The page: estimates are labelled, a hostile name is escaped, subscribers are diverging bars.
+  const evil = `<img src=x onerror=alert(1)>`;
+  const html = netContribution([{ d: { id: "a", name: evil, colour: "#4A5CD4", position: 0 }, v: 120 }, { d: { id: "b", name: "Bits", colour: "#AC63C8", position: 1 }, v: -40 }], "subs", "USD");
+  t("contribution: subscribers (which can fall) as diverging bars, names escaped", [html.includes("nt-diverge"), html.includes("<img src=x"), html.includes("−40")], [true, false, true]);
+  t("money and counts read plainly", [netFmtNum(184203), netFmtNum(1_250_000), netFmtNum(-40, { sign: true }), netFmtNum(null), netFmtMoney(5240, "USD"), netFmtMoney(0.84, "USD"), netFmtMoney(152_400, "USD")], ["184K", "1.25M", "−40", "—", "$5,240", "$0.84", "$152.4K"]);
 }
 
 section("Every route is behind the sign-in");

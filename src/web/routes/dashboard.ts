@@ -12,6 +12,7 @@ import { financeAlerts } from "../finance/routes.js";
 import { hasDatabase } from "../../config.js";
 import { noticeTitle, renderEmptyState, renderWhatsNew } from "../page.js";
 import { refererPath, safeDate } from "../http.js";
+import { safeHref } from "../html.js";
 import { renderDashboard } from "../pages/dashboard.js";
 import { allNotices, cookieList, forgetGaps, nextAssignments, releaseTime, shell, withScores } from "../shell.js";
 import type { FastifyInstance } from "fastify";
@@ -80,6 +81,8 @@ export function registerDashboard(app: FastifyInstance): void {
       items: notices.map((n) =>
         n.kind === "update"
           ? { id: n.release.id, kind: n.kind, at: n.at.getTime(), title: n.release.title, channel: null, href: `/whats-new#${n.release.id}` }
+          : n.kind === "network"
+          ? { id: n.alert.key, kind: n.kind, at: n.at.getTime(), title: n.alert.text, channel: n.alert.channel, href: safeHref(n.alert.href ?? "") || "/network" }
           : n.kind === "gap"
           ? { id: `${n.gap.channel}:${n.gap.date}`, kind: n.kind, at: n.at.getTime(), title: `Nothing assigned for ${usDate(n.gap.date)}`, channel: n.gap.channel, href: `/day/${n.gap.date}` }
           : { id: n.record.id, kind: n.kind, at: n.at.getTime(), title: noticeTitle(n.record), channel: n.record.channel, href: `/r/${n.record.id}` },

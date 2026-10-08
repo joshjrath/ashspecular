@@ -269,6 +269,56 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and running it again changes nothing", [again.missed.length, await rows(), await airs(old)], [0, after, [day(-5), day(4), day(8)]]);
 }
 
+// ── Network Overview: readings in, figures out ──────────────────────────────
+{
+  const { recordViewReadings, saveChannelDay, listNetChannels } = await import("../src/db/network.js");
+  const { listUploads } = await import("../src/jobs/youtube.js");
+  const yesterdayNoon = new Date(Date.now() - 86_400_000);
+  // Specular Anime: one long-form video (the board's format) and one Short (Network Overview's only).
+  await pool.query("INSERT INTO youtube_channels (channel, input, youtube_id, checked_at) VALUES ('Specular Anime', '@specularanime', 'UCanime0000000000000000', now()) ON CONFLICT (channel) DO UPDATE SET youtube_id = 'UCanime0000000000000000'");
+  await pool.query(
+    `INSERT INTO uploads (video_id, channel, title, published_at, url, format, board) VALUES
+       ('netlong0001', 'Specular Anime', 'What If Naruto Was In Bleach?', now() - interval '20 days', 'https://www.youtube.com/watch?v=netlong0001', 'long', true),
+       ('netshort001', 'Specular Anime', 'Naruto vs Ichigo #shorts', now() - interval '20 days', 'https://www.youtube.com/shorts/netshort001', 'short', false)`,
+  );
+  t("the board's own pages never see a channel's other format", (await listUploads(new Date(Date.now() - 30 * 86_400_000))).filter((u) => u.channel === "Specular Anime").map((u) => u.videoId), ["netlong0001"]);
+  // Yesterday's readings, then today's: 10,000 → 13,000 total; the long-form video +2,000, the Short +600.
+  await saveChannelDay("Specular Anime", { views: 10_000, subscribers: 5_000, subsHidden: false, videos: 2 }, yesterdayNoon);
+  await recordViewReadings([{ videoId: "netlong0001", views: 50_000 }, { videoId: "netshort001", views: 9_000 }], { now: new Date(Date.now() - 3_600_000) });
+  await saveChannelDay("Specular Anime", { views: 13_000, subscribers: 5_100, subsHidden: false, videos: 2 });
+  await recordViewReadings([{ videoId: "netlong0001", views: 52_000 }, { videoId: "netshort001", views: 9_600 }]);
+  const gains = (await pool.query("SELECT format, gained FROM network_format_days WHERE channel = 'Specular Anime' ORDER BY format")).rows.map((r) => `${r.format}:${r.gained}`);
+  t("view gains are counted by format, once each (the first reading only sets a baseline)", gains, ["long:2000", "short:600"]);
+
+  // An RPM through Settings: $4 long-form, $0.10 Shorts, $2 blended.
+  const anime = (await listNetChannels()).find((c) => c.name === "Specular Anime")!;
+  const saved = await post("/settings/network/rpm", { channel: anime.id, from: shiftDate(today, -30), long: "4", short: "0.10", blended: "2", currency: "USD", notes: "test" });
+  const bad = await post("/settings/network/rpm", { channel: anime.id, from: shiftDate(today, -30), long: "abc", short: "", blended: "" });
+  t("RPM settings: saved from a date; a non-number is refused with a reason", [saved.status, /saved=/.test(saved.location ?? ""), /error=/.test(bad.location ?? "")], [302, true, true]);
+  const page = await app.inject({ method: "GET", url: `/network?ch=${anime.id}&range=today`, headers: { cookie } });
+  // 2,000 × $4 + 600 × $0.10 + (3,000 − 2,600) × $2, per 1,000 = $8 + $0.06 + $0.80 = $8.86.
+  t("the page: today's views, and the estimate worked out by hand ($8.86), marked ESTIMATED", [page.statusCode, page.body.includes("3,000"), page.body.includes("$8.86"), page.body.includes("ESTIMATED")], [200, true, true, true]);
+  const short = await app.inject({ method: "GET", url: `/network?ch=${anime.id}&range=today&fmt=short`, headers: { cookie } });
+  t("…Shorts only: the Short's 600 views at $0.10 ($0.06), and subscribers marked as not format-specific", [short.body.includes("$0.06"), short.body.includes("not format-specific")], [true, true]);
+
+  // Divisions: a new one, a channel moved into it, and the page filtered to it.
+  await post("/settings/network/divisions/add", { name: "Anime <Group>", colour: "#123456" });
+  const divId = String((await pool.query("SELECT id FROM network_divisions WHERE name = 'Anime <Group>'")).rows[0]?.id ?? "");
+  const form: Record<string, string> = {};
+  for (const c of await listNetChannels()) { form[`div_${c.id}`] = c.name === "Specular Anime" ? divId : c.divisionId ?? ""; if (c.active) form[`on_${c.id}`] = "1"; }
+  await post("/settings/network/channels", form);
+  const byDiv = await app.inject({ method: "GET", url: `/network?div=${divId}&range=today`, headers: { cookie } });
+  t("a division made in Settings filters the page, its name escaped", [byDiv.statusCode, byDiv.body.includes("Anime &lt;Group&gt;"), byDiv.body.includes("Anime <Group>"), byDiv.body.includes("$8.86")], [200, true, false, true]);
+  const blocked = await post(`/settings/network/divisions/${divId}/delete`, {});
+  t("…and it can't be deleted while a channel is in it", /error=/.test(blocked.location ?? ""), true);
+
+  // Exports: every kind, with the method stated.
+  const kinds = ["channels", "divisions", "daily", "revenue", "uploads"];
+  const csvs = await Promise.all(kinds.map((k) => app.inject({ method: "GET", url: `/network/export.csv?ch=${anime.id}&range=today&kind=${k}`, headers: { cookie } })));
+  t("CSV exports: each kind downloads, saying it's estimated and for which period", csvs.map((r) => [r.statusCode, String(r.headers["content-type"]).startsWith("text/csv"), r.body.includes("ESTIMATED"), r.body.includes(today)]), kinds.map(() => [200, true, true, true]));
+  t("…the revenue export carries the day's estimate", csvs[3]!.body.includes("8.86"), true);
+}
+
 await app.close();
 await pool.end().catch(() => undefined);
 console.log(`\n${pass} passed, ${fail} failed\n`);

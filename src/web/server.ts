@@ -50,6 +50,7 @@ import { registerSettings } from "./routes/settings.js";
 import { registerStoryLab, storyContext } from "./routes/storylab.js";
 import { registerTasks } from "./routes/tasks.js";
 import { registerUploads } from "./routes/uploads.js";
+import { registerNetwork } from "./routes/network.js";
 
 const PUBLIC = new Set(["/login", "/healthz"]);
 
@@ -187,11 +188,12 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
 
   app.get("/healthz", async () => ({ ok: true }));
 
-  // Finance, the Bits Idea Feed and Competitors: their own sections, the same shell.
+  // Finance, the Bits Idea Feed, Competitors and Network Overview: their own sections, the same shell.
   if (hasDatabase || opts.everyRoute) {
     registerFinance(app, shell);
     registerIdeaFeed(app, shell);
     registerCompetitors(app, shell);
+    registerNetwork(app);
   }
 
   app.get<{ Querystring: { out?: string } }>("/login", async (request, reply) =>
