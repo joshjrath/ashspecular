@@ -631,7 +631,7 @@ async function estimatedViews(month: string, tz: string): Promise<Map<string, nu
      )
      SELECT u.channel, SUM(e.views - COALESCE(b.views, 0)) AS gained
        FROM e JOIN uploads u ON u.video_id = e.video_id LEFT JOIN b ON b.video_id = e.video_id, bounds
-      WHERE b.video_id IS NOT NULL OR u.published_at >= bounds.s
+      WHERE u.board AND (b.video_id IS NOT NULL OR u.published_at >= bounds.s)
       GROUP BY u.channel`,
     [monthStart(month), monthEnd(month), tz],
   );
@@ -673,7 +673,7 @@ export async function loadFacts(months: string[], tz: string): Promise<Facts> {
     ),
     pool.query(
       `SELECT channel, to_char(published_at AT TIME ZONE $3, 'YYYY-MM') AS month, COUNT(*) AS n FROM uploads
-        WHERE published_at >= ($1::date::timestamp AT TIME ZONE $3) AND published_at < (($2::date + 1)::timestamp AT TIME ZONE $3) GROUP BY 1, 2`,
+        WHERE board AND published_at >= ($1::date::timestamp AT TIME ZONE $3) AND published_at < (($2::date + 1)::timestamp AT TIME ZONE $3) GROUP BY 1, 2`,
       [from, to, tz],
     ),
     pool.query(

@@ -115,7 +115,7 @@ async function judgeDay(channel: string, day: string): Promise<{ posted: Map<num
   const { rows: ups } = await pool.query<{ video_id: string; title: string; day: string }>(
     `SELECT u.video_id, u.title, to_char(u.published_at AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS day
        FROM uploads u
-      WHERE u.channel = $1 AND u.published_at >= $2 AND u.url NOT LIKE '%/shorts/%'
+      WHERE u.channel = $1 AND u.board AND u.published_at >= $2 AND u.url NOT LIKE '%/shorts/%'
         AND NOT EXISTS (SELECT 1 FROM records r WHERE r.posted_video_id = u.video_id)
       ORDER BY u.published_at`,
     [channel, instantIn(shiftDate(day, -1), "00:00", ORG_TZ)],

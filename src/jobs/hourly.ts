@@ -1,7 +1,8 @@
 /**
  * The hourly read (at :07, and once shortly after boot): every linked
- * channel's uploads from YouTube, then the posting check for yesterday's
- * videos, breakout alerts, and the Shorts avatars' colours.
+ * channel's uploads from YouTube, Network Overview's readings, then the
+ * posting check for yesterday's videos, breakout alerts, and the Shorts
+ * avatars' colours.
  */
 import cron from "node-cron";
 import { moveWithRest } from "../web/moves.js";
@@ -9,6 +10,7 @@ import { syncUploads } from "./youtube.js";
 import { announceBreakouts } from "./breakouts.js";
 import { sampleAvatars } from "./avatars.js";
 import { checkPosts, missedLine } from "./postcheck.js";
+import { runNetworkRead } from "./network.js";
 import { config } from "../config.js";
 import { displayTitle } from "../web/page.js";
 import { getRecord as getRecordById } from "../db/records.js";
@@ -20,6 +22,7 @@ export function startHourlyRead(): void {
   const read = (why: string) =>
     syncUploads()
       .then((r) => r.channels && console.log(`[uploads] ${why}: ${r.channels} channels, ${r.added} new, ${r.errors} failed`))
+      .then(() => runNetworkRead())
       .then(() => runPostCheck())
       .then(() => announceBreakouts())
       .then((n) => n && console.log(`[uploads] announced ${n} breakout${n === 1 ? "" : "s"}`))

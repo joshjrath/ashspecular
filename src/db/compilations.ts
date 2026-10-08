@@ -52,7 +52,7 @@ export async function loadCatalog(): Promise<{ sources: Source[]; excluded: Arra
   const [ups, uses, excl] = await Promise.all([
     pool.query(
       `SELECT video_id, title, channel, ${D("published_at AT TIME ZONE 'UTC'", "day")}, views, duration_s, duration_source
-         FROM uploads WHERE channel = ANY($1) AND url NOT LIKE '%/shorts/%'`,
+         FROM uploads WHERE channel = ANY($1) AND board AND url NOT LIKE '%/shorts/%'`,
       [sourceChannels()],
     ),
     pool.query(
@@ -144,7 +144,7 @@ export async function loadPast(): Promise<PastCompilation[]> {
 export async function syncPosted(catalog: Source[]): Promise<number> {
   const { rows } = await pool.query(
     `SELECT u.video_id, u.title, u.channel, ${D("u.published_at AT TIME ZONE 'UTC'", "day")}
-       FROM uploads u WHERE u.channel = ANY($1) AND u.url NOT LIKE '%/shorts/%'
+       FROM uploads u WHERE u.channel = ANY($1) AND u.board AND u.url NOT LIKE '%/shorts/%'
         AND NOT EXISTS (SELECT 1 FROM compilations c WHERE c.upload_video_id = u.video_id)`,
     [[compilationChannel("movie"), compilationChannel("sleep")]],
   );

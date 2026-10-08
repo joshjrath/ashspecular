@@ -16,6 +16,7 @@ import { CHANNELS } from "../catalog.js";
 import { pool } from "../db/pool.js";
 import { formatFor } from "../web/targets.js";
 import { youtubeQuotaHit } from "../db/keys.js";
+import { recordViewReadings } from "../db/network.js";
 
 type Fetcher = typeof fetch;
 
@@ -116,18 +117,19 @@ function decode(s: string): string {
 }
 
 /** The channel's long-form uploads from its free feed. Shorts filtered out either way. */
-export async function readLongFormFeed(id: string, fetcher: Fetcher = fetch): Promise<{ title: string | null; videos: FeedVideo[] }> {
+export async function readLongFormFeed(id: string, fetcher: Fetcher = fetch): Promise<{ title: string | null; videos: FeedVideo[]; fromList: boolean }> {
   const urls = [
     `https://www.youtube.com/feeds/videos.xml?playlist_id=UULF${id.slice(2)}`,
     `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`,
   ];
   let lastStatus = 0;
-  for (const url of urls) {
+  for (const [i, url] of urls.entries()) {
     const res = await fetcher(url, { signal: AbortSignal.timeout(10_000) });
     lastStatus = res.status;
     if (!res.ok) continue;
     const feed = parseFeed(await res.text());
-    return { title: feed.title, videos: feed.videos.filter((v) => !/\/shorts\//.test(v.url)) };
+    // Only YouTube's long-form list says for sure; the plain feed's non-Shorts may be live streams.
+    return { title: feed.title, videos: feed.videos.filter((v) => !/\/shorts\//.test(v.url)), fromList: i === 0 };
   }
   throw new Error(`YouTube's feed answered ${lastStatus}.`);
 }
@@ -136,16 +138,16 @@ export async function readLongFormFeed(id: string, fetcher: Fetcher = fetch): Pr
  * The channel's Shorts only — for Bits and Reading. Its Shorts-only list
  * ("UUSH") first; failing that, the whole feed, keeping /shorts/ links.
  */
-export async function readShortsFeed(id: string, fetcher: Fetcher = fetch): Promise<{ title: string | null; videos: FeedVideo[] }> {
+export async function readShortsFeed(id: string, fetcher: Fetcher = fetch): Promise<{ title: string | null; videos: FeedVideo[]; fromList: boolean }> {
   const list = await fetcher(`https://www.youtube.com/feeds/videos.xml?playlist_id=UUSH${id.slice(2)}`, { signal: AbortSignal.timeout(10_000) });
   if (list.ok) {
     const feed = parseFeed(await list.text());
-    return { title: feed.title, videos: feed.videos.map((v) => ({ ...v, url: `https://www.youtube.com/shorts/${v.videoId}` })) };
+    return { title: feed.title, videos: feed.videos.map((v) => ({ ...v, url: `https://www.youtube.com/shorts/${v.videoId}` })), fromList: true };
   }
   const res = await fetcher(`https://www.youtube.com/feeds/videos.xml?channel_id=${id}`, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`YouTube's feed answered ${res.status}.`);
   const feed = parseFeed(await res.text());
-  return { title: feed.title, videos: feed.videos.filter((v) => /\/shorts\//.test(v.url)) };
+  return { title: feed.title, videos: feed.videos.filter((v) => /\/shorts\//.test(v.url)), fromList: true };
 }
 
 /**
@@ -234,7 +236,7 @@ export async function listChannelLinks(): Promise<ChannelLink[]> {
 
 export async function listUploads(since: Date): Promise<Upload[]> {
   const { rows } = await pool.query<{ video_id: string; channel: string; title: string; published_at: Date; url: string; views: string | null }>(
-    "SELECT video_id, channel, title, published_at, url, views FROM uploads WHERE published_at >= $1 ORDER BY published_at ASC",
+    "SELECT video_id, channel, title, published_at, url, views FROM uploads WHERE board AND published_at >= $1 ORDER BY published_at ASC, video_id ASC",
     [since],
   );
   return rows.map((r) => ({ videoId: r.video_id, channel: r.channel, title: r.title, publishedAt: r.published_at, url: r.url, views: r.views === null ? null : Number(r.views) }));
@@ -242,7 +244,7 @@ export async function listUploads(since: Date): Promise<Upload[]> {
 
 /** The latest upload per channel, however old — for "days since" on a quiet channel. */
 export async function latestUploads(): Promise<Map<string, Date>> {
-  const { rows } = await pool.query<{ channel: string; at: Date }>("SELECT channel, MAX(published_at) AS at FROM uploads GROUP BY channel");
+  const { rows } = await pool.query<{ channel: string; at: Date }>("SELECT channel, MAX(published_at) AS at FROM uploads WHERE board GROUP BY channel");
   return new Map(rows.map((r) => [r.channel, r.at]));
 }
 
@@ -267,20 +269,31 @@ export async function setChannelLink(channel: string, input: string): Promise<vo
   if (rows.length) await pool.query("DELETE FROM uploads WHERE channel = $1", [channel]);
 }
 
-async function saveVideos(channel: string, videos: FeedVideo[]): Promise<number> {
+/**
+ * Keep a channel's videos: their format (from which of YouTube's lists they
+ * came off, or "unknown"), whether it's the format the board measures the
+ * channel on, and their views — through recordViewReadings, so a gain is
+ * counted once. Views: "count" counts the gain, "store" only sets a baseline
+ * (a backfill), "ignore" leaves them (the free feed, when a key reads the same
+ * videos exactly: two sources taking turns would lose part of each gain).
+ */
+async function saveVideos(channel: string, videos: FeedVideo[], format: "long" | "short" | "unknown", board: boolean, views: "count" | "store" | "ignore"): Promise<number> {
   let added = 0;
   for (const v of videos) {
     const { rows } = await pool.query<{ inserted: boolean }>(
-      `INSERT INTO uploads (video_id, channel, title, published_at, url, views)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (video_id) DO UPDATE SET title = EXCLUDED.title,
-         views = COALESCE(EXCLUDED.views, uploads.views), channel = EXCLUDED.channel
+      `INSERT INTO uploads (video_id, channel, title, published_at, url, format, board)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (video_id) DO UPDATE SET title = EXCLUDED.title, channel = EXCLUDED.channel,
+         format = CASE WHEN EXCLUDED.format = 'unknown' THEN COALESCE(uploads.format, 'unknown') ELSE EXCLUDED.format END,
+         board = CASE WHEN EXCLUDED.format = 'unknown' THEN uploads.board ELSE EXCLUDED.board END
        RETURNING (xmax = 0) AS inserted`,
-      [v.videoId, channel, v.title, v.publishedAt, v.url, v.views],
+      [v.videoId, channel, v.title, v.publishedAt, v.url, format, board],
     );
     if (rows[0]?.inserted) added += 1;
-    if (v.views !== null) await snapshot(v.videoId, v.views, v.publishedAt);
   }
+  const withViews = videos.filter((v) => v.views !== null);
+  if (views !== "ignore") await recordViewReadings(withViews.map((v) => ({ videoId: v.videoId, views: v.views! })), { count: views === "count" });
+  for (const v of withViews) await snapshot(v.videoId, v.views!, v.publishedAt);
   return added;
 }
 
@@ -302,8 +315,9 @@ async function snapshot(videoId: string, views: number, publishedAt: Date): Prom
 }
 
 /**
- * With a key, views for every upload of the last sixty days — not only the
- * fifteen the feed shows — so older videos keep their curve too.
+ * With a key, views for every upload of the last sixty days (both formats) —
+ * not only the fifteen the feed shows — so older videos keep their curve too,
+ * and each one's gain is counted for Network Overview.
  */
 async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
   const { rows } = await pool.query<{ video_id: string; published_at: Date }>(
@@ -317,12 +331,11 @@ async function refreshViews(key: string, fetcher: Fetcher): Promise<void> {
     const res = await fetcher(u, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return;
     const data = (await res.json()) as { items?: Array<{ id: string; statistics?: { viewCount?: string } }> };
-    for (const item of data.items ?? []) {
-      const views = Number(item.statistics?.viewCount ?? NaN);
-      if (!Number.isFinite(views)) continue;
-      await pool.query("UPDATE uploads SET views = $2 WHERE video_id = $1", [item.id, views]);
-      await snapshot(item.id, views, published.get(item.id) ?? new Date(0));
-    }
+    const readings = (data.items ?? [])
+      .map((item) => ({ videoId: item.id, views: Number(item.statistics?.viewCount ?? NaN) }))
+      .filter((r) => Number.isFinite(r.views));
+    await recordViewReadings(readings);
+    for (const r of readings) await snapshot(r.videoId, r.views, published.get(r.videoId) ?? new Date(0));
   }
 }
 
@@ -378,7 +391,7 @@ export async function listSnapshots(videoIds: string[]): Promise<Map<string, Sna
 /** Recent uploads not yet announced as breakouts. */
 export async function unalertedSince(since: Date): Promise<Set<string>> {
   const { rows } = await pool.query<{ video_id: string }>(
-    "SELECT video_id FROM uploads WHERE published_at >= $1 AND breakout_alerted_at IS NULL",
+    "SELECT video_id FROM uploads WHERE board AND published_at >= $1 AND breakout_alerted_at IS NULL",
     [since],
   );
   return new Set(rows.map((r) => r.video_id));
@@ -389,6 +402,22 @@ export async function markAlerted(videoId: string): Promise<void> {
 }
 
 /**
+ * A channel's other format (Shorts on a long-form channel, long-form on a
+ * Shorts one): its feed every read, and its whole history once with a key.
+ * Kept with board = false, so the board's pages, which measure one format
+ * per channel, never see it.
+ */
+async function readOtherFormat(channel: string, id: string, format: "long" | "short", key: string, backfill: boolean, fetcher: Fetcher): Promise<number> {
+  const feed = format === "long" ? await readLongFormFeed(id, fetcher) : await readShortsFeed(id, fetcher);
+  let added = await saveVideos(channel, feed.videos, feed.fromList ? format : "unknown", false, key ? "ignore" : "count");
+  if (key && backfill) {
+    added += await saveVideos(channel, await readFullHistory(id, key, fetcher, format), format, false, "store");
+    await pool.query("UPDATE youtube_channels SET other_backfilled_at = now() WHERE channel = $1", [channel]);
+  }
+  return added;
+}
+
+/**
  * Read every linked channel once — long form or Shorts, by its category: resolve any new link, pull its
  * feed (or, with a key, its whole history the first time), keep every
  * video. One channel failing never stops the rest.
@@ -396,8 +425,8 @@ export async function markAlerted(videoId: string): Promise<void> {
 export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels: number; added: number; errors: number }> {
   const key = process.env.YOUTUBE_API_KEY?.trim() ?? "";
   const known = new Set(CHANNELS.map((c) => c.name));
-  const { rows } = await pool.query<{ channel: string; input: string; youtube_id: string | null; backfilled_at: Date | null }>(
-    "SELECT channel, input, youtube_id, backfilled_at FROM youtube_channels",
+  const { rows } = await pool.query<{ channel: string; input: string; youtube_id: string | null; backfilled_at: Date | null; other_backfilled_at: Date | null }>(
+    "SELECT channel, input, youtube_id, backfilled_at, other_backfilled_at FROM youtube_channels",
   );
   let added = 0;
   let errors = 0;
@@ -413,11 +442,16 @@ export async function syncUploads(fetcher: Fetcher = fetch): Promise<{ channels:
         await pool.query("UPDATE youtube_channels SET youtube_id = $2 WHERE channel = $1", [row.channel, id]);
       }
       const feed = format === "long" ? await readLongFormFeed(id, fetcher) : await readShortsFeed(id, fetcher);
-      added += await saveVideos(row.channel, feed.videos);
+      // With a key, its views come exactly from the API below; the feed's only set a first value.
+      added += await saveVideos(row.channel, feed.videos, feed.fromList ? format : "unknown", true, key ? "ignore" : "count");
       if (key && !row.backfilled_at) {
-        added += await saveVideos(row.channel, await readFullHistory(id, key, fetcher, format));
+        added += await saveVideos(row.channel, await readFullHistory(id, key, fetcher, format), format, true, "store");
         await pool.query("UPDATE youtube_channels SET backfilled_at = now() WHERE channel = $1", [row.channel]);
       }
+      // The other format too, for Network Overview; the board's own pages don't read it.
+      await readOtherFormat(row.channel, id, format === "long" ? "short" : "long", key, !row.other_backfilled_at, fetcher)
+        .then((n) => { added += n; })
+        .catch((err) => console.error(`[uploads] ${row.channel}: couldn't read its ${format === "long" ? "Shorts" : "long-form videos"}:`, err instanceof Error ? err.message : err));
       await pool.query(
         "UPDATE youtube_channels SET title = COALESCE($2, title), error = NULL, checked_at = now() WHERE channel = $1",
         [row.channel, feed.title],

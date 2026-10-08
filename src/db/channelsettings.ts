@@ -42,6 +42,11 @@ export const NAME_COLUMNS: ReadonlyArray<[table: string, column: string, unique:
   ["idea_sources", "channel", false],
   ["ideas", "channel", false],
   ["comp_channels", "board_channel", false],
+  ["network_channels", "channel", true],
+  ["network_rpm", "channel", true],
+  ["network_channel_days", "channel", true],
+  ["network_format_days", "channel", true],
+  ["network_alerts", "channel", false],
 ];
 /** Tables that keep a list of channel names. */
 export const NAME_ARRAYS: ReadonlyArray<[table: string, column: string]> = [

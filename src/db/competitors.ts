@@ -209,7 +209,7 @@ export async function loadVideos(channels: CompChannel[]): Promise<NicheVideo[]>
   const board = channels.filter((c) => c.boardChannel);
   if (board.length) {
     const byName = new Map(board.map((c) => [c.boardChannel!, c.id]));
-    const { rows } = await pool.query("SELECT video_id, channel, title, published_at, url, views, duration_s FROM uploads WHERE channel = ANY($1)", [[...byName.keys()]]);
+    const { rows } = await pool.query("SELECT video_id, channel, title, published_at, url, views, duration_s FROM uploads WHERE channel = ANY($1) AND board", [[...byName.keys()]]);
     const snaps = await snapshotsOf("video_views", rows.map((r) => String(r.video_id)));
     for (const r of rows) {
       const url = String(r.url);

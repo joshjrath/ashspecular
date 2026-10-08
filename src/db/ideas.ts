@@ -596,7 +596,7 @@ export async function loadHistory(): Promise<HistoryItem[]> {
   if (historyCache && Date.now() - historyCache.at < 10 * 60_000) return historyCache.items;
   const [bits, ideas, rejected] = await Promise.all([
     pool.query(
-      `SELECT video_id, title, channel, to_char(published_at AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS day, url FROM uploads WHERE channel = ANY($1)`,
+      `SELECT video_id, title, channel, to_char(published_at AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS day, url FROM uploads WHERE channel = ANY($1) AND board`,
       [bitsChannels()],
     ),
     pool.query(
