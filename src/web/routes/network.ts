@@ -2,26 +2,47 @@
  * Network Overview's routes: the page and its exports, and Settings →
  * Network & revenue (divisions, channels, RPM assumptions).
  */
-import type { FastifyInstance, FastifyReply } from "fastify";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { CATEGORIES } from "../../catalog.js";
+import { deleteAnalyticsLink, listAnalyticsLinks, markAnalyticsRead, saveAnalyticsLink } from "../../db/analytics.js";
 import { addChannel } from "../../db/channelsettings.js";
+import { googleClient, setGoogleClient } from "../../db/keys.js";
 import {
   CURRENCIES, addDivision, deleteDivision, deleteRpm, firstReading, listDivisions, listNetChannels, listRpm, moveChannel, moveDivision, readStatus, readingCoverage,
   recentAlerts, renameDivision, rpmValue, saveRpm, setChannelPlace,
 } from "../../db/network.js";
+import { channelOfSignIn, exchangeCode, readAnalytics } from "../../jobs/analytics.js";
 import { listChannelLinks, setChannelLink } from "../../jobs/youtube.js";
+import { authUrl } from "../../network/analytics.js";
 import { loadDataset } from "../../network/dataset.js";
 import { EXPORTS, exportRows, type ExportKind } from "../../network/export.js";
 import { buildOverview, readQuery } from "../../network/overview.js";
 import { defaultPreset, periodOf } from "../../network/period.js";
 import { ORG_TZ, dateIn, shiftDate } from "../../parse/derive.js";
-import { formText, safeDate, toCsv } from "../http.js";
+import { cookieOptions } from "../auth.js";
+import { baseUrlOf, formText, safeDate, toCsv } from "../http.js";
 import { renderNetwork } from "../pages/network.js";
 import { renderNetworkSettings } from "../pages/networksettings.js";
 import { forgetPaces, shell } from "../shell.js";
 
 /** Readings older than this are shown as stale. */
 const STALE_HOURS = 3;
+
+/** Where Google sends the browser back to: the address to add to the Google client. */
+export const ANALYTICS_CALLBACK = "/settings/network/analytics/callback";
+const redirectUriOf = (request: FastifyRequest) => `${baseUrlOf(request)}${ANALYTICS_CALLBACK}`;
+/** Ties Google's answer to a Connect pressed on this board, for ten minutes. */
+const STATE_COOKIE = "nt_oauth";
+
+/** Read a newly connected channel's history in the background; a failure is kept on the connection and logged. */
+function readInBackground(link: { youtubeId: string; channel: string | null }): void {
+  void readAnalytics({ ...link, backfilled: false, through: null, revenue: null }).catch(async (err) => {
+    const why = err instanceof Error ? err.message : String(err);
+    console.error(`[analytics] first read of ${link.channel ?? link.youtubeId} failed:`, why);
+    await markAnalyticsRead(link.youtubeId, { error: why }).catch((e) => console.error("[analytics] couldn't note the failure:", e));
+  });
+}
 
 async function overviewFor(query: Record<string, unknown>, now: Date) {
   const [channels, divisions] = await Promise.all([listNetChannels(), listDivisions()]);
@@ -70,11 +91,13 @@ export function registerNetwork(app: FastifyInstance): void {
     reply.redirect(`/settings/network?${new URLSearchParams(msg as Record<string, string>).toString()}${anchor}`);
 
   app.get<{ Querystring: Record<string, string> }>("/settings/network", async (request, reply) => {
-    const [s, divisions, channels, rpm, coverage, links] = await Promise.all([
-      shell("settings"), listDivisions(), listNetChannels(), listRpm(), readingCoverage(), listChannelLinks(),
+    const [s, divisions, channels, rpm, coverage, links, analytics] = await Promise.all([
+      shell("settings"), listDivisions(), listNetChannels(), listRpm(), readingCoverage(), listChannelLinks(), listAnalyticsLinks(),
     ]);
+    const client = googleClient();
     return html(reply, renderNetworkSettings(s, {
       divisions, channels, rpm, coverage, links: new Map(links.map((l) => [l.channel, l.input])), today: dateIn(ORG_TZ),
+      analytics: { links: analytics, client: { source: client.source, id: client.id }, redirectUri: redirectUriOf(request) },
       saved: formText(request.query.saved).slice(0, 200), error: formText(request.query.error).slice(0, 200),
     }));
   });
@@ -145,6 +168,84 @@ export function registerNetwork(app: FastifyInstance): void {
     const id = Number(request.params.id);
     if (Number.isSafeInteger(id) && id > 0) await deleteRpm(id);
     return back(reply, { saved: "RPM entry deleted." }, "#rpm");
+  });
+
+  // ── YouTube Analytics ────────────────────────────────────────────────────
+  app.post<{ Body: Record<string, string> }>("/settings/network/analytics/client", async (request, reply) => {
+    const b = request.body ?? {};
+    if (b.clear === "1") {
+      await setGoogleClient(null);
+      return back(reply, { saved: "Google client removed." }, "#analytics");
+    }
+    const id = formText(b.id).slice(0, 300);
+    const now = googleClient();
+    // A blank secret keeps the one saved here, so the ID can be corrected alone.
+    const secret = formText(b.secret).slice(0, 300) || (now.source === "settings" ? now.secret : "");
+    if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(id)) return back(reply, { error: "The client ID ends in .apps.googleusercontent.com: copy it from Google Cloud → Google Auth Platform → Clients." }, "#analytics");
+    if (secret.length < 10) return back(reply, { error: "Paste the client secret too (it's beside the client ID in Google Cloud)." }, "#analytics");
+    await setGoogleClient({ id, secret });
+    return back(reply, { saved: "Google client saved. Now connect each channel." }, "#analytics");
+  });
+
+  app.post<{ Body: Record<string, string> }>("/settings/network/analytics/connect", async (request, reply) => {
+    const client = googleClient();
+    if (client.source === "none") return back(reply, { error: "Set the Google client ID and secret first." }, "#analytics");
+    const channel = (await listNetChannels()).find((c) => c.id === formText(request.body?.channel));
+    const state = randomBytes(24).toString("base64url");
+    reply.setCookie(STATE_COOKIE, `${state}.${channel?.id ?? ""}`, { ...cookieOptions(request.protocol === "https"), path: "/settings/network/analytics", maxAge: 600 });
+    // The one redirect off the board: Google's sign-in, built here, never from the request.
+    return reply.redirect(authUrl({ clientId: client.id, redirectUri: redirectUriOf(request), state }));
+  });
+
+  // A GET that saves: Google sends the browser back here, and OAuth only does
+  // GET. It only acts on the answer to a Connect pressed on this board (the
+  // state cookie the POST above set), behind the sign-in like every route.
+  app.get<{ Querystring: Record<string, string> }>(ANALYTICS_CALLBACK, async (request, reply) => {
+    const q = request.query;
+    const [state, channelId] = String(request.cookies[STATE_COOKIE] ?? "").split(".");
+    reply.clearCookie(STATE_COOKIE, { path: "/settings/network/analytics" });
+    if (q.error) return back(reply, { error: q.error === "access_denied" ? "Google sign-in was cancelled. Nothing changed." : "Google sign-in didn't finish. Try Connect again." }, "#analytics");
+    const given = Buffer.from(formText(q.state));
+    const expected = Buffer.from(state ?? "");
+    if (!state || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      return back(reply, { error: "That sign-in had expired or didn't start here. Press Connect again." }, "#analytics");
+    }
+    try {
+      const tokens = await exchangeCode(formText(q.code), redirectUriOf(request));
+      if (!tokens.refresh) return back(reply, { error: "Google didn't give lasting access. Press Connect again." }, "#analytics");
+      const yt = await channelOfSignIn(tokens.access);
+      if (!yt) return back(reply, { error: "That Google account has no YouTube channel. On Google's screen, pick the channel itself (its brand account), not your own name." }, "#analytics");
+      const [channels, links] = await Promise.all([listNetChannels(), listChannelLinks()]);
+      const picked = channels.find((c) => c.id === channelId);
+      const owner = links.find((l) => l.youtubeId === yt.id);
+      if (picked) {
+        const pickedLink = links.find((l) => l.channel === picked.name);
+        if (pickedLink?.youtubeId && pickedLink.youtubeId !== yt.id) {
+          return back(reply, { error: `You signed in as ${yt.title}, which isn't ${picked.name}'s YouTube channel. Press Connect again and pick ${picked.name} on Google's screen.` }, "#analytics");
+        }
+        if (!pickedLink?.youtubeId && !owner) await setChannelLink(picked.name, `https://www.youtube.com/channel/${yt.id}`);
+      } else if (!owner) {
+        return back(reply, { error: `${yt.title} isn't linked to a channel on the board. Add its YouTube link under Channels first.` }, "#analytics");
+      }
+      await saveAnalyticsLink({ youtubeId: yt.id, title: yt.title, refreshToken: tokens.refresh, scopes: tokens.scope });
+      readInBackground({ youtubeId: yt.id, channel: owner?.channel ?? picked?.name ?? null });
+      return back(reply, { saved: `Connected ${yt.title}. Its history is loading; give it a minute, then open Network Overview.` }, "#analytics");
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      console.error("[analytics] connect failed:", why);
+      return back(reply, { error: `Couldn't connect: ${why}.` }, "#analytics");
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/settings/network/analytics/:id/read", async (request, reply) => {
+    const link = (await listAnalyticsLinks()).find((l) => l.youtubeId === request.params.id);
+    if (link) readInBackground(link);
+    return back(reply, link ? { saved: `Reading ${link.title} again; give it a minute.` } : {}, "#analytics");
+  });
+  app.post<{ Params: { id: string } }>("/settings/network/analytics/:id/disconnect", async (request, reply) => {
+    const link = (await listAnalyticsLinks()).find((l) => l.youtubeId === request.params.id);
+    if (link) await deleteAnalyticsLink(link.youtubeId);
+    return back(reply, link ? { saved: `Disconnected ${link.title}; its Analytics figures are gone from the board.` } : {}, "#analytics");
   });
 
 }

@@ -116,8 +116,9 @@ import { buildIndex as netBuildIndex, compareOn as netCompareOn, dayRevenue as n
 import { queryString as netQueryString, readQuery as netReadQuery, selectChannels as netSelect } from "../src/network/overview.js";
 import { explainChange as netExplain, moverReason as netMoverReason, moversOf as netMoversOf, nextMilestone as netNextMilestone, trendOf as netTrendOf, usualGapDays as netUsualGap } from "../src/network/insights.js";
 import { gainOf as netGainOf } from "../src/db/network.js";
+import { authUrl as ytAuthUrl, chunks as ytChunks, formatOfType as ytFormatOf, mergeDays as ytMergeDays, windowOf as ytWindowOf } from "../src/network/analytics.js";
 import { contribution as netContribution, fmtMoneyIn as netFmtMoney, fmtNum as netFmtNum } from "../src/web/pages/network.js";
-import type { ChannelDay as NetChannelDay, FormatDay as NetFormatDay, NetChannel, RpmRow as NetRpmRow } from "../src/network/types.js";
+import type { AnalyticsDay as NetAnalyticsDay, ChannelDay as NetChannelDay, FormatDay as NetFormatDay, NetChannel, RpmRow as NetRpmRow } from "../src/network/types.js";
 
 import { contentDisposition, formId, formText, localPath, refererPath, safeDate, toCsv } from "../src/web/http.js";
 import { gunzipSync } from "node:zlib";
@@ -2605,6 +2606,35 @@ section("Network Overview");
   const rq = netReadQuery({ div: "stories,nope", ch: ["a", "zzz"], fmt: "bad", range: "90d", scn: "500", lsort: "growth" }, { divisions: ["stories"], channels: ["a"] });
   t("the address: unknown values are dropped, out-of-range ones ignored", [rq.divisions, rq.channels, rq.fmt, rq.preset, rq.scenario, rq.lsort], [["stories"], ["a"], "all", "90d", null, "growth"]);
   t("…and written back the same way", netQueryString(rq, { fmt: "short" }), "?div=stories&ch=a&fmt=short&range=90d&lsort=growth");
+  // YouTube Analytics: the sign-in, the days asked for, and its reports as days.
+  const au = new URL(ytAuthUrl({ clientId: "abc.apps.googleusercontent.com", redirectUri: "https://board.example/settings/network/analytics/callback", state: "s<1>" }));
+  t("Analytics sign-in: lasting, read-only access to Analytics and revenue, tied to this connect", [au.host, au.searchParams.get("access_type"), au.searchParams.get("state"), au.searchParams.get("scope")?.split(" ").every((x) => x.endsWith(".readonly")), au.searchParams.get("scope")?.includes("yt-analytics-monetary"), au.searchParams.get("prompt")?.includes("consent")], ["accounts.google.com", "offline", "s<1>", true, true, true]);
+  t("…first read goes three years back; later ones re-read the last ten days YouTube had", [ytWindowOf({ backfilled: false, through: null }, "2026-10-09"), ytWindowOf({ backfilled: true, through: "2026-10-06" }, "2026-10-09")], [{ from: "2023-10-10", to: "2026-10-09" }, { from: "2026-09-26", to: "2026-10-09" }]);
+  const parts = ytChunks({ from: "2023-10-10", to: "2026-10-09" });
+  t("…asked for in pieces that cover every day once", [parts.length, parts[0]!.from, parts.at(-1)!.to, parts.every((x, i) => i === 0 || x.from === shiftDate(parts[i - 1]!.to, 1))], [7, "2023-10-10", "2026-10-09", true]);
+  t("…YouTube's content types as formats", ["SHORTS", "shorts", "VIDEO_ON_DEMAND", "videoOnDemand", "LIVE_STREAM", undefined].map(ytFormatOf), ["short", "short", "long", "long", "other", "other"]);
+  const merged = ytMergeDays("Chan A", [
+    { day: "2026-10-01", views: 1000, subscribersGained: 12, subscribersLost: 2, estimatedRevenue: 3.5 },
+    { day: "2026-10-03", views: 400, subscribersGained: 1, subscribersLost: 0, estimatedRevenue: 1.25 },
+  ], [
+    { day: "2026-10-01", creatorContentType: "VIDEO_ON_DEMAND", views: 700, estimatedRevenue: 3.2 },
+    { day: "2026-10-01", creatorContentType: "SHORTS", views: 250, estimatedRevenue: 0.2 },
+    { day: "2026-10-01", creatorContentType: "LIVE_STREAM", views: 50, estimatedRevenue: 0.1 },
+  ], { from: "2026-09-30" });
+  t("…a report as days: every day up to the last YouTube had (a day without a row had none), split by format", merged.map((d) => [d.day, d.views, d.viewsLong, d.viewsShort, d.revenue, d.revenueLong]), [
+    ["2026-09-30", 0, 0, 0, 0, 0], ["2026-10-01", 1000, 700, 250, 3.5, 3.2], ["2026-10-02", 0, 0, 0, 0, 0], ["2026-10-03", 400, 0, 0, 1.25, 0],
+  ]);
+  const noRev = ytMergeDays("Chan A", [{ day: "2026-10-01", views: 10, subscribersGained: 0, subscribersLost: 0 }], null, { from: "2026-10-01" });
+  t("…without revenue access or a split: those stay unknown, not 0", [noRev[0]!.revenue, noRev[0]!.viewsLong, noRev[0]!.revenueShort], [null, null, null]);
+  const yDay = (day: string, views: number, revenue: number | null, long: number | null = null, short: number | null = null): NetAnalyticsDay =>
+    ({ channel: "Chan A", day, views, viewsLong: long, viewsShort: short, subsGained: 30, subsLost: 5, revenue, revenueLong: null, revenueShort: null });
+  const ixY = netBuildIndex(days, gains, [], [], undefined, { days: [yDay("2026-10-02", 9_000, 21.5, 6_000, 2_500), yDay("2026-10-03", 8_000, 19)], reach: new Map([["Chan A", { through: "2026-10-03", revenue: true }]]) });
+  t("connected channel: YouTube Analytics' views, subscribers and revenue win over the public counts", [netDayViews(ixY, "Chan A", "2026-10-02", "all"), netDaySubs(ixY, "Chan A", "2026-10-02"), netDayRevenue(ixY, "Chan A", "2026-10-02", "all").value], [9_000, 25, 21.5]);
+  t("…its format split, and a day the public counts missed is filled", [netDayViews(ixY, "Chan A", "2026-10-02", "long"), netDayViews(ixY, "Chan A", "2026-10-02", "short"), netDayViews(ixY, "Chan A", "2026-10-03", "all")], [6_000, 2_500, 8_000]);
+  const pend = netDayRevenue(ixY, "Chan A", "2026-10-04", "all");
+  t("…a day YouTube hasn't reported: not 'needs an RPM', just not in yet", [pend.value, pend.noRpm, pend.pending], [null, false, true]);
+  const ixYR = netBuildIndex(days, gains, [], [rpm("Chan A", "2026-01-01", 5, 0.12, 2)], undefined, { days: [], reach: new Map([["Chan A", { through: "2026-10-01", revenue: true }]]) });
+  t("…with an RPM too, those days are estimated from it meanwhile", Math.round(netDayRevenue(ixYR, "Chan A", "2026-10-02", "all").value! * 1000) / 1000, 1.618);
   const opened = netReadQuery({}, { divisions: [], channels: [] }, "since");
   t("…no range: the one the page opens on; a range picked is always written, so a link keeps it", [opened.preset, netQueryString(opened, { preset: "28d" }), netReadQuery({ range: "28d" }, { divisions: [], channels: [] }, "since").preset], ["since", "?range=28d", "28d"]);
 

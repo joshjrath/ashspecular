@@ -79,3 +79,27 @@ export interface NetVideo {
   format: VideoFormat;
   board: boolean;
 }
+
+/** A channel's day as YouTube Analytics reports it (what YouTube Studio shows). */
+export interface AnalyticsDay {
+  channel: string;
+  day: string;
+  views: number;
+  /** Null when YouTube didn't split the day by format. */
+  viewsLong: number | null;
+  viewsShort: number | null;
+  subsGained: number | null;
+  subsLost: number | null;
+  /** YouTube's estimated revenue (USD); null when the sign-in can't see revenue. */
+  revenue: number | null;
+  revenueLong: number | null;
+  revenueShort: number | null;
+}
+
+/** How far a connected channel's Analytics goes. */
+export interface AnalyticsReach {
+  /** The last day YouTube had figures for. */
+  through: string | null;
+  /** Whether the sign-in can see revenue. */
+  revenue: boolean;
+}

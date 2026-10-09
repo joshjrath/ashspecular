@@ -309,6 +309,63 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const short = await app.inject({ method: "GET", url: `/network?ch=${anime.id}&range=today&fmt=short`, headers: { cookie } });
   t("…Shorts only: the Short's 600 views at $0.10 ($0.06), and subscribers marked as not format-specific", [short.body.includes("$0.06"), short.body.includes("not format-specific")], [true, true]);
 
+  // YouTube Analytics, end to end against a stand-in Google: set the client, connect Comics, read its history.
+  const setupPage = await app.inject({ method: "GET", url: "/settings/network", headers: { cookie } });
+  t("Analytics: before setup, Settings shows the steps and the exact redirect address", [setupPage.body.includes("YouTube Analytics API"), setupPage.body.includes("/settings/network/analytics/callback")], [true, true]);
+  const badClient = await post("/settings/network/analytics/client", { id: "not-a-client", secret: "x" });
+  const goodClient = await post("/settings/network/analytics/client", { id: "123-abc.apps.googleusercontent.com", secret: "GOCSPX-test-secret" });
+  t("…a client ID that isn't one is refused; a real-looking one is saved", [/error=/.test(badClient.location ?? ""), /saved=/.test(goodClient.location ?? "")], [true, true]);
+  const sealedSecret = (await pool.query("SELECT value FROM app_settings WHERE key = 'google:client_secret'")).rows[0]?.value as string;
+  t("…the secret is stored sealed, never as typed", [Boolean(sealedSecret), sealedSecret?.includes("GOCSPX")], [true, false]);
+  const connect = await app.inject({ method: "POST", url: "/settings/network/analytics/connect", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, payload: `channel=${comics.id}` });
+  const to = new URL(String(connect.headers.location));
+  const stateCookie = String(connect.headers["set-cookie"] ?? "").match(/nt_oauth=([^;]+)/)?.[1] ?? "";
+  t("…Connect sends you to Google's sign-in with a state only this browser holds", [connect.statusCode, to.host, Boolean(to.searchParams.get("state")), stateCookie.startsWith(`${to.searchParams.get("state")}.`)], [302, "accounts.google.com", true, true]);
+  const forged = await app.inject({ method: "GET", url: `/settings/network/analytics/callback?code=x&state=forged`, headers: { cookie: `${cookie}; nt_oauth=${stateCookie}` } });
+  t("…an answer that didn't start here is refused", [/error=/.test(String(forged.headers.location)), (await pool.query("SELECT count(*)::int AS n FROM network_analytics_links")).rows[0].n], [true, 0]);
+
+  const day4 = shiftDate(today, -4), day5 = shiftDate(today, -5);
+  const realFetch = globalThis.fetch;
+  const googleCalls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const u = new URL(String(input instanceof Request ? input.url : input));
+    googleCalls.push(`${u.host}${u.pathname}`);
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    if (u.host === "oauth2.googleapis.com") {
+      const form = new URLSearchParams(String(init?.body ?? ""));
+      return json(form.get("grant_type") === "authorization_code" ? { access_token: "a1", refresh_token: "r1-secret", scope: "yt-analytics" } : { access_token: "a2" });
+    }
+    if (u.pathname.endsWith("/channels")) return json({ items: [{ id: "UCcomics000000000000000", snippet: { title: "Specular Comics" } }] });
+    if (u.host === "youtubeanalytics.googleapis.com") {
+      const inRange = (d: string) => d >= u.searchParams.get("startDate")! && d <= u.searchParams.get("endDate")!;
+      const metrics = u.searchParams.get("metrics")!.split(",");
+      if (u.searchParams.get("dimensions") === "day") {
+        const rows = [[day5, 5_000, 40, 4, 12.5], [day4, 6_000, 50, 5, 15]].filter((r) => inRange(String(r[0]))).map((r) => r.slice(0, 1 + metrics.length));
+        return json({ columnHeaders: [{ name: "day" }, ...metrics.map((name) => ({ name }))], rows });
+      }
+      const rows = [[day5, "VIDEO_ON_DEMAND", 3_000, 11], [day5, "SHORTS", 2_000, 1.5], [day4, "VIDEO_ON_DEMAND", 4_000, 13.5], [day4, "SHORTS", 2_000, 1.5]].filter((r) => inRange(String(r[0])));
+      return json({ columnHeaders: [{ name: "day" }, { name: "creatorContentType" }, ...metrics.map((name) => ({ name }))], rows });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const answer = await app.inject({ method: "GET", url: `/settings/network/analytics/callback?code=good&state=${encodeURIComponent(to.searchParams.get("state")!)}`, headers: { cookie: `${cookie}; nt_oauth=${stateCookie}` } });
+    t("…Google's answer: the channel is connected", [/saved=/.test(String(answer.headers.location)), (new URL(String(answer.headers.location), "http://x").searchParams.get("saved") ?? "").includes("Connected Specular Comics")], [true, true]);
+    for (let i = 0; i < 100 && !(await pool.query("SELECT synced_at FROM network_analytics_links WHERE synced_at IS NOT NULL")).rows.length; i++) await new Promise((r) => setTimeout(r, 50));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const link = (await pool.query("SELECT refresh_token, to_char(synced_through, 'YYYY-MM-DD') AS through, revenue, backfilled, error FROM network_analytics_links")).rows[0];
+  t("…its history read: through the last day YouTube had, revenue included, lasting access sealed", [link?.through, link?.revenue, link?.backfilled, link?.error, String(link?.refresh_token).includes("r1-secret"), googleCalls.filter((c) => c.startsWith("youtubeanalytics")).length], [day4, true, true, null, false, 14]);
+  const ytPage = await app.inject({ method: "GET", url: `/network?ch=${comics.id}&range=7d`, headers: { cookie } });
+  const ytShorts = await app.inject({ method: "GET", url: `/network?ch=${comics.id}&range=7d&fmt=short`, headers: { cookie } });
+  t("…Network Overview: YouTube's views (11.0K), revenue ($27.50, shown $28) and subscribers (+81), marked as from YouTube Analytics", [ytPage.body.includes("11.0K"), ytPage.body.includes(">$28<"), ytPage.body.includes("+81"), ytPage.body.includes("from YouTube Analytics")], [true, true, true, true]);
+  t("…and Shorts alone: YouTube's 4,000 views and $3.00", [ytShorts.body.includes("4,000"), ytShorts.body.includes(">$3.00<")], [true, true]);
+  const connectedPage = await app.inject({ method: "GET", url: "/settings/network", headers: { cookie } });
+  t("…Settings shows it connected, with Read again and Disconnect", [connectedPage.body.includes("connected"), connectedPage.body.includes("Read again"), connectedPage.body.includes("/disconnect")], [true, true, true]);
+  await post("/settings/network/analytics/UCcomics000000000000000/disconnect", {});
+  t("…Disconnect takes the access and its figures away", [(await pool.query("SELECT (SELECT count(*) FROM network_analytics_links)::int + (SELECT count(*) FROM network_analytics_days)::int AS n")).rows[0].n], [0]);
+
   // Divisions: a new one, a channel moved into it, and the page filtered to it.
   await post("/settings/network/divisions/add", { name: "Anime <Group>", colour: "#123456" });
   const divId = String((await pool.query("SELECT id FROM network_divisions WHERE name = 'Anime <Group>'")).rows[0]?.id ?? "");

@@ -2333,6 +2333,16 @@ h2 .spok, h2 .spwait { font-family: var(--ui); margin-left: 8px; vertical-align:
   letter-spacing: .05em; text-transform: uppercase; vertical-align: middle; }
 .nt-pill.warn { background: #3A2A1C; color: #F5B77F; }
 .nt-pill.est { background: #3B3416; color: #F3E96C; }
+.nt-pill.ok { background: #183526; color: #7FE0A8; }
+.nt-steps { margin: 8px 0 12px; padding-left: 20px; color: var(--ink2); font-size: 13px; line-height: 1.55; }
+.nt-steps li { margin: 4px 0; }
+.nt-steps a { color: var(--ink); text-decoration: underline; }
+.nt-antable { width: 100%; }
+.nt-table.nt-antable td { white-space: normal; vertical-align: middle; }
+.nt-antable td b { margin-right: 6px; }
+.nt-antable .nt-cov { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+.nt-table.nt-antable td.nt-anact { text-align: right; white-space: nowrap; width: 1%; }
+.nt-copy { display: inline-block; margin-top: 4px; padding: 3px 8px; border-radius: 6px; background: var(--sunk); color: var(--ink); font-size: 12px; overflow-wrap: anywhere; user-select: all; }
 a.nt-pill { text-decoration: none; }
 .nt-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .nt-tile { background: var(--card); border-radius: 22px; padding: 18px 20px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }

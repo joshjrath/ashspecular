@@ -9,7 +9,7 @@ import { BREAKOUT, median, scoreAll, viewsAtAge, type VideoViews } from "../web/
 import { scoreShorts } from "../web/shorts-perf.js";
 import type { Snapshot } from "../jobs/youtube.js";
 import { ORG_TZ, dateIn } from "../parse/derive.js";
-import { rpmOn, type Figures, type Index, MIN_COVERAGE, viewCoverage } from "./compute.js";
+import { rpmOn, youtubeRpm, type Figures, type Index, MIN_COVERAGE, viewCoverage } from "./compute.js";
 import type { Division, FormatPick, NetChannel, NetVideo } from "./types.js";
 
 const DAY = 86_400_000;
@@ -84,8 +84,8 @@ export function efficiencyOf(uploads: NetVideo[], all: NetVideo[], scores: Map<s
   const revs: number[] = [];
   for (const v of measured) {
     const r = rpmOn(ix.rpm.get(v.channel), dateIn(ORG_TZ, v.publishedAt));
-    if (!r || r.currency !== ix.currency) continue;
-    const rate = (v.format === "long" ? r.long : v.format === "short" ? r.short : null) ?? r.blended;
+    // A typed RPM, else what YouTube Analytics says the channel earns per 1,000 views.
+    const rate = r && r.currency === ix.currency ? (v.format === "long" ? r.long : v.format === "short" ? r.short : null) ?? r.blended : youtubeRpm(ix, v.channel, v.format);
     if (rate !== null) revs.push((scores.get(v.videoId)!.at7! / 1000) * rate);
   }
   const recent: number[] = [];

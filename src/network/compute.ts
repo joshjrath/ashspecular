@@ -7,7 +7,14 @@
  *   first reading. A format's views are what that format's videos
  *   gained, read video by video. A day with no reading is unknown — never 0.
  *
+ * YouTube Analytics
+ *   A connected channel's days come from YouTube's own figures (views,
+ *   subscribers gained and lost, estimated revenue, long-form and Shorts),
+ *   which win over everything below. Days YouTube hasn't reported yet (it
+ *   runs two or three days behind) use the public counts.
+ *
  * Revenue (always an ESTIMATE)
+ *   YouTube's estimated revenue for a connected channel, else
  *   views ÷ 1,000 × the RPM in force that day, per channel and format:
  *   long-form views at the long-form RPM, Shorts at the Shorts RPM, and views
  *   that can't be told apart (the channel total beyond what its tracked videos
@@ -20,7 +27,7 @@
  */
 import { ORG_TZ, dateIn, shiftDate } from "../parse/derive.js";
 import { daysIn, eachDay, type Range } from "./period.js";
-import type { ChannelDay, Division, FormatDay, FormatPick, NetChannel, NetVideo, RpmRow, VideoFormat } from "./types.js";
+import type { AnalyticsDay, AnalyticsReach, ChannelDay, Division, FormatDay, FormatPick, NetChannel, NetVideo, RpmRow, VideoFormat } from "./types.js";
 
 export type Metric = "views" | "revenue" | "subs" | "uploads";
 export const METRICS: Array<{ id: Metric; label: string }> = [
@@ -38,9 +45,15 @@ export interface Index {
   rpm: Map<string, RpmRow[]>;
   /** The currency revenue is shown in: the one most channels use. */
   currency: string;
+  /** YouTube Analytics days of connected channels, which win over the public counts. */
+  analytics: Map<string, Map<string, AnalyticsDay>>;
+  reach: Map<string, AnalyticsReach>;
 }
 
-export function buildIndex(days: ChannelDay[], formats: FormatDay[], videos: NetVideo[], rpm: RpmRow[], tz = ORG_TZ): Index {
+export function buildIndex(
+  days: ChannelDay[], formats: FormatDay[], videos: NetVideo[], rpm: RpmRow[], tz = ORG_TZ,
+  yt: { days: AnalyticsDay[]; reach: Map<string, AnalyticsReach> } = { days: [], reach: new Map() },
+): Index {
   const totals = new Map<string, Map<string, ChannelDay>>();
   for (const d of days) {
     if (!totals.has(d.channel)) totals.set(d.channel, new Map());
@@ -73,7 +86,12 @@ export function buildIndex(days: ChannelDay[], formats: FormatDay[], videos: Net
     tally.set(c, (tally.get(c) ?? 0) + 1);
   }
   const currency = [...tally].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? "USD";
-  return { totals, gains, uploads, rpm: byChannel, currency };
+  const analytics = new Map<string, Map<string, AnalyticsDay>>();
+  for (const a of yt.days) {
+    if (!analytics.has(a.channel)) analytics.set(a.channel, new Map());
+    analytics.get(a.channel)!.set(a.day, a);
+  }
+  return { totals, gains, uploads, rpm: byChannel, currency, analytics, reach: yt.reach };
 }
 
 /** The RPM assumption in force on a day: the latest that starts on or before it. */
@@ -102,13 +120,36 @@ function dayChange(ix: Index, channel: string, day: string, pick: (r: { views: n
   return first && start !== null && first.at.getTime() < today.readAt.getTime() ? now - start : null;
 }
 
-/** A channel's views on a day, split as far as the readings allow. */
+/**
+ * A connected channel's revenue per 1,000 views over the days loaded, as
+ * YouTube reports it, for one format when YouTube split it (else overall).
+ * Null without revenue from YouTube.
+ */
+export function youtubeRpm(ix: Index, channel: string, format: VideoFormat): number | null {
+  let rev = 0, views = 0;
+  for (const a of ix.analytics.get(channel)?.values() ?? []) {
+    const r = format === "long" ? a.revenueLong : format === "short" ? a.revenueShort : null;
+    const v = format === "long" ? a.viewsLong : format === "short" ? a.viewsShort : null;
+    if (r !== null && v !== null) { rev += r; views += v; }
+    else if (a.revenue !== null) { rev += a.revenue; views += a.views; }
+  }
+  return views > 0 && ix.currency === "USD" ? (rev / views) * 1000 : null;
+}
+
+/** A channel's views on a day, split as far as the readings allow: YouTube Analytics' own figures when the channel is connected and YouTube has the day. */
 export function dayParts(ix: Index, channel: string, day: string): { total: number | null; long: number | null; short: number | null; unknown: number | null; read: boolean } {
+  const g = ix.gains.get(channel)?.get(day);
+  const a = ix.analytics.get(channel)?.get(day);
+  if (a) {
+    const long = a.viewsLong ?? g?.get("long") ?? null;
+    const short = a.viewsShort ?? g?.get("short") ?? null;
+    const unknown = a.viewsLong !== null && a.viewsShort !== null ? a.views - a.viewsLong - a.viewsShort : g?.get("unknown") ?? null;
+    return { total: a.views, long, short, unknown, read: true };
+  }
   const today = ix.totals.get(channel)?.get(day);
   const total = dayChange(ix, channel, day, (r) => r.views);
   // A day the channel was read on, its videos were too: no gain recorded is a real 0.
   const read = Boolean(today);
-  const g = ix.gains.get(channel)?.get(day);
   const part = (f: VideoFormat) => (g?.has(f) ? g.get(f)! : read ? 0 : null);
   return { total, long: part("long"), short: part("short"), unknown: part("unknown"), read };
 }
@@ -119,6 +160,8 @@ export function dayViews(ix: Index, channel: string, day: string, fmt: FormatPic
 }
 
 export function daySubs(ix: Index, channel: string, day: string): number | null {
+  const a = ix.analytics.get(channel)?.get(day);
+  if (a && a.subsGained !== null && a.subsLost !== null) return a.subsGained - a.subsLost;
   return dayChange(ix, channel, day, (r) => r.subscribers);
 }
 
@@ -140,11 +183,21 @@ export interface DayRevenue {
   noRpm: boolean;
   /** Views it was worked out from. */
   priced: number;
+  /** Of it: YouTube Analytics' own estimate rather than an RPM. */
+  byYouTube: number;
+  /** A connected channel's day YouTube hasn't reported yet (and no RPM to estimate it with). */
+  pending: boolean;
 }
 
 export function dayRevenue(ix: Index, channel: string, day: string, fmt: FormatPick): DayRevenue {
-  const none: DayRevenue = { value: null, byFormat: 0, byBlended: 0, unpriced: 0, noRpm: false, priced: 0 };
+  const none: DayRevenue = { value: null, byFormat: 0, byBlended: 0, unpriced: 0, noRpm: false, priced: 0, byYouTube: 0, pending: false };
+  // A connected channel's own revenue, as YouTube Studio reports it (in USD).
+  const a = ix.analytics.get(channel)?.get(day);
+  const yt = a && a.revenue !== null && ix.currency === "USD" ? (fmt === "all" ? a.revenue : fmt === "long" ? a.revenueLong : a.revenueShort) : null;
+  if (yt !== null) return { ...none, value: yt, byYouTube: yt, priced: dayViews(ix, channel, day, fmt) ?? 0 };
   const r = rpmOn(ix.rpm.get(channel), day);
+  const reach = ix.reach.get(channel);
+  if ((!r || r.currency !== ix.currency) && reach?.revenue && (!reach.through || day > reach.through)) return { ...none, pending: true };
   if (!r || r.currency !== ix.currency) return { ...none, noRpm: true };
   const p = dayParts(ix, channel, day);
   const out = { ...none };
@@ -192,6 +245,10 @@ export interface Figures {
   pricedViews: number;
   /** No RPM on any day of the range. */
   noRpm: boolean;
+  /** Revenue from YouTube Analytics rather than an RPM. */
+  revYouTube: number;
+  /** Days YouTube hasn't reported revenue for yet. */
+  pendingDays: number;
   subs: number | null;
   subDays: number;
   /** Latest subscriber count read in the range (null if hidden or never read). */
@@ -203,7 +260,7 @@ export interface Figures {
 /** One channel over a range, with how much of it the readings cover. */
 export function figuresOf(ix: Index, ch: NetChannel, r: Range, fmt: FormatPick): Figures {
   const f: Figures = {
-    channel: ch, days: daysIn(r), views: null, viewDays: 0, revenue: null, revFormat: 0, revBlended: 0, unpriced: 0, pricedViews: 0, noRpm: true,
+    channel: ch, days: daysIn(r), views: null, viewDays: 0, revenue: null, revFormat: 0, revBlended: 0, unpriced: 0, pricedViews: 0, noRpm: true, revYouTube: 0, pendingDays: 0,
     subs: null, subDays: 0, subsNow: null, subsHidden: false, uploads: { long: 0, short: 0, unknown: 0, total: 0 },
   };
   for (const day of eachDay(r)) {
@@ -211,10 +268,12 @@ export function figuresOf(ix: Index, ch: NetChannel, r: Range, fmt: FormatPick):
     if (v !== null) { f.views = (f.views ?? 0) + v; f.viewDays += 1; }
     const rev = dayRevenue(ix, ch.name, day, fmt);
     if (!rev.noRpm) f.noRpm = false;
+    if (rev.pending) f.pendingDays += 1;
     if (rev.value !== null) {
       f.revenue = (f.revenue ?? 0) + rev.value;
       f.revFormat += rev.byFormat;
       f.revBlended += rev.byBlended;
+      f.revYouTube += rev.byYouTube;
       f.pricedViews += rev.priced;
     }
     f.unpriced += rev.unpriced;
@@ -243,6 +302,10 @@ export interface Totals {
   pricedViews: number;
   /** Channels with no RPM for the range: left out of revenue. */
   needRpm: string[];
+  /** Revenue from YouTube Analytics. */
+  revYouTube: number;
+  /** Connected channels with days YouTube hasn't reported revenue for yet. */
+  pendingRevenue: string[];
   subs: number | null;
   subsNow: number | null;
   uploads: { long: number; short: number; unknown: number; total: number };
@@ -272,7 +335,9 @@ export function totalsOf(list: Figures[], ix: Index, r: Range, fmt: FormatPick):
     revBlended: list.reduce((a, f) => a + f.revBlended, 0),
     unpriced: list.reduce((a, f) => a + f.unpriced, 0),
     pricedViews,
-    needRpm: list.filter((f) => f.noRpm).map((f) => f.channel.name),
+    needRpm: list.filter((f) => f.noRpm && !f.pendingDays && !f.revYouTube).map((f) => f.channel.name),
+    revYouTube: list.reduce((a, f) => a + f.revYouTube, 0),
+    pendingRevenue: list.filter((f) => f.pendingDays > 0).map((f) => f.channel.name),
     subs: sum((f) => f.subs),
     subsNow: sum((f) => f.subsNow),
     uploads: {

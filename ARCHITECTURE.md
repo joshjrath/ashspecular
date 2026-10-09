@@ -37,7 +37,8 @@ src/
     migrations/       NNN_name.sql, applied in order at start, each in a transaction
   jobs/               background work: schedule (batches, digest, nudge), hourly (YouTube + posting check),
                       ideas, competitors, storyideas, youtube, avatars, breakouts, postcheck,
-                      network (channel totals, every video's views, the daily alerts)
+                      network (channel totals, every video's views, the daily alerts),
+                      analytics (YouTube Analytics: sign-in, each connected channel's days)
   web/
     server.ts         buildApp(): the app, its guards and every route module; startWeb(): jobs + listen
     routes/           one module per area: registerX(app) — the HTTP handlers
@@ -130,6 +131,7 @@ card actions).
 | Dates and deadlines | `parse/derive.ts` (`ORG_TZ`, VO buffer, deadline time) | Everything is stored UTC and shown in `ORG_TZ`. Dates are `YYYY-MM-DD` strings in that zone. |
 | Time estimates | `work_estimates` + defaults in `web/work.ts` | |
 | Divisions (Network Overview's grouping) | `network_divisions` + `network_channels` (`db/network.ts`) | Seeded from the categories, then edited in Settings → Network & revenue. Separate from categories: nothing but Network Overview reads them. One division per channel. |
+| A connected channel's views, subscribers, revenue | `network_analytics_days` (YouTube Analytics), keyed by YouTube channel id | Win over the public counts and RPM estimates day by day (`dayParts`/`dayRevenue` in `network/compute.ts`); days YouTube hasn't reported yet fall back. Google access is `network_analytics_links.refresh_token`, sealed like the API keys; the Google client is `app_settings` `google:client_*` or `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`. |
 | RPM assumptions | `network_rpm`, one row per channel per `effective_from` | `rpmOn()` picks the row in force each day, so a new rate never rewrites earlier estimates. Revenue is always an estimate; Finance holds actuals. |
 | Which videos the board sees | `uploads.board` | Network Overview also reads each channel's other format (`board = false`). Every board query on `uploads` filters `AND board`; add it to a new one. |
 | One running timer | `time_entries` with a unique index on the running row | Starting one stops the last in one locked transaction (`db/timers.ts`). |
@@ -156,6 +158,7 @@ card actions).
 | Open daily batches | `jobs/schedule.ts` → `jobs/batches.ts` | each recurring channel's `opensAt` (ORG_TZ), and at boot |
 | Morning digest, overdue nudge | `jobs/schedule.ts` | `DIGEST_CRON`, `NUDGE_CRON` (needs `DIGEST_CHANNEL_ID`) |
 | YouTube read → posting check → breakouts → avatars → network read | `jobs/hourly.ts` (`runNetworkRead` in `jobs/network.ts`) | :07 every hour, and 20 s after boot; every video's views and the network alerts once a day (ET) |
+| YouTube Analytics (connected channels) | `jobs/analytics.ts`, from `jobs/hourly.ts` | each channel every 6 hours (3 years on the first read, the last 10 days after); straight after connecting |
 | Idea Feed (Tumblr + Claude) | `jobs/ideas.ts` | every minute (paced to the daily caps) |
 | Competitors | `jobs/competitors.ts` | every 10 minutes (quota-budgeted) |
 | Claude's Story Lab ideas | `jobs/storyideas.ts` | every 5 minutes, ≤ `STORYLAB_AI_DAILY` calls/day |
@@ -172,6 +175,7 @@ and log their own failures; a rejection nothing catches is logged by
 | Discord (discord.js) | intake, tasks, digest, nudges, breakout and missed-post messages | `bot/`, `jobs/` |
 | Anthropic (official SDK) | parsing prose, revision summaries, finance voice notes, compilation packages, Idea Feed, Competitors, Story Lab | `ai/claude.ts` (`anthropic()`, `askClaude()`) |
 | YouTube | uploads and views (Data API with a key; RSS feeds and channel pages without) | `jobs/youtube.ts`, `competitors/youtube.ts`, `jobs/avatars.ts` |
+| YouTube Analytics (Google sign-in) | connected channels' daily views, subscribers, revenue | `jobs/analytics.ts`, `network/analytics.ts` |
 | Tumblr API | the Idea Feed | `ideas/tumblr.ts` |
 | Frame.io | link names (public pages), comments (API with `FRAMEIO_TOKEN`) | `parse/frameio.ts`, `revisions/comments.ts` |
 | Google Docs | reading a shared script as plain text | `web/gdoc.ts` |

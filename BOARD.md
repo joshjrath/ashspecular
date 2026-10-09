@@ -1920,7 +1920,9 @@ otherwise the card says there isn't enough to compare.
 
 ### Revenue is an estimate
 
-Revenue is **ESTIMATED** everywhere it appears: views ÷ 1,000 × the RPM set
+Revenue is **ESTIMATED** everywhere it appears. For a channel connected to
+YouTube Analytics it's YouTube's own estimate (Studio's "Estimated revenue");
+otherwise it's views ÷ 1,000 × the RPM set
 for that channel in Settings → Network & revenue, as it stood on each day.
 Long-form views use the long-form RPM, Shorts the Shorts RPM, and views
 that can't be told apart (or a format with no RPM of its own) the blended
@@ -1983,12 +1985,47 @@ two weeks, a video 5× its channel's usual, a channel gone quiet, the whole
 network down 25%, and a division up 50%. Each lands in the bell under
 **Network**, with the reason, and in Network health.
 
+### YouTube Analytics — the real figures
+
+Connect a channel to YouTube Analytics and Network Overview uses the figures
+YouTube Studio shows for it: daily views, subscribers gained and lost, and
+YouTube's estimated revenue, split into long-form and Shorts, going back
+three years. Revenue then needs no RPM. YouTube runs two or three days
+behind; the days after come from the public counts (and the RPM, if one is
+set), and the page says how far YouTube's figures go.
+
+**Setting it up (once, about 10 minutes)** — Settings → Network & revenue →
+YouTube Analytics lists these steps with the exact address to paste:
+
+1. In Google Cloud (the project the YouTube key is in), enable the
+   **YouTube Analytics API**.
+2. **Google Auth Platform** → Get started: an app name, your email,
+   Audience **External**; then **Audience → Publish app**, or Google ends
+   the access after 7 days.
+3. **Clients → Create client** → Web application, with the board's redirect
+   address (shown on the page) under Authorized redirect URIs.
+4. Paste the client ID and secret into the page (stored encrypted), or set
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on Railway.
+5. Press **Connect** beside each channel and sign in with the Google account
+   that owns or manages it; Google asks which channel, so pick that one. It
+   warns the app isn't verified, which is expected for your own tool:
+   Advanced → Go to Specular board.
+
+A connected channel's history loads within a minute or two and is read again
+every six hours. Each row says how far its figures go, whether revenue is
+included (a sign-in without revenue access gets views and subscribers), or
+why the last read failed. **Read again** retries; **Disconnect** removes the
+access and its figures. Channels that aren't connected keep working from the
+public counts.
+
 ### Where the numbers come from, and their limits
 
-- Views and subscribers are YouTube's public counts, read every hour with the
-  YouTube key (Settings → Connections). Without a key nothing is read and
-  the page says so.
-- **History starts when the board starts reading.** YouTube's public data has
+- Connected channels: YouTube Analytics, as above. The rest: YouTube's
+  public counts, read every hour with the YouTube key (Settings →
+  Connections). Without a key or a connection nothing is read and the page
+  says so.
+- **For channels not connected, history starts when the board starts
+  reading.** YouTube's public data has
   no past daily figures, so nothing before the first reading is invented.
   A channel's first day counts from its first reading (the page says when
   that was); every day after counts from the day before.
@@ -2004,6 +2041,8 @@ network down 25%, and a division up 50%. Each lands in the bell under
 
 The Settings menu has a **Network & revenue** tile:
 
+- **YouTube Analytics**: the setup steps, the Google client, and a Connect
+  button per channel (see above).
 - **Divisions**: rename, recolour, reorder, add and delete (a division with
   channels in it can't be deleted). They start as the board's five
   categories but are separate from them: changing a division never changes

@@ -150,6 +150,8 @@ export interface Overview {
   currency: string;
   /** In the period, the earliest first reading a channel's figures count from; null when every day has the day before. */
   startedAt: Date | null;
+  /** Selected channels connected to YouTube Analytics, and the last day YouTube has for all of them. */
+  analytics: { connected: number; through: string | null };
 }
 
 export interface Momentum {
@@ -381,7 +383,7 @@ export function buildOverview(ds: Dataset, q: NetQuery, now: Date): Overview {
   let startedAt: Date | null = null;
   for (const c of selected) {
     for (const [day, r] of ix.totals.get(c.name) ?? []) {
-      if (r.first && day >= period.from && day <= period.to && (!startedAt || r.first.at < startedAt)) startedAt = r.first.at;
+      if (r.first && day >= period.from && day <= period.to && !ix.analytics.get(c.name)?.has(day) && (!startedAt || r.first.at < startedAt)) startedAt = r.first.at;
     }
   }
 
@@ -389,5 +391,6 @@ export function buildOverview(ds: Dataset, q: NetQuery, now: Date): Overview {
     q, period, today: ds.today, divisions: ds.divisions, pool, selected, cur, totals, prevTotals, changes, sparks, chart, divisionRows, leaders,
     movers: { ...mv, range: { ...mw.cur, label: widened ? "Last 28 days" : period.label }, prevLabel: mLabel, widened },
     momentum, health, top, uploads, milestones, scenario, currency: ix.currency, startedAt,
+    analytics: { connected: selected.filter((c) => ix.reach.has(c.name)).length, through: [...selected].map((c) => ix.reach.get(c.name)?.through ?? null).filter((d): d is string => d !== null).sort()[0] ?? null },
   };
 }

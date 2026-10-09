@@ -139,8 +139,12 @@ function statusLine(o: Overview, s: { lastRead: Date | null; stale: boolean; lin
   const t = o.totals;
   const notes: string[] = [];
   notes.push(s.lastRead ? `Last updated ${esc(timeEt(s.lastRead))}${s.stale ? ` ${pill("stale", "warn")}` : ""}` : `${pill("no readings yet", "warn")} Daily figures start from the first hourly read with a YouTube key.`);
-  if (!s.key) notes.push(`${pill("needs a key", "warn")} Views, subscribers and revenue need the YouTube key (<a href="/settings#keys">Settings → Connections</a>).`);
+  if (!s.key && !o.analytics.connected) notes.push(`${pill("needs a key", "warn")} Views, subscribers and revenue need the YouTube key (<a href="/settings#keys">Settings → Connections</a>).`);
   if (o.period.partial) notes.push(`${pill("partial")} ${esc(o.period.label)} runs to today, which isn't over.`);
+  const a = o.analytics;
+  notes.push(a.connected
+    ? `${pill(`${a.connected} of ${o.selected.length} from YouTube Analytics`, "ok")}${a.through ? ` YouTube's figures run to ${esc(usDate(a.through))}; later days come from the public counts.` : " Their history is loading."}${a.connected < o.selected.length ? ` <a href="/settings/network#analytics">Connect the rest</a>.` : ""}`
+    : `Public counts only: <a href="/settings/network#analytics">connect YouTube Analytics</a> for real daily views and revenue, years back.`);
   if (o.startedAt) notes.push(`Views and subscribers count from the first reading, ${esc(timeEt(o.startedAt))}. YouTube's public figures don't go back further.`);
   if (t.days > 0 && t.viewDays < t.days) notes.push(`Daily view history for ${t.viewDays} of ${t.days} day${t.days === 1 ? "" : "s"}${t.gappy ? ` (${t.gappy} channel${t.gappy === 1 ? "" : "s"} missing some)` : ""}.`);
   if (s.unlinked.length) notes.push(`${s.unlinked.length} channel${s.unlinked.length === 1 ? "" : "s"} not linked to YouTube: <a href="/settings/network#channels">link them</a>.`);
@@ -158,8 +162,11 @@ function tiles(o: Overview): string {
   const notFormat = o.q.fmt !== "all";
   const confidence = (t: Totals) => {
     if (t.revenue === null) return "";
+    const yt = t.revenue > 0 ? t.revYouTube / t.revenue : 0;
+    if (yt >= 0.999) return pill("from YouTube Analytics", "ok");
     const share = t.revenue > 0 ? t.revBlended / t.revenue : 0;
-    return share > 0.5 ? pill("mostly blended RPM", "warn") : share > 0 ? pill(`${Math.round(share * 100)}% at blended RPM`) : pill("format RPMs");
+    const rpm = share > 0.5 ? pill("mostly blended RPM", "warn") : share > 0 ? pill(`${Math.round(share * 100)}% at blended RPM`) : pill("format RPMs");
+    return yt > 0 ? `${pill(`${Math.round(yt * 100)}% from YouTube Analytics`, "ok")} · rest at ${rpm}` : rpm;
   };
   const tile = (o2: { label: string; value: string; change: string; sub: string; spark?: string; tone?: string }) =>
     `<div class="nt-tile${o2.tone ? ` ${o2.tone}` : ""}"><div class="nt-tl">${o2.label}</div><div class="nt-tv">${o2.value}</div>
@@ -174,12 +181,12 @@ function tiles(o: Overview): string {
     ${tile({
       label: `Est. revenue ${pill("ESTIMATED", "est")}`, value: esc(fmtMoneyIn(t.revenue, o.currency)),
       change: changeBadge(o.changes.revenue, prevLabel), spark: spark(o.sparks.revenue, "#56C990"),
-      sub: `${avgPerDay !== null ? `${esc(fmtMoneyIn(avgPerDay, o.currency))} a day · ` : ""}${confidence(t)}${t.needRpm.length ? ` · <a href="/settings/network#rpm">${t.needRpm.length} without an RPM</a>` : ""}`,
+      sub: `${avgPerDay !== null ? `${esc(fmtMoneyIn(avgPerDay, o.currency))} a day · ` : ""}${confidence(t)}${t.needRpm.length ? ` · <a href="/settings/network#rpm">${t.needRpm.length} without an RPM</a>` : ""}${t.pendingRevenue.length ? ` · last days not in from YouTube yet` : ""}`,
     })}
     ${tile({
       label: "Net subscribers", value: esc(fmtNum(t.subs, { sign: true })),
       change: changeBadge(o.changes.subs, prevLabel), spark: spark(o.sparks.subs, "#7D8AF5"),
-      sub: `${notFormat ? "Channel-level, not format-specific · " : ""}approximate: YouTube rounds public counts`,
+      sub: `${notFormat ? "Channel-level, not format-specific · " : ""}${o.analytics.connected === o.selected.length && o.selected.length ? "gained less lost, from YouTube Analytics" : "approximate where from public counts: YouTube rounds them"}`,
     })}
     ${tile({
       label: "Uploads", value: esc(fmtNum(t.uploads.total)),
@@ -276,7 +283,7 @@ function chartPanel(o: Overview): string {
   const tabs = METRICS.map((m) => `<a class="nt-tab${q.metric === m.id ? " on" : ""}" href="${esc(href(q, { metric: m.id }, "#chart"))}">${esc(m.label)}</a>`).join("");
   const splits = ([["total", "Combined"], ["division", "By division"], ["channel", "By channel"]] as const)
     .map(([id, label]) => `<a class="nt-tab sm${q.split === id ? " on" : ""}" href="${esc(href(q, { split: id }, "#chart"))}">${label}</a>`).join("");
-  const note = q.metric === "subs" && q.fmt !== "all" ? `<p class="hint">Subscribers are counted per channel, not per format.</p>` : q.metric === "revenue" ? `<p class="hint">Estimated: views × each channel's RPM for the format, in force that day.</p>` : "";
+  const note = q.metric === "subs" && q.fmt !== "all" ? `<p class="hint">Subscribers are counted per channel, not per format.</p>` : q.metric === "revenue" ? `<p class="hint">Estimated: YouTube Analytics' own estimate for connected channels; otherwise views × each channel's RPM for the format, in force that day.</p>` : "";
   return `<section class="panel nt-panel" id="chart"><div class="nt-head"><h2>Performance over time</h2><div class="nt-tabs">${tabs}</div><div class="nt-tabs">${splits}</div></div>
     ${mainChart(o)}${note}</section>`;
 }
@@ -477,7 +484,7 @@ function uploadsPanel(o: Overview): string {
     <h3 style="margin-top:16px">How new uploads are doing</h3>
     <div class="nt-mgrid">
       ${effLine("Views per upload", e.medianFirstWeek === null ? "—" : fmtNum(e.medianFirstWeek), p && p.medianFirstWeek !== null ? fmtNum(p.medianFirstWeek) : null, `median at 7 days · ${e.measured} of ${e.uploads} measured`)}
-      ${effLine("Est. revenue per upload", e.revenuePerUpload === null ? "—" : fmtMoneyIn(e.revenuePerUpload, o.currency), p && p.revenuePerUpload !== null ? fmtMoneyIn(p.revenuePerUpload, o.currency) : null, "first week, at each channel's RPM (estimated)")}
+      ${effLine("Est. revenue per upload", e.revenuePerUpload === null ? "—" : fmtMoneyIn(e.revenuePerUpload, o.currency), p && p.revenuePerUpload !== null ? fmtMoneyIn(p.revenuePerUpload, o.currency) : null, "first week, at each channel's RPM or YouTube's (estimated)")}
       ${effLine("Median recent video", e.medianRecent === null ? "—" : fmtNum(e.medianRecent), null, "lifetime views, each channel's last 10 a week old or more")}
       ${effLine("Beat their channel's usual", e.beatRate === null ? "—" : fmtPctPlain(e.beatRate), p && p.beatRate !== null ? fmtPctPlain(p.beatRate) : null, `${e.scored} scored`)}
     </div>
@@ -540,7 +547,7 @@ export function renderNetwork(shell: Shell, o: Overview, x: NetworkPageExtra): s
     <div class="nt-two">${momentumPanel(o)}${healthPanel(o, x.alerts)}</div>
     ${topVideos(o)}${uploadsPanel(o)}
     <div class="nt-two">${milestonesPanel(o)}${scenarioPanel(o)}</div>
-    <p class="hint nt-method">All revenue here is <b>estimated</b>: views ÷ 1,000 × the RPM you set for each channel and format, as it stood each day. It isn't what YouTube paid. Views and subscribers come from YouTube's public counts, read hourly; a day with no reading is left out, never counted as zero.</p>`
+    <p class="hint nt-method">All revenue here is <b>estimated</b>. For a channel connected to YouTube Analytics it's YouTube's own estimate, as YouTube Studio shows it; otherwise views ÷ 1,000 × the RPM you set for each channel and format, as it stood each day. Neither is what YouTube paid. Connected channels' views and subscribers are YouTube Analytics' figures; the rest come from YouTube's public counts, read hourly, and a day with no reading is left out, never counted as zero.</p>`
       : `<div class="panel"><div class="empty">No channels in this selection. <a href="/network">Show the whole network</a> or <a href="/settings/network#channels">check which channels are switched on</a>.</div></div>`}
     ${TIP_SCRIPT}`,
   );

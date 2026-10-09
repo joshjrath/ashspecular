@@ -10,6 +10,7 @@ import { usDate } from "../../parse/derive.js";
 import { CURRENCIES, RPM_BOUNDS } from "../../db/network.js";
 import { rpmOn } from "../../network/compute.js";
 import type { Division, NetChannel, RpmRow } from "../../network/types.js";
+import type { AnalyticsLink } from "../../db/analytics.js";
 
 export interface NetworkSettingsView {
   divisions: Division[];
@@ -20,6 +21,7 @@ export interface NetworkSettingsView {
   today: string;
   saved: string;
   error: string;
+  analytics: { links: AnalyticsLink[]; client: { source: "settings" | "railway" | "none"; id: string }; redirectUri: string };
 }
 
 const money = (n: number | null, c: string) => (n === null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: c, minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n));
@@ -120,6 +122,52 @@ function rpmPanel(v: NetworkSettingsView): string {
   </section>`;
 }
 
+function analyticsPanel(v: NetworkSettingsView): string {
+  const a = v.analytics;
+  const clientForm = (open: boolean) => `<form class="chaddrow nt-rpmform" method="post" action="/settings/network/analytics/client">
+      <label class="wide">Client ID<input name="id" required maxlength="300" autocomplete="off" placeholder="1234-abc.apps.googleusercontent.com" value="${esc(a.client.source === "settings" ? a.client.id : "")}"></label>
+      <label class="wide">Client secret<input name="secret" type="password" maxlength="300" autocomplete="off" placeholder="${a.client.source === "settings" ? "saved: leave blank to keep it" : "GOCSPX-…"}"${open ? " required" : ""}></label>
+      <button class="clear sm">Save</button>
+    </form>`;
+  const steps = `<ol class="nt-steps">
+      <li>Open <a href="https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com" target="_blank" rel="noreferrer">YouTube Analytics API</a> in Google Cloud, in the same project as your YouTube key, and press <b>Enable</b>.</li>
+      <li>Go to <b>Google Auth Platform</b> (it may say OAuth consent screen) → <b>Get started</b>. App name: Specular board; your email for both contacts; Audience: <b>External</b>. Then <b>Audience → Publish app</b>, so the access doesn't run out after 7 days.</li>
+      <li><b>Clients → Create client</b> → Web application. Under <b>Authorized redirect URIs</b> add exactly:<br><code class="nt-copy">${esc(a.redirectUri)}</code></li>
+      <li>Copy the <b>Client ID</b> and <b>Client secret</b> into the form below. They're stored encrypted. Don't paste the secret anywhere else, chat included.</li>
+      <li>Press <b>Connect</b> beside each channel and sign in with the Google account that owns or manages it. Google asks which channel: pick that one. It says the app isn't verified; that's expected for your own tool: <b>Advanced → Go to Specular board</b>.</li>
+    </ol>`;
+  if (a.client.source === "none") {
+    return `<section class="panel setgroup" id="analytics" style="margin-top:14px">
+      <h2>YouTube Analytics <span class="sub">— the figures YouTube Studio shows: daily views, subscribers and revenue, years back, long-form and Shorts apart. Set up once (about 10 minutes), then connect each channel.</span></h2>
+      ${steps}${clientForm(true)}
+    </section>`;
+  }
+  const byChannel = new Map(a.links.filter((l) => l.channel).map((l) => [l.channel!, l]));
+  const status = (l: AnalyticsLink | undefined) => {
+    if (!l) return `<span class="nt-pill">not connected</span>`;
+    if (l.error) return `<span class="nt-pill warn">read failed</span><small class="nt-cov">${esc(l.error)}</small>`;
+    if (!l.syncedAt) return `<span class="nt-pill">reading history…</span><small class="nt-cov">${esc(`as ${l.title}`)}</small>`;
+    return `<span class="nt-pill ok">connected</span><small class="nt-cov">${esc(`as ${l.title} · figures through ${l.through ? usDate(l.through) : "—"} · ${l.revenue ? "revenue included" : "no revenue access (the RPM estimate is used)"}`)}</small>`;
+  };
+  const actions = (c: NetChannel | null, l: AnalyticsLink | undefined) => l
+    ? `<form method="post" action="/settings/network/analytics/${esc(l.youtubeId)}/read" style="display:inline"><button class="linkbtn">Read again</button></form>
+       <form method="post" action="/settings/network/analytics/${esc(l.youtubeId)}/disconnect" style="display:inline"><button class="linkbtn" onclick="return confirm('Disconnect? Its Analytics figures leave the board.')">Disconnect</button></form>`
+    : c ? `<form method="post" action="/settings/network/analytics/connect" style="display:inline"><input type="hidden" name="channel" value="${esc(c.id)}"><button class="clear sm">Connect</button></form>` : "";
+  const row = (name: string, c: NetChannel | null, l: AnalyticsLink | undefined) =>
+    `<tr><td class="l"><b>${esc(name)}</b> ${status(l)}</td><td class="nt-anact">${actions(c, l)}</td></tr>`;
+  const rows = v.channels.map((c) => row(c.name, c, byChannel.get(c.name))).join("");
+  const loose = a.links.filter((l) => !l.channel).map((l) => row(`${l.title} (not linked to a board channel)`, null, l)).join("");
+  const connected = a.links.filter((l) => l.channel).length;
+  return `<section class="panel setgroup" id="analytics" style="margin-top:14px">
+    <h2>YouTube Analytics <span class="sub">— ${connected} of ${v.channels.length} channels connected. A connected channel's views, subscribers and revenue come from YouTube Studio's own figures, years back; YouTube runs two or three days behind, and the days after come from the public counts. Each channel connects separately: sign in as someone who manages it and pick it on Google's screen.</span></h2>
+    <table class="nt-table nt-antable"><thead><tr><th class="l">Channel</th><th></th></tr></thead><tbody>${rows}${loose}</tbody></table>
+    <details class="nt-rpm"><summary><b>Google client</b> <span>${a.client.source === "settings" ? "set here" : "from Railway (GOOGLE_CLIENT_ID)"}</span></summary>
+      ${steps}${clientForm(a.client.source !== "settings")}
+      ${a.client.source === "settings" ? `<form method="post" action="/settings/network/analytics/client"><input type="hidden" name="clear" value="1"><button class="linkbtn" onclick="return confirm('Remove the Google client? Connected channels stop updating until it is set again.')">Remove the client</button></form>` : ""}
+    </details>
+  </section>`;
+}
+
 export function renderNetworkSettings(shell: Shell, v: NetworkSettingsView): string {
   return layout(
     "Network & revenue · Settings",
@@ -127,10 +175,11 @@ export function renderNetworkSettings(shell: Shell, v: NetworkSettingsView): str
     `${pageHeader("Network & revenue", `<a class="clear secondary" href="/settings">← Settings</a><a class="clear secondary" href="/network">Network Overview</a>`)}
     ${v.saved ? `<p class="saved" role="status">${esc(v.saved)}</p>` : ""}${v.error ? `<p class="seterr" role="alert">${esc(v.error)}</p>` : ""}
     <nav class="setmenu" aria-label="Sections">
+      <a class="setmenu-i" href="#analytics"><span class="ic" aria-hidden="true">📈</span><span><b>YouTube Analytics</b><em>${v.analytics.client.source === "none" ? "not set up" : `${v.analytics.links.filter((l) => l.channel).length} of ${v.channels.length} connected`}</em></span></a>
       <a class="setmenu-i" href="#divisions"><span class="ic" aria-hidden="true">🗂</span><span><b>Divisions</b><em>${v.divisions.length} divisions</em></span></a>
       <a class="setmenu-i" href="#channels"><span class="ic" aria-hidden="true">📺</span><span><b>Channels</b><em>${v.channels.filter((c) => c.active).length} of ${v.channels.length} in Network</em></span></a>
       <a class="setmenu-i" href="#rpm"><span class="ic" aria-hidden="true">💵</span><span><b>RPM settings</b><em>${v.channels.filter((c) => !rpmOn(v.rpm.filter((r) => r.channel === c.name), v.today)).length} need one</em></span></a>
     </nav>
-    ${divisionsPanel(v)}${channelsPanel(v)}${rpmPanel(v)}`,
+    ${analyticsPanel(v)}${divisionsPanel(v)}${channelsPanel(v)}${rpmPanel(v)}`,
   );
 }

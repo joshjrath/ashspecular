@@ -11,13 +11,14 @@ import { announceBreakouts } from "./breakouts.js";
 import { sampleAvatars } from "./avatars.js";
 import { checkPosts, missedLine } from "./postcheck.js";
 import { runNetworkRead } from "./network.js";
+import { syncAnalytics } from "./analytics.js";
 import { config } from "../config.js";
 import { displayTitle } from "../web/page.js";
 import { getRecord as getRecordById } from "../db/records.js";
 import { usDate } from "../parse/derive.js";
 import { forgetGaps } from "../web/shell.js";
 
-/** Read YouTube hourly (at :07), and once twenty seconds after boot. Each step's failure is logged. */
+/** Read YouTube hourly (at :07), and once twenty seconds after boot, with YouTube Analytics alongside. Each step's failure is logged. */
 export function startHourlyRead(): void {
   const read = (why: string) =>
     syncUploads()
@@ -29,8 +30,13 @@ export function startHourlyRead(): void {
       .then(() => sampleAvatars())
       .then((a) => (a.sampled || a.failed) && console.log(`[colours] ${a.sampled} avatars sampled, ${a.failed} failed`))
       .catch((err) => console.error("[uploads] read failed:", err));
-  cron.schedule("7 * * * *", () => void read("hourly"));
-  setTimeout(() => void read("boot"), 20_000).unref();
+  // YouTube Analytics needs no API key and doesn't wait on the rest.
+  const analytics = () =>
+    syncAnalytics()
+      .then((n) => n && console.log(`[analytics] read ${n} channel${n === 1 ? "" : "s"}`))
+      .catch((err) => console.error("[analytics] sync failed:", err));
+  cron.schedule("7 * * * *", () => { void read("hourly"); void analytics(); });
+  setTimeout(() => { void read("boot"); void analytics(); }, 20_000).unref();
 }
 
 /**

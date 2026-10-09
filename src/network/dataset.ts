@@ -4,6 +4,7 @@
  * every upload, and the recent ones' outlier scores.
  */
 import { firstReading, listDivisions, listNetChannels, listRpm, loadReadings, loadVideos } from "../db/network.js";
+import { loadAnalyticsDays } from "../db/analytics.js";
 import { listSnapshots } from "../jobs/youtube.js";
 import { ORG_TZ, dateIn } from "../parse/derive.js";
 import { buildIndex, type Index } from "./compute.js";
@@ -18,7 +19,7 @@ export interface Dataset {
   ix: Index;
   videos: NetVideo[];
   scores: Map<string, VideoScore>;
-  /** The first day any channel was read, or null before the first read. */
+  /** The first day any channel has figures for (read, or from YouTube Analytics), or null before any. */
   firstRead: string | null;
 }
 
@@ -31,8 +32,8 @@ export async function loadDataset(o: { from: string; scoreSince: number; now?: D
   const now = o.now ?? new Date();
   const [channels, divisions, rpm, firstRead] = await Promise.all([listNetChannels(), listDivisions(), listRpm(), firstReading()]);
   const names = channels.map((c) => c.name);
-  const [readings, videos] = await Promise.all([loadReadings(names, o.from), loadVideos(names)]);
-  const ix = buildIndex(readings.days, readings.formats, videos, rpm);
+  const [readings, videos, yt] = await Promise.all([loadReadings(names, o.from), loadVideos(names), loadAnalyticsDays(names, o.from)]);
+  const ix = buildIndex(readings.days, readings.formats, videos, rpm, ORG_TZ, yt);
   // Snapshots only cover each video's first ten days; the last few months' are what scoring needs.
   const since = now.getTime() - (o.scoreSince + 90) * 86_400_000;
   const recent = videos.filter((v) => v.publishedAt.getTime() >= since);

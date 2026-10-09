@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-09-youtube-analytics",
+    title: "Network Overview: real figures from YouTube Analytics",
+    changes: [
+      { text: "Connect a channel to YouTube Analytics and Network Overview shows what YouTube Studio shows for it: daily views, subscribers gained and lost, and YouTube's estimated revenue, long-form and Shorts apart, three years back. No RPM needed.", href: "/settings/network#analytics" },
+      { text: "Set up once in Settings → Network & revenue → YouTube Analytics (about 10 minutes; the steps are on the page), then press Connect beside each channel and pick it on Google's screen." },
+      { text: "YouTube runs two or three days behind; the latest days come from the public counts until it catches up. Channels you don't connect work as before.", href: "/network" },
+    ],
+  },
+  {
     id: "2026-10-08-network-views-now",
     title: "Network Overview shows views from the first hour",
     changes: [

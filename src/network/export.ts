@@ -13,7 +13,7 @@ export const EXPORTS = ["channels", "divisions", "daily", "revenue", "uploads"] 
 export type ExportKind = (typeof EXPORTS)[number];
 
 export const METHOD =
-  "Revenue is ESTIMATED: views / 1000 x the RPM set for each channel and format, as in force each day (long-form views at the long-form RPM, Shorts at the Shorts RPM, views that can't be told apart at the blended RPM). It is not what YouTube paid. Views and subscribers are YouTube's public counts, read hourly; a day without a reading is blank, not zero.";
+  "Revenue is ESTIMATED: for channels connected to YouTube Analytics, YouTube's own estimated revenue (USD); otherwise views / 1000 x the RPM set for each channel and format, as in force each day (long-form views at the long-form RPM, Shorts at the Shorts RPM, views that can't be told apart at the blended RPM). It is not what YouTube paid. Connected channels' views and subscribers are YouTube Analytics' figures; the rest are YouTube's public counts, read hourly; a day without a reading is blank, not zero.";
 
 const r2 = (n: number | null) => (n === null ? "" : (Math.round(n * 100) / 100).toFixed(2));
 const n0 = (n: number | null) => (n === null ? "" : String(Math.round(n)));
@@ -54,7 +54,7 @@ export function exportRows(kind: ExportKind, o: Overview, ix: Index, videos: Net
           const p = dayParts(ix, c.name, day);
           const rev = dayRevenue(ix, c.name, day, fmt);
           const rpm = rpmOn(ix.rpm.get(c.name), day);
-          const status = rev.noRpm ? "no RPM" : rev.value === null ? "no reading" : rev.byBlended > 0 && rev.byFormat === 0 ? "blended" : rev.byBlended > 0 ? "format + blended" : "format";
+          const status = rev.byYouTube ? "YouTube Analytics" : rev.pending ? "not in from YouTube yet" : rev.noRpm ? "no RPM" : rev.value === null ? "no reading" : rev.byBlended > 0 && rev.byFormat === 0 ? "blended" : rev.byBlended > 0 ? "format + blended" : "format";
           return [day, c.name, n0(p.total), n0(p.long), n0(p.short), r2(rpm?.long ?? null), r2(rpm?.short ?? null), r2(rpm?.blended ?? null), r2(rev.value), r2(rev.byFormat), r2(rev.byBlended), n0(rev.unpriced), status];
         }))];
     case "uploads": {

@@ -168,6 +168,32 @@ export const limitValue = (id: string) => {
   return Number.isFinite(v) && (stored.has(`limit:${id}`) || ORIGINAL.get(d.env)) ? v : d.fallback;
 };
 
+/**
+ * The Google sign-in client YouTube Analytics connects with: set in Settings
+ * → Network & revenue, else GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (read when
+ * used). Both are sealed like the keys; the secret is never shown again.
+ */
+export function googleClient(): { id: string; secret: string; source: "settings" | "railway" | "none" } {
+  const id = stored.get("google:client_id")?.trim();
+  const secret = stored.get("google:client_secret")?.trim();
+  if (id && secret) return { id, secret, source: "settings" };
+  const envId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const envSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (envId && envSecret) return { id: envId, secret: envSecret, source: "railway" };
+  return { id: "", secret: "", source: "none" };
+}
+
+/** Save the client (null clears it, so the Railway variables apply again). */
+export async function setGoogleClient(value: { id: string; secret: string } | null): Promise<void> {
+  if (!value) await pool.query("DELETE FROM app_settings WHERE key IN ('google:client_id', 'google:client_secret')");
+  else {
+    for (const [key, v] of [["google:client_id", value.id.trim()], ["google:client_secret", value.secret.trim()]] as const) {
+      await pool.query("INSERT INTO app_settings (key, value, secret, updated_at) VALUES ($1, $2, true, now()) ON CONFLICT (key) DO UPDATE SET value = $2, secret = true, updated_at = now()", [key, seal(v)]);
+    }
+  }
+  await loadKeys();
+}
+
 /** Keep a second process (the bot on its own) in step: reread once a minute. */
 let syncing = false;
 export function startKeySync(): void {

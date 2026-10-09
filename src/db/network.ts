@@ -207,7 +207,12 @@ export async function loadVideos(channels: string[]): Promise<Array<{
 
 /** The earliest day a channel total was read: history before it doesn't exist. */
 export async function firstReading(): Promise<string | null> {
-  const { rows } = await pool.query("SELECT to_char(min(day), 'YYYY-MM-DD') AS d FROM network_channel_days");
+  const { rows } = await pool.query(
+    `SELECT to_char(LEAST(
+       (SELECT min(day) FROM network_channel_days),
+       (SELECT min(d.day) FROM network_analytics_days d JOIN youtube_channels y ON y.youtube_id = d.youtube_id)
+     ), 'YYYY-MM-DD') AS d`,
+  );
   return (rows[0]?.d as string | null) ?? null;
 }
 
