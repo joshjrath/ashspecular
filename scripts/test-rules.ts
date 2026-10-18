@@ -77,6 +77,7 @@ import { renderTasks } from "../src/web/pages/tasks.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
 import { planReset } from "../src/web/reset.js";
+import { layoutFor as snapLayout, snapshotSvg } from "../src/web/snapshot.js";
 import { withCodes } from "../src/web/gaps.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
@@ -1758,6 +1759,21 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
     busy.days[1]!.vos.map((v) => v.kind).sort(), [...busy.assign.entries()].filter(([id]) => id >= 700).every(([, d]) => d > "2026-10-19"), busy.days.flatMap((d) => d.vos).length,
   ], [["late", "late", "late", "stays", "stays"], true, 13]);
   t("…nothing late, nothing planned", planReset({ start: "2026-10-19", perDay: 5, daysOff: new Set(), late: [], upcoming: [], schedule: [], avgViews: new Map() }).assign.size, 0);
+}
+
+// Calendar snapshot: the layout follows the range, and outside text is escaped.
+{
+  const evil = `<img src=x onerror=alert(1)>"&`;
+  const item = (day: string, i: number) => ({ day, id: i, title: i === 1 ? evil : `Video ${i}`, channel: "Specular Studios", category: "stories", code: `VIDEO-0${i}`, done: false, due: null });
+  const base = { mode: "posting" as const, today: "2026-10-18", batches: new Map([["2026-10-19", 12]]), daysOff: new Set(["2026-10-20"]), generatedAt: new Date("2026-10-18T16:00:00Z") };
+  const week = snapshotSvg({ ...base, from: "2026-10-18", to: "2026-10-24", items: [item("2026-10-19", 1), item("2026-10-19", 2)] });
+  const grid = snapshotSvg({ ...base, from: "2026-10-01", to: "2026-11-15", items: [item("2026-10-19", 3)] });
+  const year = snapshotSvg({ ...base, mode: "deadlines", from: "2026-01-01", to: "2026-12-31", items: [item("2026-10-19", 4)] });
+  t("Snapshot: a week is a column a day, nine weeks a grid, longer a channel heat map", [snapLayout(7), snapLayout(8), snapLayout(63), snapLayout(64)], ["columns", "grid", "grid", "timeline"]);
+  t("…one self-contained SVG: the range, the counts, batches counted, a day off marked, titles escaped", [
+    week.startsWith("<svg"), week.includes("Oct 18 – Oct 24"), week.includes("2 videos"), week.includes("+ 12 daily batches"), week.includes("OFF"), week.includes("<img"), week.includes("&lt;img"), /https?:\/\//.test(week.replace(/xmlns="[^"]+"/, "")),
+  ], [true, true, true, true, true, false, true, false]);
+  t("…the grid and the heat map draw too, Deadlines labelled by due date", [grid.includes("SUN"), year.includes("By due date"), year.includes("Specular Studios"), grid.includes("Oct 1")], [true, true, true, true]);
 }
 
 // Next to assign: the video # it would get.

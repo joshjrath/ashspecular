@@ -294,6 +294,22 @@ plots the day the work is due.
   videos never move with anything; in Deadlines only open work does.
   The date box on a record's page does the same, with a ticked *Move the N
   later … videos* box you can untick.
+- **Snapshot** (top right of the month, week and 4-day views) turns any
+  stretch of the calendar into a poster image to save or share. It opens on
+  what's on screen, in the mode on screen (Posting or Deadlines, each its
+  own poster), with From/To dates and quick picks (this week, next 7 days,
+  next week, next 2 weeks, this month, next month, next 90 days; up to a
+  year).
+  - The layout follows the range: a week or less is a column a day with
+    every video as a card (channel, title, video #, or for Deadlines which
+    deadline and when); up to nine weeks is a calendar grid; longer is each
+    channel as a row of weeks, brighter the busier.
+  - The header has the range, how many videos or deadlines, daily batches
+    (counted, not drawn), the busiest day and the split by category. Today
+    is highlighted and days off are marked. The glow behind it takes the
+    colours of the range's busiest categories, so each one looks different.
+  - **Download PNG** (sharp, at twice the size), **Copy image** (paste it
+    straight into Discord), or **Download SVG**.
 - **Future reset…** (top right of the month) is a last resort for when work
   is far behind. It opens a preview first; nothing changes until you tick
   the box and press **Reset the upcoming calendar**.

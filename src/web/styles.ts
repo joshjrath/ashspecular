@@ -1079,6 +1079,17 @@ header.page .checknow button { white-space: nowrap; }
 .ut .scriptmark, .vt .scriptmark { margin-left: 6px; vertical-align: -3px; height: 17px; width: 17px; }
 .row.revision .meta .scriptmark { height: 22px; }
 /* ── My Day, the VO Queue, recording mode ───────────────────────────────── */
+/* Calendar snapshot */
+.snapbtn { display: inline-flex; align-items: center; gap: 6px; }
+.snapctl .snaprow { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; justify-content: space-between; }
+.snapdates { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0; }
+.snapdates label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink2); font-size: 13px; }
+.snapdates input { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font: inherit; color-scheme: dark; }
+.snapchips { margin-top: 12px; }
+.snapacts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.snapmsg { color: var(--ink2); font-size: 13px; }
+.snapframe { margin-top: 14px; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.45); background: #0A0A0D; }
+.snapframe svg { display: block; width: 100%; height: auto; }
 /* Future reset */
 .rsintro p { margin: 0 0 10px; color: var(--ink2); }
 .rsintro p b { color: var(--ink); }

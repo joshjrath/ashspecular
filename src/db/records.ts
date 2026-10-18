@@ -269,6 +269,16 @@ export async function clearResetUndo(): Promise<void> {
   await pool.query("DELETE FROM app_settings WHERE key = 'calendar_reset_undo'");
 }
 
+/** Daily batches per day over a range (they're counted on the calendar snapshot, not drawn one by one). */
+export async function batchCountsByDay(from: string, to: string): Promise<Map<string, number>> {
+  const { rows } = await pool.query<{ day: string; n: string }>(
+    `SELECT to_char(air_date, 'YYYY-MM-DD') AS day, COUNT(*) AS n FROM records
+      WHERE batch_no IS NOT NULL AND status <> 'removed' AND paused_at IS NULL AND air_date BETWEEN $1 AND $2 GROUP BY 1`,
+    [from, to],
+  );
+  return new Map(rows.map((r) => [r.day, Number(r.n)]));
+}
+
 // ── days off ──────────────────────────────────────────────────────────────
 
 /** Every day marked off, as YYYY-MM-DD, earliest first. A handful a year. */
@@ -997,6 +1007,7 @@ export async function calendarRange(
   to: string,
   mode: CalendarMode,
   zone: string,
+  opts: { batches?: boolean; limit?: number } = {},
 ): Promise<CalendarEntry[]> {
   const day = calendarExpr(mode);
   const params: unknown[] = mode === "posting" ? [from, to] : [from, to, zone];
@@ -1007,10 +1018,11 @@ export async function calendarRange(
      WHERE ${day} BETWEEN $1 AND $2 AND status <> 'removed' AND paused_at IS NULL
        -- Revisions live on the Revisions page and the dashboard, not the calendar.
        AND kind <> 'review'
+       ${opts.batches === false ? "AND batch_no IS NULL" : ""}
      -- Recurring batches sort last within a day: a dozen of them would
      -- otherwise bury the one video that is actually airing.
      ORDER BY 1 ASC, (batch_no IS NOT NULL) ASC, category ASC, created_at ASC
-     LIMIT 1000`,
+     LIMIT ${Math.max(1, Math.min(5000, Math.round(opts.limit ?? 1000)))}`,
     params,
   );
 

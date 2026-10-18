@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-calendar-snapshot",
+    title: "Calendar snapshots: any stretch as an image",
+    changes: [
+      { text: "Calendar → Snapshot turns any range into a poster to save or share: Posting or Deadlines, from a single day to a year, with quick picks like Next week or This month.", href: "/calendar/snapshot" },
+      { text: "A week shows every video as a card, up to nine weeks is a calendar grid, and longer is each channel by week. Each has the busiest day and a split by category." },
+      { text: "Download it as a PNG, copy it to paste straight into Discord, or keep the SVG." },
+    ],
+  },
+  {
     id: "2026-10-18-end-my-day-batches",
     title: "End my day keeps the daily batches",
     changes: [

@@ -423,6 +423,13 @@ function subscribePanel(feedUrl: string): string {
   </script>`;
 }
 
+/** The Snapshot button: the range on screen, in the mode on screen, as a poster to save. */
+function snapButton(mode: string, from: string, to: string): string {
+  return `<a class="clear snapbtn" href="/calendar/snapshot?mode=${mode === "deadlines" ? "deadlines" : "posting"}&amp;from=${esc(from)}&amp;to=${esc(to)}" title="Make an image of this stretch of the calendar"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5h3l1.5-2h5L14 6.5h3v9H3z"/><circle cx="10" cy="11" r="3"/></svg> Snapshot</a>`;
+}
+/** The last day of a YYYY-MM month. */
+const lastOfMonth = (ym: string) => shiftDay(`${shiftDay(`${ym}-01`, 32).slice(0, 7)}-01`, -1);
+
 export function renderCalendar(
   shell: Shell,
   ym: string,
@@ -500,7 +507,7 @@ export function renderCalendar(
   return layout(
     "Calendar",
     shell,
-    `${pageHeader("Calendar", `<a class="clear secondary" href="/calendar/reset" title="A last resort when work is far behind: spread the overdue VOs over the next days">Future reset…</a>`)}
+    `${pageHeader("Calendar", `${snapButton(mode, `${ym}-01`, lastOfMonth(ym))}<a class="clear secondary" href="/calendar/reset" title="A last resort when work is far behind: spread the overdue VOs over the next days">Future reset…</a>`)}
     <div class="calbar">
       <a class="nav" href="/calendar/${shiftMonth(ym, -1)}${q}" aria-label="Previous month">←</a>
       <span class="month">${esc(monthName(ym))}</span>
@@ -730,7 +737,7 @@ export function renderWeek(
   return layout(
     span === 4 ? `${usDate(start)} – ${usDate(end)}` : `Week of ${usDate(start)}`,
     shell,
-    `${pageHeader(span === 4 ? "4 days" : "Week")}
+    `${pageHeader(span === 4 ? "4 days" : "Week", snapButton(mode, start, end))}
     <div class="calbar">
       <a class="nav" href="/${path}/${shiftDay(start, -span)}${q}" aria-label="${span === 4 ? "Previous 4 days" : "Previous week"}">←</a>
       <span class="month">${esc(usDate(start))} – ${esc(usDate(end))}</span>

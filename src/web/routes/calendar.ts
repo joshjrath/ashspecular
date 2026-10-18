@@ -3,7 +3,7 @@
  * off; and the subscribable feed (calendar.ics, signed by its own key).
  */
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
-import { type CalendarMode, type StoredRecord, calendarRange, dueOnDay, feedRecords, listDaysOff, saveDayOffMoves, setDayOff } from "../../db/records.js";
+import { type CalendarMode, type StoredRecord, batchCountsByDay, calendarRange, dueOnDay, feedRecords, listDaysOff, saveDayOffMoves, setDayOff } from "../../db/records.js";
 import { DAY_SPAN, type StatusHide, calendarGrid, monthOf, renderCalendar, renderDay, renderWeek, weekStart } from "../pages/calendar.js";
 import { type WorkItem as MyWorkItem, projectBatches, remaining, spreadDayOff, toItem } from "../work.js";
 import { ORG_TZ, dateIn, shiftDate } from "../../parse/derive.js";
@@ -12,6 +12,9 @@ import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../ics.js";
 import { clearBatchesOn, reopenBatchesOn } from "../../jobs/batches.js";
 import { hasDatabase } from "../../config.js";
 import { renderList } from "../pages/lists.js";
+import { renderSnapshot } from "../pages/snapshot.js";
+import { SNAP_MAX_DAYS, type SnapItem, clockEt, snapshotSvg } from "../snapshot.js";
+import { titleOnDay } from "../page.js";
 import { baseUrlOf, refererPath, safeDate, safeMode } from "../http.js";
 import { forgetGaps, loadWork, shell } from "../shell.js";
 import type { FastifyInstance } from "fastify";
@@ -186,6 +189,34 @@ export function registerCalendar(app: FastifyInstance): void {
 
   // The sidebar's Calendar: opens the way it was last left — Day, 4 days,
   // Week or Month, deadlines or posting.
+  // Snapshot: a stretch of the calendar as a poster to save or share. Reads only.
+  app.get<{ Querystring: Record<string, string | undefined> }>("/calendar/snapshot", async (request, reply) => {
+    const mode: CalendarMode = request.query.mode === "deadlines" ? "deadlines" : "posting";
+    const today = dateIn(ORG_TZ);
+    let from = safeDate(request.query.from) ?? shiftDate(today, -new Date(`${today}T12:00:00Z`).getUTCDay());
+    let to = safeDate(request.query.to) ?? shiftDate(from, 6);
+    if (to < from) [from, to] = [to, from];
+    const span = Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000) + 1;
+    const capped = span > SNAP_MAX_DAYS;
+    if (capped) to = shiftDate(from, SNAP_MAX_DAYS - 1);
+    const [s, entries, batches, off] = await Promise.all([
+      shell("calendar"),
+      hasDatabase ? calendarRange(from, to, mode, ORG_TZ, { batches: false, limit: 5000 }) : Promise.resolve([]),
+      hasDatabase ? batchCountsByDay(from, to) : Promise.resolve(new Map<string, number>()),
+      hasDatabase ? listDaysOff() : Promise.resolve([] as string[]),
+    ]);
+    const dueLabel = (r: StoredRecord) => {
+      const [what, at] = r.voDue ? ["VO", r.voDue] : r.deadline ? ["Due", r.deadline] : r.scriptDue ? ["Script", r.scriptDue] : [null, null];
+      return what && at ? `${what} · ${clockEt(at)}` : null;
+    };
+    const items: SnapItem[] = entries.map((e) => ({
+      day: e.day, id: e.record.id, title: titleOnDay(e.record), channel: e.record.channel, category: e.record.category, code: e.record.code,
+      done: e.record.status === "done" || Boolean(e.record.uploadedAt), due: mode === "deadlines" ? dueLabel(e.record) : null,
+    }));
+    const svg = snapshotSvg({ mode, from, to, today, items, batches, daysOff: new Set(off), generatedAt: new Date() });
+    return reply.type("text/html").send(renderSnapshot(s, { mode, from, to, today, svg, capped }));
+  });
+
   app.get<{ Querystring: { mode?: string } }>("/calendar", async (request, reply) => {
     const [view, savedMode] = (request.cookies.cal_view ?? "").split(".");
     const mode = request.query.mode ?? (savedMode === "deadlines" ? "deadlines" : undefined);
