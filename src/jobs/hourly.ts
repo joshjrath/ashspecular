@@ -12,6 +12,7 @@ import { sampleAvatars } from "./avatars.js";
 import { checkPosts, missedLine } from "./postcheck.js";
 import { runNetworkRead } from "./network.js";
 import { syncAnalytics } from "./analytics.js";
+import { openMyDayBatches } from "./batches.js";
 import { config } from "../config.js";
 import { displayTitle } from "../web/page.js";
 import { getRecord as getRecordById } from "../db/records.js";
@@ -35,8 +36,13 @@ export function startHourlyRead(): void {
     syncAnalytics()
       .then((n) => n && console.log(`[analytics] read ${n} channel${n === 1 ? "" : "s"}`))
       .catch((err) => console.error("[analytics] sync failed:", err));
-  cron.schedule("7 * * * *", () => { void read("hourly"); void analytics(); });
-  setTimeout(() => { void read("boot"); void analytics(); }, 20_000).unref();
+  // The batches of the day My Day is on, if it moved on before they'd open (End my day): after a restart too.
+  const myDay = () =>
+    openMyDayBatches()
+      .then((n) => n && console.log(`[my day] opened ${n} batch${n === 1 ? "" : "es"} for the day My Day is on`))
+      .catch((err) => console.error("[my day] couldn't open its batches:", err));
+  cron.schedule("7 * * * *", () => { void read("hourly"); void analytics(); void myDay(); });
+  setTimeout(() => { void read("boot"); void analytics(); void myDay(); }, 20_000).unref();
 }
 
 /**

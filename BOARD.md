@@ -705,6 +705,9 @@ can be changed.)
     noon.
   - Pressed before midnight, My Day moves on to tomorrow's list so you can
     get ahead; it says which day it's on.
+  - The day it moves on to gets its daily batches straight away (Specular's
+    long-form, Bits and Reading), instead of at their usual opening time
+    (12:05 AM, or 6 AM for Bits and Reading).
   - After you press it, **Done today** and **tracked today** count from that
     moment. A note says when the day ended, with **Undo** for a press by
     mistake.

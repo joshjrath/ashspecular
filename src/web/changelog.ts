@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-end-my-day-batches",
+    title: "End my day keeps the daily batches",
+    changes: [
+      { text: "Ending your day moved My Day on before that day's batches had opened (Specular at 12:05 AM, Bits and Reading at 6 AM), so they vanished from My Day. Now ending the day opens the next day's batches straight away. A day you've already ended gets its batches within the hour.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-10-18-reset-every-day",
     title: "Future reset fills every day, starting today included",
     changes: [

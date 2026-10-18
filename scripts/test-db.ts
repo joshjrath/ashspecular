@@ -278,6 +278,12 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const saved = (await pool.query("SELECT value FROM app_settings WHERE key = 'myday_ended'")).rows[0]?.value as string | undefined;
   const page = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
   t("End my day: the day My Day was on is ended, and the page offers Undo", [ended.status, saved ? JSON.parse(saved).day : null, page.statusCode, page.body.includes('action="/my-day/end/undo"')], [302, before.day, 200, true]);
+  // The day My Day moved on to has its daily batches now, not at their opening time (12:05 AM / 6 AM).
+  const { getDayEnd } = await import("../src/db/timers.js");
+  const { recurringChannels } = await import("../src/jobs/batches.js");
+  const next = workdayOf(new Date(), await getDayEnd()).day;
+  const open = (await pool.query("SELECT channel FROM records WHERE batch_no IS NOT NULL AND air_date = $1 AND status <> 'removed'", [next])).rows.map((r) => r.channel as string);
+  t("…and the day it moved on to has every daily batch, so My Day shows them", recurringChannels().every((c) => open.includes(c.name)) && page.body.includes(recurringChannels()[0]!.name), true);
   await post("/my-day/end/undo", {});
   t("…Undo puts it back", (await pool.query("SELECT count(*)::int AS n FROM app_settings WHERE key = 'myday_ended'")).rows[0].n, 0);
 }

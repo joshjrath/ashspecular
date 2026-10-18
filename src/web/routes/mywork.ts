@@ -10,6 +10,7 @@ import { hasDatabase } from "../../config.js";
 import { localPath } from "../http.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "../pages/mywork.js";
 import { repeatTask, setTaskStatus } from "../../db/tasks.js";
+import { openMyDayBatches } from "../../jobs/batches.js";
 import { loadWork, shell } from "../shell.js";
 import type { FastifyInstance } from "fastify";
 
@@ -82,7 +83,11 @@ export function registerMyWork(app: FastifyInstance): void {
     const ended = await getDayEnd();
     const w = workdayOf(now, ended);
     // A day not begun yet can't be ended: once today's ended, tomorrow waits for tomorrow.
-    if (!w.ahead) await setDayEnd({ day: w.day, at: now, prev: ended ? { day: ended.day, at: ended.at } : null });
+    if (!w.ahead) {
+      await setDayEnd({ day: w.day, at: now, prev: ended ? { day: ended.day, at: ended.at } : null });
+      // The next day's batches, now rather than at their opening time, so My Day has them.
+      await openMyDayBatches(now).catch((err) => console.error("[my day] couldn't open the next day's batches:", err));
+    }
     return reply.redirect("/my-day");
   });
   app.post("/my-day/end/undo", async (_request, reply) => {

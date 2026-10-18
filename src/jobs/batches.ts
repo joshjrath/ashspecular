@@ -14,6 +14,8 @@
  */
 import { CHANNELS, COMPILATION_CHANNEL_ID, isLongFormRecurring, type Channel } from "../catalog.js";
 import { pool } from "../db/pool.js";
+import { getDayEnd } from "../db/timers.js";
+import { workdayOf } from "../web/work.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
 
 export { shortsDay };
@@ -104,6 +106,19 @@ export async function openBatchesFor(
 async function pausedChannelNames(): Promise<Set<string>> {
   const { rows } = await pool.query<{ channel: string }>("SELECT channel FROM channel_pauses");
   return new Set(rows.map((r) => r.channel));
+}
+
+/**
+ * The batches of the day My Day is on. Ending the day moves My Day on before
+ * that day's batches open by themselves (Specular's at 12:05 AM, Bits and
+ * Reading at 3 AM, or tomorrow's when the day ends early), and they're the
+ * day's work, so they open now. Opening is idempotent: nothing doubles.
+ */
+export async function openMyDayBatches(now = new Date()): Promise<number> {
+  const w = workdayOf(now, await getDayEnd());
+  // Still on the day before (not ended yet): its batches are already open.
+  if (w.carried) return 0;
+  return (await openBatchesFor(w.day)).opened;
 }
 
 /**
