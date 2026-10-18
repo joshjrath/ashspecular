@@ -9,6 +9,9 @@ import { RESET_BOUNDS, type ResetPlan } from "../reset.js";
 
 export interface ResetView {
   perDay: number;
+  /** Start today (the day My Day is on) or the day after, and the day each means. */
+  from: "today" | "tomorrow";
+  starts: { today: string; tomorrow: string };
   plan: ResetPlan | null;
   /** The first day VOs would go to. */
   start: string;
@@ -38,7 +41,8 @@ export function renderReset(shell: Shell, v: ResetView): string {
   const intro = `<section class="panel rsintro">
     <p><b>A last resort for when work is far behind.</b> Every overdue VO gets a new day, ${v.perDay} a day from ${esc(short(v.start))} (days off skipped; a day already carrying VOs takes fewer). Each video's upload moves to at least ${VO_BUFFER_DAYS} days after its VO, and the rest of that channel's schedule moves with it, spacing kept.</p>
     <p>Channels with the most average long-form views go first, in rounds: every channel's first late VO before any channel's second. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
-    <form method="get" action="/calendar/reset" class="rsper"><label>VOs a day <select name="per" onchange="this.form.submit()">${Array.from({ length: RESET_BOUNDS.max - RESET_BOUNDS.min + 1 }, (_, i) => i + RESET_BOUNDS.min).map((n) => `<option${n === v.perDay ? " selected" : ""}>${n}</option>`).join("")}</select></label><noscript><button class="clear secondary">Show</button></noscript></form>
+    <form method="get" action="/calendar/reset" class="rsper"><label>VOs a day <select name="per" onchange="this.form.submit()">${Array.from({ length: RESET_BOUNDS.max - RESET_BOUNDS.min + 1 }, (_, i) => i + RESET_BOUNDS.min).map((n) => `<option${n === v.perDay ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>Start <select name="from" onchange="this.form.submit()"><option value="today"${v.from === "today" ? " selected" : ""}>Today, ${esc(short(v.starts.today))}: a fresh ${v.perDay} now</option><option value="tomorrow"${v.from === "tomorrow" ? " selected" : ""}>Tomorrow, ${esc(short(v.starts.tomorrow))}</option></select></label><noscript><button class="clear secondary">Show</button></noscript></form>
   </section>`;
 
   if (!p || !p.assign.size) {
@@ -68,6 +72,7 @@ export function renderReset(shell: Shell, v: ResetView): string {
   const channels = new Set(p.moves.map((m) => m.channel)).size;
   const apply = `<form method="post" action="/calendar/reset" class="panel rsapply">
     <input type="hidden" name="per" value="${v.perDay}">
+    <input type="hidden" name="from" value="${v.from}">
     <p>${v.lateCount} overdue VO${v.lateCount === 1 ? "" : "s"} over ${p.days.length} day${p.days.length === 1 ? "" : "s"} (${esc(short(p.days[0]!.day))} to ${esc(short(p.days[p.days.length - 1]!.day))}); ${p.moves.length} upload${p.moves.length === 1 ? "" : "s"} on ${channels} channel${channels === 1 ? "" : "s"} move later.</p>
     <label class="rsconfirm"><input type="checkbox" name="confirm" value="1" required> I understand this moves uploads and VO days across ${channels || "these"} channel${channels === 1 ? "" : "s"}.</label>
     <button class="clear rsgo">Reset the upcoming calendar</button>

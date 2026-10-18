@@ -297,10 +297,14 @@ plots the day the work is due.
 - **Future reset…** (top right of the month) is a last resort for when work
   is far behind. It opens a preview first; nothing changes until you tick
   the box and press **Reset the upcoming calendar**.
-  - Every overdue VO gets a new day: **5 a day** (change it, 1–15) from the
-    day after the one My Day is on. Days off are skipped, and a day that
-    already has VOs due takes fewer. With 16 late on a Saturday: 5 Sunday,
-    5 Monday, 5 Tuesday, 1 Wednesday.
+  - Every overdue VO gets a new day: **5 a day** (change it, 1–15). **Start**
+    picks where: **Tomorrow** (the day after the one My Day is on, the
+    default) or **Today**, for a fresh 5 due tonight without waiting a day.
+    Past midnight before you've ended the day before, Today means the
+    calendar day. Days off are skipped, and a day that already has VOs due
+    takes fewer. With 16 late on a Saturday, starting tomorrow: 5 Sunday,
+    5 Monday, 5 Tuesday, 1 Wednesday; starting today: 5 Saturday, 5 Sunday,
+    5 Monday, 1 Tuesday.
   - Channels go in order of their **average long-form views** (their last
     ten long-form videos at least a week old), highest first, in rounds:
     every channel's first late VO is placed before any channel's second.

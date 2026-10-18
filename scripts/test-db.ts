@@ -314,6 +314,14 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and Undo is offered", page.body.includes('action="/calendar/reset/undo"'), true);
   await post("/calendar/reset/undo", {});
   t("…Undo puts every upload and VO day back", JSON.stringify(await state()), JSON.stringify(before));
+  // Start today instead: a fresh day's worth now, the first VO due today.
+  const todayStart = w.carried ? w.calendar : w.day;
+  const choose = await app.inject({ method: "GET", url: "/calendar/reset?per=1&from=today", headers: { cookie } });
+  await post("/calendar/reset", { per: "1", from: "today", confirm: "1" });
+  const fresh = await state();
+  t("…Start today: the first late VO is due today, its upload six days on", [choose.body.includes('<option value="today" selected'), fresh.some((r) => r.vo === todayStart), fresh.every((r, i) => i === 1 || r.air >= shiftDate(r.vo, 6))], [true, true, true]);
+  await post("/calendar/reset/undo", {});
+  t("…and Undo puts that back too", JSON.stringify(await state()), JSON.stringify(before));
 }
 
 // ── A planned Movie names that day's Specular batch ─────────────────────────

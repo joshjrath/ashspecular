@@ -1082,7 +1082,8 @@ header.page .checknow button { white-space: nowrap; }
 /* Future reset */
 .rsintro p { margin: 0 0 10px; color: var(--ink2); }
 .rsintro p b { color: var(--ink); }
-.rsper select { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; font: inherit; margin-left: 6px; }
+.rsper { display: flex; gap: 16px; flex-wrap: wrap; }
+.rsper select { max-width: 100%; background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; font: inherit; margin-left: 6px; }
 .rsnote { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--yellow); border-radius: 16px; padding: 12px 16px; margin: 0 0 14px; }
 .rsnote.ok { border-left-color: var(--ok); }
 .rsnote p { margin: 0; flex: 1 1 260px; color: var(--ink2); }

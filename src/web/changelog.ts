@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-reset-start-today",
+    title: "Future reset can start today",
+    changes: [
+      { text: "Future reset has a Start choice: Tomorrow, as before, or Today, for a fresh 5 due tonight instead of waiting a day. The preview shows the plan for whichever you pick.", href: "/calendar/reset" },
+    ],
+  },
+  {
     id: "2026-10-18-future-reset",
     title: "Future reset, video #s to assign, and Movie titles in My Day",
     changes: [

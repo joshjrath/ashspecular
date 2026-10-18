@@ -26,7 +26,18 @@ const perDayOf = (v: unknown) => {
 };
 
 /** Everything the plan needs, read fresh: the late VOs, the rest, their channels' schedules, views, days off. */
-async function makePlan(perDay: number, now = new Date()) {
+/** Where the VOs start: today (the day My Day is on) or the day after. */
+type StartFrom = "today" | "tomorrow";
+const fromOf = (v: unknown): StartFrom => (formText(v) === "today" ? "today" : "tomorrow");
+
+/** The first day for each choice. Past midnight with the day before not ended, "today" is the calendar day: the day before's deadlines have gone. */
+function startDays(workday: ReturnType<typeof workdayOf>): Record<StartFrom, string> {
+  const today = workday.carried ? workday.calendar : workday.day;
+  // If today's already ended, My Day is on tomorrow, and that's where "tomorrow" starts too.
+  return { today, tomorrow: workday.ahead ? workday.day : shiftDate(workday.day, 1) };
+}
+
+async function makePlan(perDay: number, from: StartFrom, now = new Date()) {
   const [ended, work, daysOff, avgViews] = await Promise.all([getDayEnd(), loadWork(now), listDaysOff(), averageLongFormViews().catch(() => new Map<string, number>())]);
   const workday = workdayOf(now, ended);
   const vos = work.items.filter((i) => isVo(i.type) && i.id !== null && i.due && i.record && !i.record.pausedAt);
@@ -41,19 +52,21 @@ async function makePlan(perDay: number, now = new Date()) {
   const schedule: ResetVideo[] = (
     await Promise.all([...firstAir].map(([ch, from]) => channelSchedule(ch, "posting", from)))
   ).flat().filter((r) => r.airDate && !r.uploadedAt).map((r) => ({ id: r.id, channel: r.channel!, airDate: r.airDate!, label: r.code ?? displayTitle(r) }));
-  // From the day after the one My Day is on; if today's already ended, My Day is on tomorrow and VOs can start there.
-  const start = workday.ahead ? workday.day : shiftDate(workday.day, 1);
+  const starts = startDays(workday);
+  const start = starts[from];
   const plan = planReset({ start, perDay, daysOff: new Set(daysOff), late, upcoming, schedule, avgViews });
-  return { plan, start, workday, lateCount: late.length };
+  return { plan, start, starts, workday, lateCount: late.length };
 }
 
 export function registerReset(app: FastifyInstance): void {
   app.get<{ Querystring: Record<string, string> }>("/calendar/reset", async (request, reply) => {
     const perDay = perDayOf(request.query.per);
-    const [s, made, undo] = await Promise.all([shell("calendar"), hasDatabase ? makePlan(perDay) : null, hasDatabase ? getResetUndo() : null]);
+    const from = fromOf(request.query.from);
+    const [s, made, undo] = await Promise.all([shell("calendar"), hasDatabase ? makePlan(perDay, from) : null, hasDatabase ? getResetUndo() : null]);
     const undoOpen = undo && Date.now() - undo.at.getTime() < UNDO_HOURS * 3_600_000 ? undo : null;
     return reply.type("text/html").send(renderReset(s, {
-      perDay, plan: made?.plan ?? null, start: made?.start ?? dateIn(ORG_TZ), lateCount: made?.lateCount ?? 0,
+      perDay, from, starts: made?.starts ?? { today: dateIn(ORG_TZ), tomorrow: shiftDate(dateIn(ORG_TZ), 1) },
+      plan: made?.plan ?? null, start: made?.start ?? dateIn(ORG_TZ), lateCount: made?.lateCount ?? 0,
       undo: undoOpen ? { at: undoOpen.at, text: undoOpen.text } : null,
       done: formText(request.query.done).slice(0, 200), undone: request.query.undone === "1",
     }));
@@ -61,9 +74,11 @@ export function registerReset(app: FastifyInstance): void {
 
   app.post<{ Body: Record<string, string> }>("/calendar/reset", async (request, reply) => {
     const perDay = perDayOf(request.body?.per);
-    if (request.body?.confirm !== "1") return reply.redirect(`/calendar/reset?per=${perDay}`);
-    const { plan } = await makePlan(perDay);
-    if (!plan.assign.size) return reply.redirect(`/calendar/reset?per=${perDay}`);
+    const from = fromOf(request.body?.from);
+    const back = `/calendar/reset?per=${perDay}&from=${from}`;
+    if (request.body?.confirm !== "1") return reply.redirect(back);
+    const { plan } = await makePlan(perDay, from);
+    if (!plan.assign.size) return reply.redirect(back);
     const ids = [...new Set([...plan.moves.map((m) => m.id), ...plan.assign.keys()])];
     const snaps = await snapshotMoves(ids);
     // Every upload and every VO day, together or not at all.
@@ -76,7 +91,7 @@ export function registerReset(app: FastifyInstance): void {
     await saveResetUndo(snaps, text);
     forgetGaps();
     console.log(`[reset] ${text}`);
-    return reply.redirect(`/calendar/reset?per=${perDay}&done=${encodeURIComponent(text)}`);
+    return reply.redirect(`${back}&done=${encodeURIComponent(text)}`);
   });
 
   app.post("/calendar/reset/undo", async (_request, reply) => {
