@@ -297,22 +297,26 @@ plots the day the work is due.
 - **Future reset…** (top right of the month) is a last resort for when work
   is far behind. It opens a preview first; nothing changes until you tick
   the box and press **Reset the upcoming calendar**.
-  - Every overdue VO gets a new day: **5 a day** (change it, 1–15). **Start**
-    picks where: **Tomorrow** (the day after the one My Day is on, the
-    default) or **Today**, for a fresh 5 due tonight without waiting a day.
-    Past midnight before you've ended the day before, Today means the
-    calendar day. Days off are skipped, and a day that already has VOs due
-    takes fewer. With 16 late on a Saturday, starting tomorrow: 5 Sunday,
-    5 Monday, 5 Tuesday, 1 Wednesday; starting today: 5 Saturday, 5 Sunday,
-    5 Monday, 1 Tuesday.
-  - Channels go in order of their **average long-form views** (their last
-    ten long-form videos at least a week old), highest first, in rounds:
-    every channel's first late VO is placed before any channel's second.
+  - Every day from the start gets **5 VOs** (change it, 1–15), none
+    skipped, until the backlog is placed. **Start** picks where:
+    **Tomorrow** (the day after the one My Day is on, the default) or
+    **Today**, for a fresh 5 due tonight without waiting a day. Past
+    midnight before you've ended the day before, Today means the calendar
+    day. Days off are skipped. With 16 late on a Saturday and nothing else
+    due, starting tomorrow: 5 Sunday, 5 Monday, 5 Tuesday, 1 Wednesday;
+    starting today: 5 Saturday, 5 Sunday, 5 Monday, 1 Tuesday.
+  - **Late VOs go first.** A VO already due on a day stays there if there's
+    room after the late ones; if not, it moves to the next day with room
+    (its upload with it). Nothing is ever pulled earlier.
+  - Within that, channels go in order of their **average long-form views**
+    (their last ten long-form videos at least a week old), highest first, in
+    rounds: every channel's first VO is placed before any channel's second.
   - Each video's upload moves to at least 6 days after its new VO day (the
     buffer), and the rest of that channel's schedule moves later by the same
     days, spacing kept.
-  - The preview shows each day's VOs with their old and new upload days, the
-    channel order, and every other upload that moves with its channel.
+  - The preview shows every VO on each day (late, moved there, or already
+    due and staying) with its old and new upload days, the channel order,
+    and every other upload that moves with its channel.
   - **Undo** puts every upload and VO day back as it was. It's offered on
     the Future reset page for a day afterwards.
 - **Category toggles** above the grid hide or show a category. They double as

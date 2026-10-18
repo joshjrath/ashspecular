@@ -39,8 +39,8 @@ export function renderReset(shell: Shell, v: ResetView): string {
   ].join("");
 
   const intro = `<section class="panel rsintro">
-    <p><b>A last resort for when work is far behind.</b> Every overdue VO gets a new day, ${v.perDay} a day from ${esc(short(v.start))} (days off skipped; a day already carrying VOs takes fewer). Each video's upload moves to at least ${VO_BUFFER_DAYS} days after its VO, and the rest of that channel's schedule moves with it, spacing kept.</p>
-    <p>Channels with the most average long-form views go first, in rounds: every channel's first late VO before any channel's second. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
+    <p><b>A last resort for when work is far behind.</b> The pending VOs are laid out ${v.perDay} a day from ${esc(short(v.start))}, every day filled (days off skipped): every overdue VO gets a day, and VOs already due on a day stay if there's room, else move to the next day with room. Nothing is pulled earlier. Each video's upload moves to at least ${VO_BUFFER_DAYS} days after its VO, and the rest of that channel's schedule moves with it, spacing kept.</p>
+    <p>Late VOs go first, then ones already due where there's room. Channels with the most average long-form views go first, in rounds: every channel's first VO before any channel's second. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
     <form method="get" action="/calendar/reset" class="rsper"><label>VOs a day <select name="per" onchange="this.form.submit()">${Array.from({ length: RESET_BOUNDS.max - RESET_BOUNDS.min + 1 }, (_, i) => i + RESET_BOUNDS.min).map((n) => `<option${n === v.perDay ? " selected" : ""}>${n}</option>`).join("")}</select></label>
       <label>Start <select name="from" onchange="this.form.submit()"><option value="today"${v.from === "today" ? " selected" : ""}>Today, ${esc(short(v.starts.today))}: a fresh ${v.perDay} now</option><option value="tomorrow"${v.from === "tomorrow" ? " selected" : ""}>Tomorrow, ${esc(short(v.starts.tomorrow))}</option></select></label><noscript><button class="clear secondary">Show</button></noscript></form>
   </section>`;
@@ -54,15 +54,19 @@ export function renderReset(shell: Shell, v: ResetView): string {
     <ol class="rsorder">${p.channels.map((c) => `<li style="--ch:${channelColour(c.channel)}"><i></i><b>${esc(c.channel)}</b> <span>${esc(fmtViews(c.avgViews))} · ${c.late} late</span></li>`).join("")}</ol>
   </section>`;
 
-  const days = p.days.map((d) => `<section class="panel rsday"><h2>${esc(short(d.day))} <span class="sub">— ${d.vos.length} late VO${d.vos.length === 1 ? "" : "s"}${d.total > d.vos.length ? ` · ${d.total} VOs that day in all` : ""}</span></h2>
-    <div class="rsrows">${d.vos.map((x) => `<div class="rsrow" style="--ch:${channelColour(x.channel)}"><i></i>
-      <div class="rsmain"><a href="/r/${x.id}">${esc(x.title)}</a><small>${esc(x.channel)} · VO was due ${esc(short(x.voDay))}</small></div>
+  const count = (d: ResetPlan["days"][number], kind: string) => d.vos.filter((x) => x.kind === kind).length;
+  const days = p.days.map((d) => {
+    const parts = [count(d, "late") && `${count(d, "late")} late`, count(d, "moved") && `${count(d, "moved")} moved here`, count(d, "stays") && `${count(d, "stays")} already due`].filter(Boolean).join(" · ");
+    return `<section class="panel rsday"><h2>${esc(short(d.day))} <span class="sub">— ${d.total} VO${d.total === 1 ? "" : "s"}: ${esc(parts)}</span></h2>
+    <div class="rsrows">${d.vos.map((x) => `<div class="rsrow${x.kind === "stays" ? " stays" : ""}" style="--ch:${channelColour(x.channel)}"><i></i>
+      <div class="rsmain"><a href="/r/${x.id}">${esc(x.title)}</a><small>${esc(x.channel)} · ${x.kind === "late" ? `VO was due ${esc(short(x.voDay))}` : x.kind === "moved" ? `VO moved from ${esc(short(x.voDay))}` : "already due that day: stays"}</small></div>
       <div class="rsair">${x.airDate && x.newAir && x.newAir !== x.airDate ? `upload <s>${esc(short(x.airDate))}</s> → <b>${esc(short(x.newAir))}</b>` : x.airDate ? `upload stays ${esc(short(x.airDate))}` : "no upload day"}</div>
     </div>`).join("")}</div>
-  </section>`).join("");
+  </section>`;
+  }).join("");
 
-  const late = new Set(p.assign.keys());
-  const others = p.moves.filter((m) => !late.has(m.id));
+  const listed = new Set(p.days.flatMap((d) => d.vos.map((x) => x.id)));
+  const others = p.moves.filter((m) => !listed.has(m.id));
   const rest = others.length
     ? `<details class="panel rsrest"><summary><b>${others.length} more upload${others.length === 1 ? "" : "s"} move with their channels</b> <span class="sub">— later by the same days, so each channel keeps its spacing</span></summary>
         <div class="rsrows">${others.map((m) => `<div class="rsrow" style="--ch:${channelColour(m.channel)}"><i></i><div class="rsmain"><a href="/r/${m.id}">${esc(m.label)}</a><small>${esc(m.channel)}</small></div><div class="rsair"><s>${esc(short(m.from))}</s> → <b>${esc(short(m.to))}</b> <small>+${m.shift}d</small></div></div>`).join("")}</div>
@@ -73,7 +77,7 @@ export function renderReset(shell: Shell, v: ResetView): string {
   const apply = `<form method="post" action="/calendar/reset" class="panel rsapply">
     <input type="hidden" name="per" value="${v.perDay}">
     <input type="hidden" name="from" value="${v.from}">
-    <p>${v.lateCount} overdue VO${v.lateCount === 1 ? "" : "s"} over ${p.days.length} day${p.days.length === 1 ? "" : "s"} (${esc(short(p.days[0]!.day))} to ${esc(short(p.days[p.days.length - 1]!.day))}); ${p.moves.length} upload${p.moves.length === 1 ? "" : "s"} on ${channels} channel${channels === 1 ? "" : "s"} move later.</p>
+    <p>${v.lateCount} overdue VO${v.lateCount === 1 ? "" : "s"}${p.assign.size > v.lateCount ? ` and ${p.assign.size - v.lateCount} more moved to make room` : ""} over ${p.days.length} day${p.days.length === 1 ? "" : "s"} (${esc(short(p.days[0]!.day))} to ${esc(short(p.days[p.days.length - 1]!.day))}); ${p.moves.length} upload${p.moves.length === 1 ? "" : "s"} on ${channels} channel${channels === 1 ? "" : "s"} move later.</p>
     <label class="rsconfirm"><input type="checkbox" name="confirm" value="1" required> I understand this moves uploads and VO days across ${channels || "these"} channel${channels === 1 ? "" : "s"}.</label>
     <button class="clear rsgo">Reset the upcoming calendar</button>
   </form>`;

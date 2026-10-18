@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-reset-every-day",
+    title: "Future reset fills every day, starting today included",
+    changes: [
+      { text: "Future reset no longer skips a day that already had VOs due. Every day from the start gets its 5: late VOs first, then ones already due if there's room. Any that don't fit move to the next day with room, with their uploads. Nothing is pulled earlier.", href: "/calendar/reset" },
+      { text: "The preview lists every VO on each day (late, moved there, or staying), so you can see each day's full 5." },
+    ],
+  },
+  {
     id: "2026-10-18-reset-start-today",
     title: "Future reset can start today",
     changes: [

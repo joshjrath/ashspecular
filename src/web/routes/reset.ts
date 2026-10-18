@@ -46,9 +46,9 @@ async function makePlan(perDay: number, from: StartFrom, now = new Date()) {
   });
   const late = vos.filter((i) => i.due!.getTime() < now.getTime()).map(asVo);
   const upcoming = vos.filter((i) => i.due!.getTime() >= now.getTime()).map(asVo);
-  // Each channel with late VOs: its schedule from its earliest late upload on, minus what's already up.
+  // Each channel with pending VOs: its schedule from its earliest pending upload on, minus what's already up.
   const firstAir = new Map<string, string>();
-  for (const v of late) if (v.airDate && v.channel && (!firstAir.has(v.channel) || v.airDate < firstAir.get(v.channel)!)) firstAir.set(v.channel, v.airDate);
+  for (const v of [...late, ...upcoming]) if (v.airDate && v.channel && (!firstAir.has(v.channel) || v.airDate < firstAir.get(v.channel)!)) firstAir.set(v.channel, v.airDate);
   const schedule: ResetVideo[] = (
     await Promise.all([...firstAir].map(([ch, from]) => channelSchedule(ch, "posting", from)))
   ).flat().filter((r) => r.airDate && !r.uploadedAt).map((r) => ({ id: r.id, channel: r.channel!, airDate: r.airDate!, label: r.code ?? displayTitle(r) }));
@@ -77,7 +77,7 @@ export function registerReset(app: FastifyInstance): void {
     const from = fromOf(request.body?.from);
     const back = `/calendar/reset?per=${perDay}&from=${from}`;
     if (request.body?.confirm !== "1") return reply.redirect(back);
-    const { plan } = await makePlan(perDay, from);
+    const { plan, lateCount } = await makePlan(perDay, from);
     if (!plan.assign.size) return reply.redirect(back);
     const ids = [...new Set([...plan.moves.map((m) => m.id), ...plan.assign.keys()])];
     const snaps = await snapshotMoves(ids);
@@ -87,7 +87,8 @@ export function registerReset(app: FastifyInstance): void {
       for (const [id, day] of plan.assign) await moveDue(id, "vo_due", instantIn(day, DEADLINE_TIME, ORG_TZ)!, db);
     });
     const channels = new Set(plan.moves.map((m) => m.channel)).size;
-    const text = `${plan.assign.size} late VO${plan.assign.size === 1 ? "" : "s"} spread over ${plan.days.length} day${plan.days.length === 1 ? "" : "s"}; ${plan.moves.length} upload${plan.moves.length === 1 ? "" : "s"} on ${channels} channel${channels === 1 ? "" : "s"} moved later.`;
+    const moved = plan.assign.size - lateCount;
+    const text = `${lateCount} late VO${lateCount === 1 ? "" : "s"}${moved > 0 ? ` (and ${moved} already due, moved to make room)` : ""} spread over ${plan.days.length} day${plan.days.length === 1 ? "" : "s"}; ${plan.moves.length} upload${plan.moves.length === 1 ? "" : "s"} on ${channels} channel${channels === 1 ? "" : "s"} moved later.`;
     await saveResetUndo(snaps, text);
     forgetGaps();
     console.log(`[reset] ${text}`);

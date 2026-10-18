@@ -1747,8 +1747,16 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
     upcoming: [{ id: 9, channel: "Specular Verse", title: "other", airDate: "2026-10-26", voDay: "2026-10-20" }],
     schedule: sched, avgViews: new Map(),
   });
-  t("…a day already carrying VOs takes fewer, and a day off none", [...one.assign.entries()], [[1, "2026-10-19"], [2, "2026-10-22"]]);
+  t("…late VOs first: one already due makes room and moves to the next working day (a day off gets none)", [...one.assign.entries()], [[1, "2026-10-19"], [2, "2026-10-20"], [9, "2026-10-22"]]);
   t("…each upload at least six days after its VO, and the channel's next ones move with it, spacing kept", one.moves.map((m) => [m.id, m.from, m.to]), [[1, "2026-10-12", "2026-10-25"], [2, "2026-10-16", "2026-10-29"], [3, "2026-10-20", "2026-11-02"]]);
+  // Started today with the next day already full of VOs due: no day is skipped, every day gets its 5.
+  const due = (id: number, channel: string, voDay: string): import("../src/web/reset.js").ResetVo => ({ id, channel, title: `U${id}`, airDate: shiftDate(voDay, 6), voDay });
+  const tomorrowFull = ["Specular Comics", "Specular Law", "Specular Manga", "Specular Horror", "Specular YOU"].map((ch, i) => due(700 + i, ch, "2026-10-19"));
+  const busy = planReset({ start: "2026-10-18", perDay: 5, daysOff: new Set(), late: sixteen.slice(0, 8), upcoming: tomorrowFull, schedule: [], avgViews: views });
+  t("…started today with tomorrow already full: today 5, tomorrow 5, and on, no day skipped", busy.days.map((d) => [d.day, d.total]), [["2026-10-18", 5], ["2026-10-19", 5], ["2026-10-20", 3]]);
+  t("…late VOs and ones already due share the days by priority; what doesn't fit moves later, never earlier", [
+    busy.days[1]!.vos.map((v) => v.kind).sort(), [...busy.assign.entries()].filter(([id]) => id >= 700).every(([, d]) => d > "2026-10-19"), busy.days.flatMap((d) => d.vos).length,
+  ], [["late", "late", "late", "stays", "stays"], true, 13]);
   t("…nothing late, nothing planned", planReset({ start: "2026-10-19", perDay: 5, daysOff: new Set(), late: [], upcoming: [], schedule: [], avgViews: new Map() }).assign.size, 0);
 }
 

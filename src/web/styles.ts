@@ -1098,6 +1098,7 @@ header.page .checknow button { white-space: nowrap; }
 .rsmain small, .rsair small { color: var(--ink3); font-size: 11.5px; }
 .rsair { flex: none; text-align: right; font-size: 12.5px; color: var(--ink2); }
 .rsair s { color: var(--ink3); }
+.rsrow.stays { background: transparent; border: 1px dashed var(--line); }
 .rsrest summary { cursor: pointer; }
 .rsrest .rsrows { margin-top: 10px; }
 .rsapply p { margin: 0 0 10px; color: var(--ink2); }
