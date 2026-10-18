@@ -12,7 +12,7 @@
  * early is the same call with a later date; when the schedule comes round it
  * finds them already there and does nothing.
  */
-import { CHANNELS, isLongFormRecurring, type Channel } from "../catalog.js";
+import { CHANNELS, COMPILATION_CHANNEL_ID, isLongFormRecurring, type Channel } from "../catalog.js";
 import { pool } from "../db/pool.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
 
@@ -65,13 +65,17 @@ export async function openBatchesFor(
 
     // No running number: a batch is its channel and its day. The title is
     // the channel alone; the board adds the air date wherever it shows one,
-    // so a batch dragged to another day never carries a stale date.
+    // so a batch dragged to another day never carries a stale date. Specular's
+    // batch on a day Story Lab planned a Movie for takes the Movie's title.
+    const movie = channel.id === COMPILATION_CHANNEL_ID.movie;
     for (let i = 1; i <= perDay; i += 1) {
       const { rowCount } = await pool.query(
         `INSERT INTO records (
            kind, category, channel, code, title, air_date, deadline, vo_source,
            status, parsed_by, confidence, batch_no, source_message_id, raw_content, batch_target
-         ) VALUES ($8, $9, $1, $2, $3, $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '', $10)
+         ) VALUES ($8, $9, $1, $2,
+           COALESCE(CASE WHEN $11 THEN (SELECT c.title FROM compilations c WHERE c.kind = 'movie' AND c.status = 'planned' AND c.slot_date = $4::date ORDER BY c.id DESC LIMIT 1) END, $3),
+           $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '', $10)
          ON CONFLICT (source_message_id) DO NOTHING`,
         [
           channel.name,
@@ -85,6 +89,7 @@ export async function openBatchesFor(
           channel.category === "bits" ? "bits" : "update",
           channel.category,
           channel.recurring?.units ?? 1,
+          movie,
         ],
       );
 

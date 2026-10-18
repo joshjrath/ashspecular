@@ -674,13 +674,13 @@ export function nextAssignStrip(list: UploadGap[]): string {
     <div class="nalead">
       <span class="nalbl">Next to assign</span>
       <a class="nach" href="/day/${first.date}" title="Open ${esc(usDate(first.date))} on the calendar"><i></i>${esc(first.channel)}</a>
-      <span class="nawhen">next upload <b>${esc(when(first))}</b> · ${esc(inText)}</span>
+      <span class="nawhen">next upload <b>${esc(when(first))}</b>${first.code ? ` · would be <b>${esc(first.code)}</b>` : ""} · ${esc(inText)}</span>
       <span class="nasub">its last lined-up video is ${esc(usDate(first.after))}${every ? ` · one every ${every} day${every === 1 ? "" : "s"}` : ""}</span>
     </div>
     ${
       then.length
         ? `<div class="nathen"><span>Then</span>${then
-            .map((g) => `<a href="/day/${g.date}" style="--ch:${channelColour(g.channel)}" title="${esc(`${g.channel}: next upload ${usDate(g.date)}, last lined up ${usDate(g.after)}`)}"><i></i>${esc(g.channel.replace(/^Specular /, ""))} <b>${esc(when(g))}</b></a>`)
+            .map((g) => `<a href="/day/${g.date}" style="--ch:${channelColour(g.channel)}" title="${esc(`${g.channel}: next upload ${usDate(g.date)}${g.code ? ` (${g.code})` : ""}, last lined up ${usDate(g.after)}`)}"><i></i>${esc(g.channel.replace(/^Specular /, ""))} <b>${esc(when(g))}</b>${g.code ? ` <small>${esc(g.code)}</small>` : ""}</a>`)
             .join("")}</div>`
         : ""
     }

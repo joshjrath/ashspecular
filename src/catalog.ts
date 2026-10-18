@@ -321,6 +321,9 @@ export function matchChannel(text: string | null): Channel | undefined {
   );
 }
 
+/** The channels Story Lab's compilations go out on: a Movie on Specular's daily long-form batch, a Sleep on Specular Sleep. */
+export const COMPILATION_CHANNEL_ID = { movie: "main", sleep: "sleep" } as const;
+
 /** Whether a channel's recurring batch is long form (a midnight day) rather than Shorts (a 3 AM day). */
 export function isLongFormRecurring(channel: Pick<Channel, "recurring"> | undefined): boolean {
   return channel?.recurring?.format === "long";

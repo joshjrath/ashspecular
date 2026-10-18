@@ -95,6 +95,12 @@ schedule on the calendar, and the date or the channel changes to match.
 Paused and resting channels (quiet for a month) aren't counted, and neither
 is a day cleared from *Nothing assigned*.
 
+Each one also says the **video #** that upload would get (*would be
+VIDEO-046*), worked out from the codes already used. If two channels have
+used the same number, numbers count per channel (that channel's highest + 1).
+If every number is unique across the studio, they count across the studio
+in the order the uploads come up.
+
 **Nothing assigned.** Every channel with a posting target (each Stories
 channel, one every four days; each Gaming channel, its own usual gap) is
 expected to post again that many days after its **last video lined up**:
@@ -288,6 +294,23 @@ plots the day the work is due.
   videos never move with anything; in Deadlines only open work does.
   The date box on a record's page does the same, with a ticked *Move the N
   later … videos* box you can untick.
+- **Future reset…** (top right of the month) is a last resort for when work
+  is far behind. It opens a preview first; nothing changes until you tick
+  the box and press **Reset the upcoming calendar**.
+  - Every overdue VO gets a new day: **5 a day** (change it, 1–15) from the
+    day after the one My Day is on. Days off are skipped, and a day that
+    already has VOs due takes fewer. With 16 late on a Saturday: 5 Sunday,
+    5 Monday, 5 Tuesday, 1 Wednesday.
+  - Channels go in order of their **average long-form views** (their last
+    ten long-form videos at least a week old), highest first, in rounds:
+    every channel's first late VO is placed before any channel's second.
+  - Each video's upload moves to at least 6 days after its new VO day (the
+    buffer), and the rest of that channel's schedule moves later by the same
+    days, spacing kept.
+  - The preview shows each day's VOs with their old and new upload days, the
+    channel order, and every other upload that moves with its channel.
+  - **Undo** puts every upload and VO day back as it was. It's offered on
+    the Future reset page for a day afterwards.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
 - **Complete / Incomplete** toggles sit beside the categories. Both are on
@@ -1185,7 +1208,9 @@ three weeks.
 **✓ Use** puts it on the calendar in the next open slot:
 
 - **A Movie** goes on the next day with no Movie (skipping days off). It takes
-  over that day's Specular card and title.
+  over that day's Specular card and title, so the calendar, the dashboard
+  and My Day show the Movie's title instead of just *Specular*. A batch that
+  opens later for a day with a Movie already planned takes its title too.
 - **A Sleep** goes 4 days after the last one, as its own Specular Sleep card.
 
 Use then opens the compilation's page, which has:

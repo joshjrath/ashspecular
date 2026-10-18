@@ -500,7 +500,7 @@ export function renderCalendar(
   return layout(
     "Calendar",
     shell,
-    `${pageHeader("Calendar")}
+    `${pageHeader("Calendar", `<a class="clear secondary" href="/calendar/reset" title="A last resort when work is far behind: spread the overdue VOs over the next days">Future reset…</a>`)}
     <div class="calbar">
       <a class="nav" href="/calendar/${shiftMonth(ym, -1)}${q}" aria-label="Previous month">←</a>
       <span class="month">${esc(monthName(ym))}</span>

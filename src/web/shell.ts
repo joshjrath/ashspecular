@@ -10,8 +10,8 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { CHANNELS, isLongFormRecurring } from "../catalog.js";
-import { type CalendarMode, type GapNotice, type Notice, type StoredRecord, calendarRange, categoryCounts, channelAirDays, doneToday, getRecord as getRecordById, lastIntake, listDaysOff, listNotices, listReviews, openBatchCount, openByCategory, openWork, pausedCount, removedCount, revisionKeys } from "../db/records.js";
-import { GAP_HORIZON_DAYS, type UploadGap, nextToAssign, uploadGaps } from "./gaps.js";
+import { type CalendarMode, type GapNotice, type Notice, type StoredRecord, calendarRange, categoryCounts, channelAirDays, doneToday, usedCodes, getRecord as getRecordById, lastIntake, listDaysOff, listNotices, listReviews, openBatchCount, openByCategory, openWork, pausedCount, removedCount, revisionKeys } from "../db/records.js";
+import { GAP_HORIZON_DAYS, type UploadGap, nextToAssign, uploadGaps, withCodes } from "./gaps.js";
 import { dateIn, ORG_TZ, shiftDate } from "../parse/derive.js";
 import type { Shell } from "./page.js";
 import type { TimerState } from "./pages/mywork.js";
@@ -263,8 +263,9 @@ async function currentGaps(): Promise<UploadGap[]> {
  */
 export async function nextAssignments(): Promise<UploadGap[]> {
   if (!hasDatabase) return [];
-  const { channels, today, dismissed } = await gapInputs();
-  return nextToAssign(channels, today, (g) => dismissed.has(`${g.channel}|${g.date}`));
+  const [{ channels, today, dismissed }, codes] = await Promise.all([gapInputs(), usedCodes().catch(() => [])]);
+  const skip = (g: UploadGap) => dismissed.has(`${g.channel}|${g.date}`);
+  return withCodes(nextToAssign(channels, today, skip), codes, uploadGaps(channels, today, 400).filter((g) => !skip(g)));
 }
 
 /** Every channel with a posting target, and each day it has a video on (posted or scheduled). */

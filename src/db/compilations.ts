@@ -5,7 +5,7 @@
  * See compilations/engine.ts for how picks are made.
  */
 import { inTransaction, pool } from "./pool.js";
-import { CHANNELS } from "../catalog.js";
+import { CHANNELS, COMPILATION_CHANNEL_ID } from "../catalog.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
 import { inferMovieConcept, inferMovieSources, inferSleepConcept, oneEach, type Kind, type PastCompilation, type Pick, type Source } from "../compilations/engine.js";
 import { corpus } from "../web/stories/corpus.js";
@@ -15,7 +15,6 @@ import { VO_WPM } from "../web/work.js";
 
 /** Where each kind posts. */
 /** The channel each kind posts on, by id: whatever it's called now. */
-const COMPILATION_CHANNEL_ID: Record<Kind, string> = { movie: "main", sleep: "sleep" };
 export const compilationChannel = (kind: Kind): string => CHANNELS.find((c) => c.id === COMPILATION_CHANNEL_ID[kind])?.name ?? (kind === "movie" ? "Specular" : "Specular Sleep");
 /** The channels whose long-form uploads are sources: every Stories channel. */
 export const sourceChannels = () => CHANNELS.filter((c) => c.category === "stories").map((c) => c.name);

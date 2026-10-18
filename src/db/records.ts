@@ -239,6 +239,36 @@ export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
   });
 }
 
+/**
+ * The last Future reset, for Undo: every record it changed, as it was. Kept
+ * in the database (not memory, like a drag's Undo) for a day, since a reset
+ * is big enough that a restart shouldn't lose the way back.
+ */
+export async function saveResetUndo(snaps: MoveSnapshot[], text: string): Promise<void> {
+  const value = JSON.stringify({ at: new Date().toISOString(), text, snaps });
+  await pool.query(
+    "INSERT INTO app_settings (key, value, secret, updated_at) VALUES ('calendar_reset_undo', $1, false, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()",
+    [value],
+  );
+}
+
+export async function getResetUndo(): Promise<{ at: Date; text: string; snaps: MoveSnapshot[] } | null> {
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'calendar_reset_undo'");
+  if (!rows[0]) return null;
+  try {
+    const v = JSON.parse(String(rows[0].value)) as { at: string; text: string; snaps: Array<Omit<MoveSnapshot, "voDue" | "deadline" | "scriptDue"> & { voDue: string | null; deadline: string | null; scriptDue: string | null }> };
+    const d = (x: string | null) => (x ? new Date(x) : null);
+    return { at: new Date(v.at), text: v.text, snaps: v.snaps.map((x) => ({ ...x, voDue: d(x.voDue), deadline: d(x.deadline), scriptDue: d(x.scriptDue) })) };
+  } catch (err) {
+    console.error("[reset] the saved undo can't be read:", err);
+    return null;
+  }
+}
+
+export async function clearResetUndo(): Promise<void> {
+  await pool.query("DELETE FROM app_settings WHERE key = 'calendar_reset_undo'");
+}
+
 // ── days off ──────────────────────────────────────────────────────────────
 
 /** Every day marked off, as YYYY-MM-DD, earliest first. A handful a year. */
@@ -750,6 +780,14 @@ export async function doneToday(since?: Date): Promise<StoredRecord[]> {
          ORDER BY done_at DESC LIMIT 300`,
       );
   return rows.map(hydrate);
+}
+
+/** Every video # used so far, with its channel (removed videos used theirs too). */
+export async function usedCodes(): Promise<Array<{ channel: string; code: string }>> {
+  const { rows } = await pool.query<{ channel: string; code: string }>(
+    "SELECT channel, code FROM records WHERE code IS NOT NULL AND channel IS NOT NULL AND batch_no IS NULL",
+  );
+  return rows;
 }
 
 /** One day's batches, newest number first. Bounded by construction. */

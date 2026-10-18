@@ -76,6 +76,8 @@ import { fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/pages/tasks.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
+import { planReset } from "../src/web/reset.js";
+import { withCodes } from "../src/web/gaps.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, isMonth, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
@@ -1727,6 +1729,49 @@ const satBatch = toItem(mk({ id: 240, category: "bits", channel: "Specular Anime
 t("…on the carried-over day, the next day's work is 'tomorrow' and waits in Do ahead", [whyNow(satBatch, ins("2026-09-28T05:00:00Z"), "2026-09-27"), isRequired(satBatch, "2026-09-27"), doAhead([satBatch], ins("2026-09-28T05:00:00Z"), 10, "2026-09-27").length], ["tomorrow", false, 1]);
 const banner = renderMyDay(shellFix, { now: ins("2026-10-18T05:30:00Z"), today: "2026-10-17", workday: workdayOf(ins("2026-10-18T05:30:00Z"), null), required: [], ahead: [], done: [], loads: [], trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });
 t("…My Day says which day it's still on, with End my day", [banner.includes("still <b>Saturday 10/17</b>"), banner.includes('action="/my-day/end"'), banner.includes(">Saturday 10/17 <span")], [true, true, true]);
+// Future reset: overdue VOs spread a few a day, biggest channels first, uploads kept six days after.
+{
+  const lateVo = (id: number, channel: string, air: string): import("../src/web/reset.js").ResetVo => ({ id, channel, title: `V${id}`, airDate: air, voDay: shiftDate(air, -6) });
+  const sixteen = Array.from({ length: 16 }, (_, i) => lateVo(500 + i, ["Specular Studios", "Specular FNAF", "Specular Verse", "Specular Force"][i % 4]!, shiftDate("2026-10-12", Math.floor(i / 4) * 4)));
+  const views = new Map([["Specular Studios", 90_000], ["Specular FNAF", 250_000], ["Specular Verse", 40_000], ["Specular Force", 120_000]]);
+  const big = planReset({ start: "2026-10-19", perDay: 5, daysOff: new Set(), late: sixteen, upcoming: [], schedule: [], avgViews: views });
+  t("Future reset: 16 late VOs on a Saturday go 5 Sunday, 5 Monday, 5 Tuesday, 1 Wednesday", big.days.map((d) => [d.day, d.vos.length]), [["2026-10-19", 5], ["2026-10-20", 5], ["2026-10-21", 5], ["2026-10-22", 1]]);
+  t("…channels by average long-form views, in rounds: every channel's first before any channel's second", [big.channels.map((c) => c.channel), big.days[0]!.vos.map((v) => v.channel)], [
+    ["Specular FNAF", "Specular Force", "Specular Studios", "Specular Verse"], ["Specular FNAF", "Specular Force", "Specular Studios", "Specular Verse", "Specular FNAF"],
+  ]);
+  // One channel: two late videos (air 10/12, 10/16) and one ahead (10/20); a Monday VO already due elsewhere; Tuesday off.
+  const sched = [{ id: 1, channel: "Specular Studios", airDate: "2026-10-12", label: "A" }, { id: 2, channel: "Specular Studios", airDate: "2026-10-16", label: "B" }, { id: 3, channel: "Specular Studios", airDate: "2026-10-20", label: "C" }];
+  const one = planReset({
+    start: "2026-10-19", perDay: 1, daysOff: new Set(["2026-10-21"]),
+    late: [lateVo(1, "Specular Studios", "2026-10-12"), lateVo(2, "Specular Studios", "2026-10-16")],
+    upcoming: [{ id: 9, channel: "Specular Verse", title: "other", airDate: "2026-10-26", voDay: "2026-10-20" }],
+    schedule: sched, avgViews: new Map(),
+  });
+  t("…a day already carrying VOs takes fewer, and a day off none", [...one.assign.entries()], [[1, "2026-10-19"], [2, "2026-10-22"]]);
+  t("…each upload at least six days after its VO, and the channel's next ones move with it, spacing kept", one.moves.map((m) => [m.id, m.from, m.to]), [[1, "2026-10-12", "2026-10-25"], [2, "2026-10-16", "2026-10-29"], [3, "2026-10-20", "2026-11-02"]]);
+  t("…nothing late, nothing planned", planReset({ start: "2026-10-19", perDay: 5, daysOff: new Set(), late: [], upcoming: [], schedule: [], avgViews: new Map() }).assign.size, 0);
+}
+
+// Next to assign: the video # it would get.
+{
+  const gap = (channel: string, date: string) => ({ channel, date, inDays: 3, after: "2026-10-10" });
+  const perCh = withCodes([gap("Specular Force", "2026-10-25"), gap("Specular Verse", "2026-10-26")], [
+    { channel: "Specular Force", code: "VIDEO-044" }, { channel: "Specular Force", code: "VIDEO-045" }, { channel: "Specular Verse", code: "VIDEO-045" }, { channel: "Specular Verse", code: "VIDEO-012" },
+  ]);
+  t("Next to assign: numbers that repeat across channels count per channel (the channel's highest + 1)", perCh.map((g) => g.code), ["VIDEO-046", "VIDEO-046"]);
+  const glob = withCodes([gap("Specular Force", "2026-10-25"), gap("Specular Verse", "2026-10-27")], [
+    { channel: "Specular Force", code: "VIDEO-031" }, { channel: "Specular Verse", code: "VIDEO-033" },
+  ], [gap("Specular Force", "2026-10-25"), gap("Specular Force", "2026-10-26"), gap("Specular Verse", "2026-10-27")]);
+  t("…numbers unique across the studio count in the order uploads come up", glob.map((g) => g.code), ["VIDEO-034", "VIDEO-036"]);
+  t("…no codes yet: none shown", withCodes([gap("Specular Force", "2026-10-25")], [])[0]!.code, undefined);
+}
+
+// A Specular batch with a compilation's title shows the title in My Day.
+t("My Day: a Specular batch planned with a compilation shows its title, not 'Specular'", [
+  toItem(mk({ id: 250, category: "movies", channel: "Specular", batchNo: 1, title: "Every Spider-Man Theory, Explained", airDate: wToday }))!.title,
+  toItem(mk({ id: 251, category: "movies", channel: "Specular", batchNo: 1, title: "Specular", airDate: wToday }))!.title,
+], ["Every Spider-Man Theory, Explained", "Specular"]);
+
 const spreadVos = [301, 302, 303, 304].map((id) => ({ ...toItem(mk({ id, category: "stories", title: `VO ${id}`, airDate: "2026-10-04", voDue: new Date("2026-10-03T22:00:00Z") }))! }));
 const offDays = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"];
 t("a day off in 5 days with 4 VOs on it: one VO a day until then, not all on the day before", [...spreadDayOff(spreadVos, offDays, new Map([["2026-09-29", 60]])).values()].sort(), offDays);

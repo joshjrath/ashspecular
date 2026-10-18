@@ -52,6 +52,7 @@ const app = await buildApp({ onRoute: (m, u) => routes.push([m, u]) });
 await app.ready();
 let cookie = `${COOKIE_NAME}=${issueToken()}`;
 const today = dateIn(ORG_TZ);
+const daysBetweenTest = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
 const fill = (url: string) =>
   url.replace(/:(\w+)\??/g, (_, p: string) => (p === "date" ? today : p === "ym" ? today.slice(0, 7) : p === "name" ? encodeURIComponent("Specular Anime") : p === "cid" || p === "gid" ? "1" : "1"));
 const pages = routes.filter(([m, u]) => m === "GET" && !["/calendar.ics", "/healthz"].includes(u)).map(([, u]) => fill(u));
@@ -279,6 +280,51 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("End my day: the day My Day was on is ended, and the page offers Undo", [ended.status, saved ? JSON.parse(saved).day : null, page.statusCode, page.body.includes('action="/my-day/end/undo"')], [302, before.day, 200, true]);
   await post("/my-day/end/undo", {});
   t("…Undo puts it back", (await pool.query("SELECT count(*)::int AS n FROM app_settings WHERE key = 'myday_ended'")).rows[0].n, 0);
+}
+
+// ── Future reset: late VOs spread out, uploads moved, and Undo ──────────────
+{
+  const { saveRecord } = await import("../src/db/records.js");
+  const { derive } = await import("../src/parse/derive.js");
+  const { workdayOf } = await import("../src/web/work.js");
+  const mk = async (channel: string, code: string, air: string) => {
+    const record = derive({
+      kind: "assignment", code, title: `Reset ${code}`, category: "stories", channel, tag: null, air_date: air, stage: "script",
+      word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+    } as never, "", new Date());
+    return Number(await saveRecord(record, { messageId: `rs-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  };
+  // Battles: one late (VO 4 days ago) and the next, not late; Survives: one late.
+  const ids = [await mk("Specular Battles", "RS-1", shiftDate(today, 2)), await mk("Specular Battles", "RS-2", shiftDate(today, 9)), await mk("Specular Survives", "RS-3", shiftDate(today, 3))];
+  const state = async () => (await pool.query(
+    `SELECT id, to_char(air_date, 'YYYY-MM-DD') AS air, to_char(vo_due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS vo FROM records WHERE id = ANY($1::bigint[]) ORDER BY id`, [ids],
+  )).rows as Array<{ id: number; air: string; vo: string }>;
+  const before = await state();
+  const preview = await app.inject({ method: "GET", url: "/calendar/reset?per=1", headers: { cookie } });
+  const unconfirmed = await post("/calendar/reset", { per: "1" });
+  t("Future reset: the preview lists the late VOs and changes nothing; without the box ticked, nothing happens", [preview.statusCode, preview.body.includes("Reset RS-1"), preview.body.includes("Reset RS-3"), preview.body.includes("Reset RS-2"), unconfirmed.status, JSON.stringify(await state()) === JSON.stringify(before)], [200, true, true, false, 302, true]);
+  await post("/calendar/reset", { per: "1", confirm: "1" });
+  const after = await state();
+  const w = workdayOf(new Date(), null);
+  const start = w.ahead ? w.day : shiftDate(w.day, 1);
+  const [a1, a2, a3] = after;
+  t("…applied: each late VO on a day from tomorrow on, its upload six days after or later", [a1!.vo >= start, a3!.vo >= start, a1!.vo !== a3!.vo, a1!.air >= shiftDate(a1!.vo, 6), a3!.air >= shiftDate(a3!.vo, 6)], [true, true, true, true, true]);
+  t("…the channel's next upload moved by the same days, spacing kept", daysBetweenTest(a1!.air, a2!.air), daysBetweenTest(before[0]!.air, before[1]!.air));
+  const page = await app.inject({ method: "GET", url: "/calendar/reset", headers: { cookie } });
+  t("…and Undo is offered", page.body.includes('action="/calendar/reset/undo"'), true);
+  await post("/calendar/reset/undo", {});
+  t("…Undo puts every upload and VO day back", JSON.stringify(await state()), JSON.stringify(before));
+}
+
+// ── A planned Movie names that day's Specular batch ─────────────────────────
+{
+  const { openBatchesFor } = await import("../src/jobs/batches.js");
+  const day = shiftDate(today, 20);
+  await pool.query("INSERT INTO compilations (kind, title, concept, slot_date, status) VALUES ('movie', 'Every Spider-Man Theory, Explained', 'spider-man', $1, 'planned')", [day]);
+  await openBatchesFor(day, (c) => c.id === "main");
+  const title = (await pool.query("SELECT title FROM records WHERE channel = 'Specular' AND batch_no IS NOT NULL AND air_date = $1", [day])).rows[0]?.title;
+  const other = (await pool.query("SELECT title FROM records WHERE channel = 'Specular' AND batch_no IS NOT NULL AND air_date <> $1 LIMIT 1", [day])).rows[0]?.title;
+  t("Specular's batch on a day with a planned Movie opens with the Movie's title; other days keep the channel's", [title, other ?? "Specular"], ["Every Spider-Man Theory, Explained", "Specular"]);
 }
 
 // ── Network Overview: readings in, figures out ──────────────────────────────

@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-future-reset",
+    title: "Future reset, video #s to assign, and Movie titles in My Day",
+    changes: [
+      { text: "Calendar → Future reset…: a last resort when work is far behind. Every overdue VO gets a new day, 5 a day from tomorrow, biggest channels (by average long-form views) first, and each upload moves to six days after its VO with the rest of its channel. It shows the whole plan first, and Undo puts it all back for a day after.", href: "/calendar/reset" },
+      { text: "Next to assign on the dashboard now says the video # each upload would get, beside its date.", href: "/" },
+      { text: "A Movie picked in Story Lab now shows its title on that day's Specular long-form in My Day, not just 'Specular'.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-10-18-end-my-day",
     title: "End my day: My Day moves on when you say",
     changes: [

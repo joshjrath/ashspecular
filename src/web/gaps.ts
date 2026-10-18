@@ -24,6 +24,8 @@ export interface UploadGap {
   inDays: number;
   /** The channel's last video before it (uploaded or scheduled). */
   after: string;
+  /** The video # it would get ("VIDEO-046"), when the channel's codes say. */
+  code?: string;
 }
 
 /**
@@ -76,4 +78,46 @@ export function nextToAssign(
     .map((c) => channelGaps(c.channel, c.every, c.days, today, 400).find((g) => !skip(g)))
     .filter((g): g is UploadGap => Boolean(g))
     .sort((a, b) => a.date.localeCompare(b.date) || a.channel.localeCompare(b.channel));
+}
+
+/** "VIDEO-045" → prefix "VIDEO-", 45, width 3. */
+function splitCode(code: string): { prefix: string; n: number; width: number } | null {
+  const m = /^(.*?)(\d+)\s*$/.exec(code.trim());
+  return m ? { prefix: m[1]!, n: Number(m[2]), width: m[2]!.length } : null;
+}
+
+/**
+ * The video # each upload to assign would get, from the codes already used.
+ * If two channels have used the same number, numbers count per channel (the
+ * channel's highest + 1); otherwise they count across the studio, in the
+ * order uploads come up (`all`: every upload still to assign, soonest first).
+ */
+export function withCodes(list: UploadGap[], used: Array<{ channel: string; code: string }>, all: UploadGap[] = list): UploadGap[] {
+  const parsed = used.map((u) => ({ channel: u.channel, c: splitCode(u.code) })).filter((u): u is { channel: string; c: NonNullable<ReturnType<typeof splitCode>> } => u.c !== null);
+  if (!parsed.length) return list;
+  const owners = new Map<string, Set<string>>();
+  for (const u of parsed) {
+    const k = `${u.c.prefix}${u.c.n}`;
+    owners.set(k, (owners.get(k) ?? new Set()).add(u.channel));
+  }
+  const perChannel = [...owners.values()].some((s) => s.size > 1);
+  const top = (xs: typeof parsed) => xs.reduce((a, b) => (b.c.n > a.c.n ? b : a));
+  const fmt = (c: { prefix: string; width: number }, n: number) => `${c.prefix}${String(n).padStart(c.width, "0")}`;
+  if (perChannel) {
+    const taken = new Map<string, number>();
+    return list.map((g) => {
+      const mine = parsed.filter((u) => u.channel === g.channel);
+      if (!mine.length) return g;
+      const t = top(mine);
+      const n = (taken.get(g.channel) ?? t.c.n) + 1;
+      taken.set(g.channel, n);
+      return { ...g, code: fmt(t.c, n) };
+    });
+  }
+  const t = top(parsed);
+  const order = [...all].sort((a, b) => a.date.localeCompare(b.date) || a.channel.localeCompare(b.channel));
+  return list.map((g) => {
+    const i = order.findIndex((x) => x.channel === g.channel && x.date === g.date);
+    return i < 0 ? g : { ...g, code: fmt(t.c, t.c.n + 1 + i) };
+  });
 }

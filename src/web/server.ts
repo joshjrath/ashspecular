@@ -51,6 +51,7 @@ import { registerStoryLab, storyContext } from "./routes/storylab.js";
 import { registerTasks } from "./routes/tasks.js";
 import { registerUploads } from "./routes/uploads.js";
 import { registerNetwork } from "./routes/network.js";
+import { registerReset } from "./routes/reset.js";
 
 const PUBLIC = new Set(["/login", "/healthz"]);
 
@@ -194,6 +195,7 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
     registerIdeaFeed(app, shell);
     registerCompetitors(app, shell);
     registerNetwork(app);
+    registerReset(app);
   }
 
   app.get<{ Querystring: { out?: string } }>("/login", async (request, reply) =>

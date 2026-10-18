@@ -323,3 +323,18 @@ export async function recentAlerts(days = 7): Promise<Array<{ key: string; kind:
 
 /** The category a division started as, for its colour when it has none. */
 export const categoryColour = (id: string) => CATEGORIES.find((c) => c.id === id)?.color ?? null;
+
+/**
+ * Each channel's average views on its long-form videos: its last ten that are
+ * a week old or more (younger ones are still climbing). The Future reset
+ * puts the channels with the most first.
+ */
+export async function averageLongFormViews(): Promise<Map<string, number>> {
+  const { rows } = await pool.query<{ channel: string; avg: string }>(
+    `SELECT channel, AVG(views) AS avg FROM (
+       SELECT channel, views, ROW_NUMBER() OVER (PARTITION BY channel ORDER BY published_at DESC) AS rn
+         FROM uploads WHERE board AND COALESCE(format, 'long') <> 'short' AND views IS NOT NULL AND published_at < now() - interval '7 days'
+     ) x WHERE rn <= 10 GROUP BY channel`,
+  );
+  return new Map(rows.map((r) => [r.channel, Math.round(Number(r.avg))]));
+}

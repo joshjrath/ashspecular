@@ -1079,6 +1079,30 @@ header.page .checknow button { white-space: nowrap; }
 .ut .scriptmark, .vt .scriptmark { margin-left: 6px; vertical-align: -3px; height: 17px; width: 17px; }
 .row.revision .meta .scriptmark { height: 22px; }
 /* ── My Day, the VO Queue, recording mode ───────────────────────────────── */
+/* Future reset */
+.rsintro p { margin: 0 0 10px; color: var(--ink2); }
+.rsintro p b { color: var(--ink); }
+.rsper select { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; font: inherit; margin-left: 6px; }
+.rsnote { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--yellow); border-radius: 16px; padding: 12px 16px; margin: 0 0 14px; }
+.rsnote.ok { border-left-color: var(--ok); }
+.rsnote p { margin: 0; flex: 1 1 260px; color: var(--ink2); }
+.rsinline { display: inline-flex; margin: 0; }
+.rsorder { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.rsorder li i, .rsrow i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ch); margin-right: 6px; flex: none; }
+.rsorder li span { color: var(--ink3); font-size: 12.5px; }
+.rsrows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rsrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--sunk); }
+.rsmain { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.rsmain a { display: block; color: var(--ink); text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rsmain small, .rsair small { color: var(--ink3); font-size: 11.5px; }
+.rsair { flex: none; text-align: right; font-size: 12.5px; color: var(--ink2); }
+.rsair s { color: var(--ink3); }
+.rsrest summary { cursor: pointer; }
+.rsrest .rsrows { margin-top: 10px; }
+.rsapply p { margin: 0 0 10px; color: var(--ink2); }
+.rsconfirm { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; color: var(--ink); }
+.rsgo { background: var(--late); color: #111; }
+@media (max-width: 640px) { .rsrow { flex-wrap: wrap; } .rsair { text-align: left; width: 100%; padding-left: 19px; } }
 /* End my day: the day My Day is on, when it isn't simply today */
 .mdend { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--yellow); border-radius: 16px; padding: 12px 16px; margin: 0 0 14px; }
 .mdend p { margin: 0; color: var(--ink2); flex: 1 1 260px; }

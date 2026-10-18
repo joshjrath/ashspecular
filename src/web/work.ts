@@ -159,7 +159,8 @@ export function toItem(r: StoredRecord, spent = 0): WorkItem | null {
   return {
     id: r.id,
     type,
-    title: r.batchNo && r.channel ? r.channel : r.title ?? r.code ?? "(untitled)",
+    // A batch is its channel, unless it has a title of its own (a Specular Movie planned in Story Lab).
+    title: r.batchNo && r.channel ? (r.title && r.title !== r.channel ? r.title : r.channel) : r.title ?? r.code ?? "(untitled)",
     channel: r.channel,
     category: r.category,
     code: r.code,
