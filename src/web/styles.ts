@@ -1079,6 +1079,12 @@ header.page .checknow button { white-space: nowrap; }
 .ut .scriptmark, .vt .scriptmark { margin-left: 6px; vertical-align: -3px; height: 17px; width: 17px; }
 .row.revision .meta .scriptmark { height: 22px; }
 /* ── My Day, the VO Queue, recording mode ───────────────────────────────── */
+/* End my day: the day My Day is on, when it isn't simply today */
+.mdend { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--yellow); border-radius: 16px; padding: 12px 16px; margin: 0 0 14px; }
+.mdend p { margin: 0; color: var(--ink2); flex: 1 1 260px; }
+.mdend p b { color: var(--ink); }
+.mdend.quiet { border-left-color: var(--line); padding: 8px 16px; }
+.mdendf { display: inline-flex; margin: 0; }
 .timerbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 16px; border-radius: 18px;
   background: rgba(86,201,144,.10); box-shadow: inset 0 0 0 1.5px rgba(86,201,144,.45); color: #CFF5E0; font-size: 13.5px; }
 .timerbar .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s ease-in-out infinite; }

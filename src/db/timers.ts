@@ -62,17 +62,6 @@ export async function minutesSpent(ids: number[]): Promise<Map<number, number>> 
   return new Map(rows.map((r) => [Number(r.record_id), Number(r.secs) / 60]));
 }
 
-/** Minutes tracked per day (in a zone), from a day on. */
-export async function minutesByDay(zone: string, from: string): Promise<Map<string, number>> {
-  const { rows } = await pool.query<{ day: string; secs: string }>(
-    `SELECT to_char(started_at AT TIME ZONE $1, 'YYYY-MM-DD') AS day,
-            SUM(EXTRACT(EPOCH FROM (COALESCE(ended_at, now()) - started_at))) AS secs
-       FROM time_entries WHERE (started_at AT TIME ZONE $1)::date >= $2::date GROUP BY 1`,
-    [zone, from],
-  );
-  return new Map(rows.map((r) => [r.day, Number(r.secs) / 60]));
-}
-
 /**
  * Log a piece done with no time on it — someone else did it: whatever was
  * tracked on it goes (a timer running on it stops), and it's marked so Done
@@ -120,4 +109,40 @@ export async function loggedBetween(from: Date, to: Date): Promise<Array<{
     start: r.started_at, end: r.ended_at, recordId: r.record_id === null ? null : Number(r.record_id), taskId: r.task_id === null ? null : Number(r.task_id),
     kind: r.kind, category: r.category, channel: r.channel, batchNo: r.batch_no === null ? null : Number(r.batch_no), title: r.title, code: r.code,
   }));
+}
+
+// ── End my day ─────────────────────────────────────────────────────────────
+
+/** The last day ended with End my day (and the one before it, for Undo). */
+export async function getDayEnd(): Promise<{ day: string; at: Date; prev: { day: string; at: Date } | null } | null> {
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'myday_ended'");
+  if (!rows[0]) return null;
+  try {
+    const v = JSON.parse(String(rows[0].value)) as { day: string; at: string; prev: { day: string; at: string } | null };
+    return { day: v.day, at: new Date(v.at), prev: v.prev ? { day: v.prev.day, at: new Date(v.prev.at) } : null };
+  } catch (err) {
+    console.error("[my day] the saved end of day can't be read:", err);
+    return null;
+  }
+}
+
+/** Save the end of a day (null forgets it: back to before any End my day). */
+export async function setDayEnd(v: { day: string; at: Date; prev: { day: string; at: Date } | null } | null): Promise<void> {
+  if (!v) await pool.query("DELETE FROM app_settings WHERE key = 'myday_ended'");
+  else {
+    await pool.query(
+      "INSERT INTO app_settings (key, value, secret, updated_at) VALUES ('myday_ended', $1, false, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()",
+      [JSON.stringify({ day: v.day, at: v.at.toISOString(), prev: v.prev ? { day: v.prev.day, at: v.prev.at.toISOString() } : null })],
+    );
+  }
+}
+
+/** Minutes tracked since a moment (a running timer counts up to now). */
+export async function minutesSince(from: Date): Promise<number> {
+  const { rows } = await pool.query<{ secs: string | null }>(
+    `SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(ended_at, now()) - GREATEST(started_at, $1)))) AS secs
+       FROM time_entries WHERE COALESCE(ended_at, now()) > $1`,
+    [from],
+  );
+  return Number(rows[0]?.secs ?? 0) / 60;
 }

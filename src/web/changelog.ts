@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-18-end-my-day",
+    title: "End my day: My Day moves on when you say",
+    changes: [
+      { text: "My Day no longer turns over at midnight. Press End my day (top right) when you're done and it moves on to the next day's list, however late it is.", href: "/my-day" },
+      { text: "Past midnight, until you press it, My Day says it's still the day before. If you forget, it moves on by itself at noon." },
+      { text: "Pressed early, it shows tomorrow's list so you can get ahead. Done today and tracked today count from when you pressed it, and Undo is there for a mistake." },
+    ],
+  },
+  {
     id: "2026-10-09-youtube-analytics",
     title: "Network Overview: real figures from YouTube Analytics",
     changes: [

@@ -740,12 +740,15 @@ export async function revisionKeys(): Promise<{ codes: Set<string>; titles: Set<
 }
 
 /** What was cleared today, in the org's zone — My Day's "done" side. */
-export async function doneToday(): Promise<StoredRecord[]> {
-  const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'done' AND done_at IS NOT NULL
-       AND (done_at AT TIME ZONE '${ORG_TZ}')::date = (now() AT TIME ZONE '${ORG_TZ}')::date
-     ORDER BY done_at DESC LIMIT 300`,
-  );
+export async function doneToday(since?: Date): Promise<StoredRecord[]> {
+  // My Day passes when its day began (it ends when Ash says so, not at midnight).
+  const { rows } = since
+    ? await pool.query<Row>(`${SELECT} WHERE status = 'done' AND done_at IS NOT NULL AND done_at >= $1 ORDER BY done_at DESC LIMIT 300`, [since])
+    : await pool.query<Row>(
+        `${SELECT} WHERE status = 'done' AND done_at IS NOT NULL
+           AND (done_at AT TIME ZONE '${ORG_TZ}')::date = (now() AT TIME ZONE '${ORG_TZ}')::date
+         ORDER BY done_at DESC LIMIT 300`,
+      );
   return rows.map(hydrate);
 }
 

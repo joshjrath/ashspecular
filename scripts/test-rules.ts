@@ -75,7 +75,7 @@ import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "..
 import { fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/pages/tasks.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
-import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay } from "../src/web/work.js";
+import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
 import { nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, isMonth, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
@@ -1711,6 +1711,22 @@ t("My Day: switches (Task off), exploded batches one row per channel with their 
   (exploded.match(/name="show" value="[a-z]+" checked/g) ?? []).length, exploded.includes('value="task" onchange'), exploded.includes('<span class="wunits">2/5 uploaded</span>'),
   exploded.includes("my-day/unit"), exploded.includes("⤡ Group batches"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
 ], [5, true, true, false, true, true, 1]);
+// End my day: the day turns over when Ash says, not at midnight (noon the next day if she forgets).
+const ins = (iso: string) => new Date(iso);
+t("End my day: after midnight, the day before carries on until it's ended (or noon)", [
+  workdayOf(ins("2026-10-18T05:30:00Z"), { day: "2026-10-16", at: ins("2026-10-17T05:00:00Z") }).day, // 1:30 AM Sun, Sat not ended → Sat
+  workdayOf(ins("2026-10-18T05:30:00Z"), { day: "2026-10-16", at: ins("2026-10-17T05:00:00Z") }).carried,
+  workdayOf(ins("2026-10-18T15:59:00Z"), null).day, // 11:59 AM Sun, never ended → still Sat
+  workdayOf(ins("2026-10-18T16:00:00Z"), null).day, // noon → Sun
+], ["2026-10-17", true, "2026-10-17", "2026-10-18"]);
+const endedLate = workdayOf(ins("2026-10-18T13:00:00Z"), { day: "2026-10-17", at: ins("2026-10-18T06:40:00Z") }); // ended Sat at 2:40 AM Sun
+t("…ended at 2:40 AM: Sunday from then, Done counts from then", [endedLate.day, endedLate.carried, endedLate.startedAt.toISOString()], ["2026-10-18", false, "2026-10-18T06:40:00.000Z"]);
+const endedEarly = workdayOf(ins("2026-10-18T01:00:00Z"), { day: "2026-10-17", at: ins("2026-10-18T00:30:00Z") }); // Sat 9 PM, Sat ended at 8:30 PM
+t("…ended early (9 PM): tomorrow's list now, to get ahead; next morning it's simply today", [endedEarly.day, endedEarly.ahead, workdayOf(ins("2026-10-18T13:00:00Z"), { day: "2026-10-17", at: ins("2026-10-18T00:30:00Z") }).day], ["2026-10-18", true, "2026-10-18"]);
+const satBatch = toItem(mk({ id: 240, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-28" }))!;
+t("…on the carried-over day, the next day's work is 'tomorrow' and waits in Do ahead", [whyNow(satBatch, ins("2026-09-28T05:00:00Z"), "2026-09-27"), isRequired(satBatch, "2026-09-27"), doAhead([satBatch], ins("2026-09-28T05:00:00Z"), 10, "2026-09-27").length], ["tomorrow", false, 1]);
+const banner = renderMyDay(shellFix, { now: ins("2026-10-18T05:30:00Z"), today: "2026-10-17", workday: workdayOf(ins("2026-10-18T05:30:00Z"), null), required: [], ahead: [], done: [], loads: [], trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });
+t("…My Day says which day it's still on, with End my day", [banner.includes("still <b>Saturday 10/17</b>"), banner.includes('action="/my-day/end"'), banner.includes(">Saturday 10/17 <span")], [true, true, true]);
 const spreadVos = [301, 302, 303, 304].map((id) => ({ ...toItem(mk({ id, category: "stories", title: `VO ${id}`, airDate: "2026-10-04", voDue: new Date("2026-10-03T22:00:00Z") }))! }));
 const offDays = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"];
 t("a day off in 5 days with 4 VOs on it: one VO a day until then, not all on the day before", [...spreadDayOff(spreadVos, offDays, new Map([["2026-09-29", 60]])).values()].sort(), offDays);

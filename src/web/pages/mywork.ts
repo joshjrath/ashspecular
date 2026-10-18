@@ -3,7 +3,7 @@
  * the VO Queue and recording mode, and Forgotten work.
  */
 import { CHANNELS } from "../../catalog.js";
-import { type DayLoad, type FocusPick, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
+import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
 import { ORG_TZ, instantIn, usDate } from "../../parse/derive.js";
 import { PAUSE_ICON, PLAY_ICON, SCRIPT_ICON, type Shell, channelColour, fmtMin, gapStrip, layout, pageHeader, row } from "../page.js";
 import { PRIORITY, TASK_CATEGORY } from "../../tasks/parse.js";
@@ -54,11 +54,11 @@ const runKey = (t: TimerState | null) => (t?.taskId ? `t${t.taskId}` : t?.record
 const workHref = (i: WorkItem) => (i.task ? `/tasks#t${i.id}` : i.id ? `/r/${i.id}` : "/recurring");
 
 /** A piece of work as a row: its kind, what it is, why now, estimate vs tracked, and start / done. */
-function workRow(i: WorkItem, now: Date, running: string | null, back: string, extra = ""): string {
+function workRow(i: WorkItem, now: Date, running: string | null, back: string, extra = "", today?: string): string {
   const t = TYPE_BY_ID.get(i.type)!;
   const pct = Math.min(100, Math.round((i.spent / i.est) * 100));
   const over = i.spent > i.est;
-  const why = i.task && !i.due ? PRIORITY.get(i.task.priority)!.label.toLowerCase() : whyNow(i, now);
+  const why = i.task && !i.due ? PRIORITY.get(i.task.priority)!.label.toLowerCase() : whyNow(i, now, today);
   const late = why.endsWith("late");
   const on = i.id !== null && running === itemKey(i);
   const kind = i.task ? '<input type="hidden" name="kind" value="task">' : "";
@@ -266,20 +266,20 @@ function mydaySwitches(hidden: string[], exploded: boolean): string {
  * 2h left"), opened to tick them one by one — a dozen 10-minute rows would
  * bury the VOs.
  */
-function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded = false): string {
+function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded = false, today?: string): string {
   // Exploded: each batch channel its own row, with how many of its uploads are done.
   if (exploded) {
     return items
       .map((i) => {
         const target = i.record?.batchTarget ?? 1;
         const extra = isBatch(i.type) && target > 1 ? `<span class="wunits">${Math.min(target, i.record?.batchDone ?? 0)}/${target} uploaded</span>` : "";
-        return workRow(i, now, running, back, extra);
+        return workRow(i, now, running, back, extra, today);
       })
       .join("");
   }
   const batches = items.filter((i) => isBatch(i.type));
   const rest = items.filter((i) => !isBatch(i.type));
-  if (batches.length < 3) return items.map((i) => workRow(i, now, running, back)).join("");
+  if (batches.length < 3) return items.map((i) => workRow(i, now, running, back, "", today)).join("");
   const est = batches.reduce((n, i) => n + i.est, 0);
   const spent = batches.reduce((n, i) => n + i.spent, 0);
   const left = batches.reduce((n, i) => n + remaining(i), 0);
@@ -288,17 +288,17 @@ function groupBatches(items: WorkItem[], now: Date, running: string | null, back
   const pct = Math.min(100, Math.round((spent / est) * 100));
   const group = `<details class="wgroup"${batches.some((i) => itemKey(i) === running) ? " open" : ""}>
     <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">Batch</span>
-      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
+      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now, today))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
       <div class="wacts"><form method="post" action="/my-day/explode"><input type="hidden" name="on" value="1"><button class="wbtn" title="Every batch channel as its own row">⤢</button></form><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
     </summary>
-    <div class="wlist">${batches.map((i) => workRow(i, now, running, back)).join("")}</div>
+    <div class="wlist">${batches.map((i) => workRow(i, now, running, back, "", today)).join("")}</div>
   </details>`;
   // The group sits where its first batch would have.
   const at = items.indexOf(batches[0]!);
   const before = rest.filter((i) => items.indexOf(i) < at);
   const after = rest.filter((i) => items.indexOf(i) > at);
-  return [...before.map((i) => workRow(i, now, running, back)), group, ...after.map((i) => workRow(i, now, running, back))].join("");
+  return [...before.map((i) => workRow(i, now, running, back, "", today)), group, ...after.map((i) => workRow(i, now, running, back, "", today))].join("");
 }
 
 /** A kind of work's estimate for the legend: tasks and recurring channels can each have their own. */
@@ -332,7 +332,11 @@ function loadBar(d: DayLoad, max: number, today: string, trackedToday: number): 
 
 export interface MyDayData {
   now: Date;
+  /** The day My Day is on (it turns over with End my day, not at midnight). */
   today: string;
+  workday?: Workday;
+  /** The last End my day, for its note and Undo. */
+  lastEnd?: DayEnd | null;
   required: WorkItem[];
   ahead: WorkItem[];
   done: WorkItem[];
@@ -349,6 +353,37 @@ export interface MyDayData {
   exploded?: boolean;
   /** Time logged over a range: the week's timeline, or a month, quarter or year. */
   log?: { range: LogRange; days: LoggedDay[]; daysOff: string[] };
+}
+
+/** "Friday 10/17": a day by name, for when My Day isn't on the calendar day. */
+function dayLabel(day: string): string {
+  const name = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+  return `${name} ${usDate(day).replace(/\/\d{4}$/, "")}`;
+}
+
+const clock = (d: Date) => `${new Intl.DateTimeFormat("en-US", { timeZone: ORG_TZ, hour: "numeric", minute: "2-digit" }).format(d)} ET`;
+
+/**
+ * Which day My Day is on, when it isn't simply today: still the day before
+ * after midnight (not ended yet), or tomorrow already (today ended early).
+ * Just after an End my day, a note with Undo.
+ */
+function dayBanner(d: MyDayData): string {
+  const w = d.workday;
+  if (!w) return "";
+  const undo = `<form method="post" action="/my-day/end/undo" class="mdendf"><button class="linkbtn">Undo</button></form>`;
+  if (w.carried) {
+    return `<div class="mdend"><p>It's past midnight, so this is still <b>${esc(dayLabel(w.day))}</b>'s list. Press <b>End my day</b> when you're done and My Day moves on to ${esc(dayLabel(w.calendar))}. If you forget, it moves on by itself at noon.</p>
+      <form method="post" action="/my-day/end" class="mdendf"><button class="clear">End my day</button></form></div>`;
+  }
+  if (w.ahead) {
+    return `<div class="mdend"><p>You ended ${esc(dayLabel(w.calendar))} at ${esc(clock(w.startedAt))}. This is <b>${esc(dayLabel(w.day))}</b>'s list, so you can get ahead.</p>${undo}</div>`;
+  }
+  const e = d.lastEnd;
+  if (e && e.at.getTime() === w.startedAt.getTime() && d.now.getTime() - e.at.getTime() < 12 * 3_600_000) {
+    return `<div class="mdend quiet"><p>${esc(dayLabel(e.day))} ended at ${esc(clock(e.at))}. Done today counts from then.</p>${undo}</div>`;
+  }
+  return "";
 }
 
 /**
@@ -383,7 +418,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
            <p class="hint" style="padding:0">Picks the most pressing piece of your work: late first, then due soonest, VOs a little ahead since the editors are waiting on them. Choose a time and it finds work that fits.</p>`
         : pick
           ? `<p class="freason">${pick.ahead ? "Everything due is done, so this is from Do ahead. " : ""}${esc(pick.reason)} · <b>${esc(fmtMin(pick.minutes))}</b></p>
-             <div class="wlist">${pick.items.map((i) => workRow(i, d.now, running, back)).join("")}</div>
+             <div class="wlist">${pick.items.map((i) => workRow(i, d.now, running, back, "", d.today)).join("")}</div>
              ${
                pick.items[0]?.id && running !== itemKey(pick.items[0])
                  ? `<form method="post" action="/timer/start" class="fstart"><input type="hidden" name="id" value="${pick.items[0].id}">${pick.items[0].task ? '<input type="hidden" name="kind" value="task">' : ""}<input type="hidden" name="back" value="${back}"><button class="clear">${PLAY_ICON} Start on it</button></form>`
@@ -399,10 +434,12 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     <div class="lrows">${d.loads.map((l) => loadBar(l, max, d.today, d.trackedToday)).join("")}</div>
   </section>`;
 
-  const todayList = `<section class="panel"><h2>Today <span class="sub">— ${d.required.length} to do · ${esc(fmtMin(leftToday))} left${
-    d.required.some((i) => whyNow(i, d.now).endsWith("late")) ? ` · <b class="late">${d.required.filter((i) => whyNow(i, d.now).endsWith("late")).length} late</b>` : ""
+  const w = d.workday;
+  const dayName = w && (w.carried || w.ahead) ? dayLabel(d.today) : "Today";
+  const todayList = `<section class="panel"><h2>${esc(dayName)} <span class="sub">— ${d.required.length} to do · ${esc(fmtMin(leftToday))} left${
+    d.required.some((i) => whyNow(i, d.now, d.today).endsWith("late")) ? ` · <b class="late">${d.required.filter((i) => whyNow(i, d.now, d.today).endsWith("late")).length} late</b>` : ""
   }</span></h2>
-    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? false)}</div>` : `<div class="empty">Everything due today is done. Do ahead is below.</div>`}
+    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? false, d.today)}</div>` : `<div class="empty">Everything due ${w && (w.carried || w.ahead) ? `on ${esc(dayName)}` : "today"} is done. Do ahead is below.</div>`}
   </section>`;
 
   const estDone = d.done.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0);
@@ -436,20 +473,21 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
   const ahead = `<section class="panel" id="ahead"><h2>Do ahead <span class="sub">— ${
     d.required.length ? "once today's is done" : "today's is done, so these are next"
   } · VOs first, since the editors can start once they're recorded</span></h2>
-    ${d.ahead.length ? `<div class="wlist">${d.ahead.map((i) => workRow(i, d.now, running, back)).join("")}</div>` : `<div class="empty">Nothing ahead yet.</div>`}
+    ${d.ahead.length ? `<div class="wlist">${d.ahead.map((i) => workRow(i, d.now, running, back, "", d.today)).join("")}</div>` : `<div class="empty">Nothing ahead yet.</div>`}
   </section>`;
 
   return layout(
     "My Day",
     shell,
-    `${pageHeader("My Day", `<a class="clear secondary" href="/vo">VO Queue</a>`)}
+    `${pageHeader("My Day", `<a class="clear secondary" href="/vo">VO Queue</a>${w && !w.ahead && !w.carried ? `<form method="post" action="/my-day/end" class="mdendf"><button class="clear">End my day</button></form>` : ""}`)}
+    ${dayBanner(d)}
     ${timerBar(d.running, back)}
     ${mydaySwitches(d.hidden ?? [], d.exploded ?? false)}
     <div class="stats">${tiles}</div>
     ${focus}
     <div class="mydaygrid">${todayList}${week}</div>
     ${doneList}
-    ${d.log ? timeLogPanel(d.log, d.today, d.now) : ""}
+    ${d.log ? timeLogPanel(d.log, w?.calendar ?? d.today, d.now) : ""}
     ${ahead}`,
   );
 }

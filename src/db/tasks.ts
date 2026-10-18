@@ -79,11 +79,13 @@ export async function openTasks(): Promise<Task[]> {
 }
 
 /** Tasks cleared today, in a zone. */
-export async function tasksDoneToday(zone: string): Promise<Task[]> {
-  const { rows } = await pool.query(
-    `SELECT * FROM tasks WHERE status = 'done' AND (done_at AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date ORDER BY done_at DESC`,
-    [zone],
-  );
+export async function tasksDoneToday(zone: string, since?: Date): Promise<Task[]> {
+  const { rows } = since
+    ? await pool.query("SELECT * FROM tasks WHERE status = 'done' AND done_at >= $1 ORDER BY done_at DESC", [since])
+    : await pool.query(
+        `SELECT * FROM tasks WHERE status = 'done' AND (done_at AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date ORDER BY done_at DESC`,
+        [zone],
+      );
   return rows.map(row);
 }
 

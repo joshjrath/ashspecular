@@ -2,10 +2,10 @@
  * Ash's own work: My Day and its switches, the timers, the VO Queue and
  * recording mode, and Forgotten work.
  */
-import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, shownTypes, typeOf, voQueue, whatNext } from "../work.js";
-import { ORG_TZ, dateIn, instantIn, shiftDate } from "../../parse/derive.js";
+import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
+import { ORG_TZ, instantIn, shiftDate } from "../../parse/derive.js";
 import { type StoredRecord, setStatus } from "../../db/records.js";
-import { clearTime, forgetUntracked, loggedBetween, minutesByDay, runningTimer, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
+import { clearTime, forgetUntracked, getDayEnd, loggedBetween, minutesSince, runningTimer, setDayEnd, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
 import { hasDatabase } from "../../config.js";
 import { localPath } from "../http.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "../pages/mywork.js";
@@ -37,9 +37,14 @@ const keepYear = { path: "/", sameSite: "lax" as const, httpOnly: true, maxAge: 
 export function registerMyWork(app: FastifyInstance): void {
   app.get<{ Querystring: { next?: string; budget?: string; log?: string } }>("/my-day", async (request, reply) => {
     const now = new Date();
-    const [s, loaded, tracked] = await Promise.all([shell("myday"), loadWork(now), minutesByDay(ORG_TZ, dateIn(ORG_TZ, now))]);
-    const today = dateIn(ORG_TZ, now);
-    const days = nextDays(7, now);
+    // The day My Day is on: it turns over when Ash presses End my day, not at midnight.
+    const ended = hasDatabase ? await getDayEnd() : null;
+    const workday = workdayOf(now, ended);
+    const today = workday.day;
+    const [s, loaded, tracked] = await Promise.all([
+      shell("myday"), loadWork(now, { today, since: workday.startedAt }), hasDatabase ? minutesSince(workday.startedAt) : Promise.resolve(0),
+    ]);
+    const days = nextDays(7, now, today);
     const offs = new Set(s.daysOff ?? []);
     // The category switches: only the kinds of work left on count anywhere on the page.
     const hidden = (request.cookies.myday_hide ?? "").split(".").filter((g) => MYDAY_GROUPS.some((x) => x.id === g));
@@ -55,12 +60,12 @@ export function registerMyWork(app: FastifyInstance): void {
     const vos = work.items.filter((i) => isVo(i.type));
     return reply.type("text/html").send(
       renderMyDay(s, {
-        now, today, required, ahead: doAhead(work.items, now, 10), done: work.doneItems,
-        loads: dayLoads(all, days, today), trackedToday: tracked.get(today) ?? 0, running: work.timer,
-        focus: asked ? whatNext(work.items, now, budget) : null, budget, asked,
+        now, today, workday, lastEnd: ended, required, ahead: doAhead(work.items, now, 10, today), done: work.doneItems,
+        loads: dayLoads(all, days, today), trackedToday: tracked, running: work.timer,
+        focus: asked ? whatNext(work.items, now, budget, today) : null, budget, asked,
         voLeft: { n: vos.length, minutes: vos.reduce((n, i) => n + remaining(i), 0) },
         hidden, exploded,
-        log: { range: logRange, days: await timeLog(logRange, today, shown), daysOff: s.daysOff ?? [] },
+        log: { range: logRange, days: await timeLog(logRange, workday.calendar, shown), daysOff: s.daysOff ?? [] },
       }),
     );
   });
@@ -69,6 +74,20 @@ export function registerMyWork(app: FastifyInstance): void {
     const show = Array.isArray(raw) ? raw : raw ? [raw] : [];
     const hide = MYDAY_GROUPS.map((g) => g.id).filter((g) => !show.includes(g));
     reply.setCookie("myday_hide", hide.join("."), keepYear);
+    return reply.redirect("/my-day");
+  });
+  // End my day: My Day moves on to the next day now, however late (or early) it is.
+  app.post("/my-day/end", async (_request, reply) => {
+    const now = new Date();
+    const ended = await getDayEnd();
+    const w = workdayOf(now, ended);
+    // A day not begun yet can't be ended: once today's ended, tomorrow waits for tomorrow.
+    if (!w.ahead) await setDayEnd({ day: w.day, at: now, prev: ended ? { day: ended.day, at: ended.at } : null });
+    return reply.redirect("/my-day");
+  });
+  app.post("/my-day/end/undo", async (_request, reply) => {
+    const ended = await getDayEnd();
+    if (ended) await setDayEnd(ended.prev ? { ...ended.prev, prev: null } : null);
     return reply.redirect("/my-day");
   });
   app.post<{ Body: { on?: string } }>("/my-day/explode", async (request, reply) => {

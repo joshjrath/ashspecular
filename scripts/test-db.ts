@@ -269,6 +269,18 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and running it again changes nothing", [again.missed.length, await rows(), await airs(old)], [0, after, [day(-5), day(4), day(8)]]);
 }
 
+// ── End my day: My Day moves on when Ash says ───────────────────────────────
+{
+  const { workdayOf } = await import("../src/web/work.js");
+  const before = workdayOf(new Date(), null);
+  const ended = await post("/my-day/end", {});
+  const saved = (await pool.query("SELECT value FROM app_settings WHERE key = 'myday_ended'")).rows[0]?.value as string | undefined;
+  const page = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  t("End my day: the day My Day was on is ended, and the page offers Undo", [ended.status, saved ? JSON.parse(saved).day : null, page.statusCode, page.body.includes('action="/my-day/end/undo"')], [302, before.day, 200, true]);
+  await post("/my-day/end/undo", {});
+  t("…Undo puts it back", (await pool.query("SELECT count(*)::int AS n FROM app_settings WHERE key = 'myday_ended'")).rows[0].n, 0);
+}
+
 // ── Network Overview: readings in, figures out ──────────────────────────────
 {
   const { recordViewReadings, saveChannelDay, listNetChannels } = await import("../src/db/network.js");

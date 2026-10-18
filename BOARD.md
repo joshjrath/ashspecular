@@ -665,6 +665,20 @@ can be changed.)
 
 **My Day** (sidebar) has:
 
+- **End my day** (top right): My Day's day doesn't turn over at midnight.
+  It turns over when you press End my day, so a late night isn't cut into
+  the next day's list before you're done.
+  - Past midnight, until you press it, the page says it's still the day
+    before (*It's past midnight, so this is still Saturday 10/17's list*),
+    with the button right there. If you forget, it moves on by itself at
+    noon.
+  - Pressed before midnight, My Day moves on to tomorrow's list so you can
+    get ahead; it says which day it's on.
+  - After you press it, **Done today** and **tracked today** count from that
+    moment. A note says when the day ended, with **Undo** for a press by
+    mistake.
+  - Only My Day follows it. Deadlines, late counts, the calendar and the
+    digest still go by the clock.
 - **Tiles:** today's load, what's left today, time tracked today, and VOs left
   with their time.
 - **What should I do next?** One press picks the most pressing piece: late

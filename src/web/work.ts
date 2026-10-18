@@ -120,8 +120,7 @@ export const itemKey = (i: WorkItem) => (i.id === null ? null : `${i.task ? "t" 
  * 5, …). An urgent one counts toward today even without a date, so it sits
  * beside the VOs; one with a date counts toward that day.
  */
-export function taskItem(t: Task, now: Date, spent = 0): WorkItem {
-  const today = dateIn(ORG_TZ, now);
+export function taskItem(t: Task, now: Date, spent = 0, today = dateIn(ORG_TZ, now)): WorkItem {
   const dueDay = t.due ? dateIn(ORG_TZ, t.due) : null;
   return {
     id: t.id,
@@ -281,15 +280,15 @@ export function dayLoads(items: WorkItem[], days: string[], today: string): DayL
  * How pressing a piece is, higher first: overdue before due, due soon before
  * due later, and a VO a little ahead of its peers — the team is waiting on it.
  */
-export function urgency(i: WorkItem, now: Date): number {
-  const hours = i.due ? (i.due.getTime() - now.getTime()) / 3_600_000 : i.day ? daysBetween(dateIn(ORG_TZ, now), i.day) * 24 + 12 : 24 * 30;
+export function urgency(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): number {
+  const hours = i.due ? (i.due.getTime() - now.getTime()) / 3_600_000 : i.day ? daysBetween(today, i.day) * 24 + 12 : 24 * 30;
   const base = hours < 0 ? 1000 + Math.min(-hours, 240) : 1000 - Math.min(hours, 999);
   const pri = i.task ? { urgent: 8, high: 2, normal: -4, low: -10 }[i.task.priority] : 0;
   return base + (isVo(i.type) ? 6 : i.type === "revision" ? 3 : 0) + pri;
 }
 
 /** Why a piece is where it is, in a few words. */
-export function whyNow(i: WorkItem, now: Date): string {
+export function whyNow(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): string {
   if (i.due) {
     const h = (i.due.getTime() - now.getTime()) / 3_600_000;
     const span = (x: number) => (Math.abs(x) < 1 ? "<1h" : Math.abs(x) < 24 ? `${Math.round(Math.abs(x))}h` : `${Math.round(Math.abs(x) / 24)}d`);
@@ -297,7 +296,7 @@ export function whyNow(i: WorkItem, now: Date): string {
     return `due in ${span(h)}`;
   }
   if (i.day) {
-    const d = daysBetween(dateIn(ORG_TZ, now), i.day);
+    const d = daysBetween(today, i.day);
     return d <= 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`;
   }
   return "no deadline";
@@ -323,16 +322,15 @@ export interface FocusPick {
  * order; when nothing required fits, the top one anyway (start it). When
  * everything required is done, the same from the Do Ahead queue.
  */
-export function whatNext(items: WorkItem[], now: Date, budget: number | null): FocusPick | null {
-  const today = dateIn(ORG_TZ, now);
+export function whatNext(items: WorkItem[], now: Date, budget: number | null, today = dateIn(ORG_TZ, now)): FocusPick | null {
   const open = items.filter((i) => i.id !== null && remaining(i) > 0);
-  const required = open.filter((i) => isRequired(i, today)).sort((a, b) => urgency(b, now) - urgency(a, now));
-  const pool = required.length ? required : doAhead(open, now, 50);
+  const required = open.filter((i) => isRequired(i, today)).sort((a, b) => urgency(b, now, today) - urgency(a, now, today));
+  const pool = required.length ? required : doAhead(open, now, 50, today);
   if (!pool.length) return null;
   const ahead = !required.length;
   if (!budget) {
     const top = pool[0]!;
-    return { items: [top], minutes: remaining(top), reason: `${ahead ? "Ahead: " : ""}${TYPE_BY_ID.get(top.type)!.label} · ${whyNow(top, now)}`, ahead };
+    return { items: [top], minutes: remaining(top), reason: `${ahead ? "Ahead: " : ""}${TYPE_BY_ID.get(top.type)!.label} · ${whyNow(top, now, today)}`, ahead };
   }
   const picked: WorkItem[] = [];
   let used = 0;
@@ -361,8 +359,7 @@ export function whatNext(items: WorkItem[], now: Date, budget: number | null): F
  * leads — once it's recorded the editors can start — then revisions, then the
  * rest; within each, the soonest first.
  */
-export function doAhead(items: WorkItem[], now: Date, limit = 12): WorkItem[] {
-  const today = dateIn(ORG_TZ, now);
+export function doAhead(items: WorkItem[], now: Date, limit = 12, today = dateIn(ORG_TZ, now)): WorkItem[] {
   // A high task is quick and someone's waiting, so it goes right after the VOs;
   // a task with no date and no hurry stays on the Tasks page.
   const rank = (i: WorkItem) => (i.task ? (i.task.priority === "high" ? 0.5 : 5) : { vo: 0, moviesvo: 0, revision: 1, gaming: 2, longform: 3, reading: 4, bits: 4, task: 5 }[i.type]);
@@ -440,9 +437,47 @@ export function forgottenWork(
   return out;
 }
 
-/** The days a page covers, from today. */
-export function nextDays(n: number, now = new Date()): string[] {
-  const today = dateIn(ORG_TZ, now);
+/**
+ * My Day's day doesn't turn over at midnight: Ash ends it herself (End my
+ * day), so a late night isn't cut into the next day's list. Until she does,
+ * the day before carries on past midnight, up to this hour (ET) the next
+ * day, in case she forgot.
+ */
+export const WORKDAY_CARRY_UNTIL = "12:00";
+
+/** The last day ended with End my day, and when. */
+export interface DayEnd {
+  day: string;
+  at: Date;
+}
+
+export interface Workday {
+  /** The day My Day is on. */
+  day: string;
+  /** The calendar day in ET. */
+  calendar: string;
+  /** When this workday began: the last End my day, else its midnight. Done today counts from here. */
+  startedAt: Date;
+  /** The day before, still going past midnight because it hasn't been ended. */
+  carried: boolean;
+  /** Today was ended early: My Day is on tomorrow already. */
+  ahead: boolean;
+}
+
+/** Which day My Day is on, from the last End my day. */
+export function workdayOf(now: Date, ended: DayEnd | null): Workday {
+  const calendar = dateIn(ORG_TZ, now);
+  const yesterday = shiftDate(calendar, -1);
+  const from = (day: string) => (ended && ended.day === shiftDate(day, -1) ? ended.at : instantIn(day, "00:00", ORG_TZ)!);
+  if (ended && ended.day >= calendar) return { day: shiftDate(calendar, 1), calendar, startedAt: ended.at, carried: false, ahead: true };
+  if ((!ended || ended.day < yesterday) && now.getTime() < instantIn(calendar, WORKDAY_CARRY_UNTIL, ORG_TZ)!.getTime()) {
+    return { day: yesterday, calendar, startedAt: from(yesterday), carried: true, ahead: false };
+  }
+  return { day: calendar, calendar, startedAt: from(calendar), carried: false, ahead: false };
+}
+
+/** The days a page covers, from today (or the day My Day is on). */
+export function nextDays(n: number, now = new Date(), today = dateIn(ORG_TZ, now)): string[] {
   return Array.from({ length: n }, (_, i) => shiftDate(today, i));
 }
 

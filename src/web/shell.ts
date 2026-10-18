@@ -79,16 +79,16 @@ async function refreshEstimates(): Promise<void> {
   setEstimates(await readEstimates());
 }
 
-export async function loadWork(now = new Date()) {
+export async function loadWork(now = new Date(), day?: { today: string; since: Date }) {
   await refreshEstimates().catch((err) => console.error("[estimates] couldn't read them:", err));
   const [open, done, running, revs, paused, tasks, tasksDone] = await Promise.all([
     openWork(),
-    doneToday(),
+    doneToday(day?.since),
     runningTimer(),
     revisionKeys(),
     pausedChannels().catch(() => new Map<string, Date>()),
     openTasks().catch(() => []),
-    tasksDoneToday(ORG_TZ).catch(() => []),
+    tasksDoneToday(ORG_TZ, day?.since).catch(() => []),
   ]);
   const [spent, taskSpent, untracked] = await Promise.all([
     minutesSpent([...open, ...done].map((r) => r.id)),
@@ -99,11 +99,11 @@ export async function loadWork(now = new Date()) {
   const items = open
     .map((r) => toItem(r, spent.get(r.id) ?? 0))
     .filter((i): i is WorkItem => i !== null)
-    .concat(tasks.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)));
+    .concat(tasks.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0, day?.today)));
   const doneItems = done
     .map((r) => toItem(r, spent.get(r.id) ?? 0))
     .filter((i): i is WorkItem => i !== null)
-    .concat(tasksDone.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0)))
+    .concat(tasksDone.map((t) => taskItem(t, now, taskSpent.get(t.id) ?? 0, day?.today)))
     .map((i) => (untracked.has(itemKey(i) ?? "") ? { ...i, untracked: true } : i));
   const norm = (t: string) => t.toLowerCase().replace(/\bv(?:er|ersion)?\.?\s*\d{1,2}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const forgotten = forgottenWork(open, now, {
