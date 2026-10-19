@@ -756,13 +756,19 @@ export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
  * videos, revisions, and daily batches from today on (a day gone by is gone).
  * Paused work isn't work right now.
  */
-export async function openWork(): Promise<StoredRecord[]> {
+export async function openWork(batchesFrom?: string): Promise<StoredRecord[]> {
+  // An unfinished daily batch drops off once its day is over: at midnight (Bits and
+  // Reading at 3 AM), or — for My Day, which passes `batchesFrom` — once Ash ends that day.
+  const expired = batchesFrom
+    ? "air_date < $1::date"
+    : `air_date < (CASE WHEN category IN ('bits', 'reading')
+         THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
+         ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END)`;
   const { rows } = await pool.query<Row>(
     `${SELECT} WHERE status = 'open' AND paused_at IS NULL
-       AND NOT (batch_no IS NOT NULL AND air_date < (CASE WHEN category IN ('bits', 'reading')
-         THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
-         ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))
+       AND NOT (batch_no IS NOT NULL AND ${expired})
      ORDER BY ${DUE} ASC NULLS LAST, created_at ASC LIMIT 800`,
+    batchesFrom ? [batchesFrom] : [],
   );
   return rows.map(hydrate);
 }

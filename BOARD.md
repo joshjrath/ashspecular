@@ -721,6 +721,10 @@ can be changed.)
     noon.
   - Pressed before midnight, My Day moves on to tomorrow's list so you can
     get ahead; it says which day it's on.
+  - Until you end it, the day keeps its own daily batches, past midnight too.
+    An unfinished batch used to drop off at midnight (3 AM for Bits and
+    Reading), with the next day's taking its place. Now the next day's
+    waits in Do ahead, marked *tomorrow*, until you end the day.
   - The day it moves on to gets its daily batches straight away (Specular's
     long-form, Bits and Reading), instead of at their usual opening time
     (12:05 AM, or 6 AM for Bits and Reading).

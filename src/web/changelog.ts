@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-19-batches-past-midnight",
+    title: "Daily batches stay in My Day past midnight",
+    changes: [
+      { text: "An unfinished daily batch used to leave My Day at midnight (3 AM for Bits and Reading), and the next day's took its place, even if you hadn't ended your day. Clearing it then cleared the next day's batch by mistake. Now your day keeps its own batches until you press End my day, and the next day's waits in Do ahead, marked tomorrow.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-10-18-calendar-snapshot",
     title: "Calendar snapshots: any stretch as an image",
     changes: [
