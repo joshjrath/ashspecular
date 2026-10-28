@@ -295,6 +295,17 @@ t("every page opens with a little of everything in it", await crawl(), []);
   await pool.query("UPDATE records SET status = 'open' WHERE id = $1", [late]);
   const carried = await loadWork(new Date(), { today: yesterday, since: new Date(Date.now() - 3_600_000) });
   const afterEnd = await loadWork(new Date(), { today, since: new Date() });
+  // Recurring's Today is the day My Day is on: today ended early, its ticks go on tomorrow's batches.
+  const { setDayEnd } = await import("../src/db/timers.js");
+  const tomorrowDay = shiftDate(today, 1);
+  await setDayEnd({ day: today, at: new Date(), prev: null });
+  await openBatchesFor(tomorrowDay);
+  const rec = await app.inject({ method: "GET", url: "/recurring", headers: { cookie } });
+  const todaySection = rec.body.slice(rec.body.indexOf("<h2>Today"), rec.body.indexOf("<h2>Today") + 6000);
+  t("Recurring: with today ended in My Day, Today is tomorrow's batches, says so, and ticks go on tomorrow's", [
+    rec.statusCode, rec.body.includes("You&#39;ve ended today in My Day") || rec.body.includes("You've ended today in My Day"), todaySection.includes(`value="${tomorrowDay}"`), todaySection.includes(`name="date" value="${today}"`),
+  ], [200, true, true, false]);
+  await setDayEnd(null);
   t("My Day: the day before's unfinished batch stays while that day is still on, and drops off once it's ended", [
     carried.items.some((i) => i.id === Number(late)), afterEnd.items.some((i) => i.id === Number(late)),
   ], [true, false]);

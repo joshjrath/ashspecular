@@ -11,7 +11,7 @@ import { usDate } from "../../parse/derive.js";
 /** The Recurring page: today's batches per channel, and working ahead. */
 export function renderRecurring(
   shell: Shell,
-  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; date?: string; paused?: boolean }> },
+  today: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; date?: string; paused?: boolean }>; note?: string },
   ahead: { date: string; rows: Array<{ channel: string; total: number; done: number; removed: number; paused?: boolean }> },
   list: StoredRecord[],
   strip: Array<{ date: string; channels: number; total: number; done: number }> = [],
@@ -157,6 +157,7 @@ export function renderRecurring(
     `${pageHeader("Recurring")}
     <div class="panel" style="margin-bottom:14px">
       <h2>Today · ${esc(pretty(today.date))}</h2>
+      ${today.note ? `<p class="hint" style="padding:0;margin:-4px 0 10px">${esc(today.note)} <a href="/my-day">My Day</a></p>` : ""}
       ${offNote(today.date, today.rows)}${sections(today.rows, today.date)}
     </div>
 

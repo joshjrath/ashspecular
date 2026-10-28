@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-28-recurring-follows-my-day",
+    title: "Finishing a batch after midnight no longer eats the next day's",
+    changes: [
+      { text: "Recurring's Today now follows My Day. Past midnight, before you've ended your day, it still shows that day's batches, so ticking uploads there finishes the batch you're working on, not the next day's.", href: "/recurring" },
+      { text: "In My Day, the next day's batches (opened by the clock at 12:05 AM and 6 AM) stay out of Today and Do ahead until you press End my day, and then they're all there.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-10-19-batches-past-midnight",
     title: "Daily batches stay in My Day past midnight",
     changes: [

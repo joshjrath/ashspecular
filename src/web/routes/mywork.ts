@@ -61,7 +61,10 @@ export function registerMyWork(app: FastifyInstance): void {
     const vos = work.items.filter((i) => isVo(i.type));
     return reply.type("text/html").send(
       renderMyDay(s, {
-        now, today, workday, lastEnd: ended, required, ahead: doAhead(work.items, now, 10, today), done: work.doneItems,
+        now, today, workday, lastEnd: ended, required,
+        // Still on the day before past midnight: the next day's batches (opened by the clock) wait for End my day.
+        ahead: doAhead(work.items.filter((i) => !(workday.carried && i.record?.batchNo && i.airDate && i.airDate > today)), now, 10, today),
+        done: work.doneItems,
         loads: dayLoads(all, days, today), trackedToday: tracked, running: work.timer,
         focus: asked ? whatNext(work.items, now, budget, today) : null, budget, asked,
         voLeft: { n: vos.length, minutes: vos.reduce((n, i) => n + remaining(i), 0) },

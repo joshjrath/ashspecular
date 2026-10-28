@@ -8,19 +8,26 @@ import { clearBatches, listBatchesOn } from "../../db/records.js";
 import { refererPath, safeDate } from "../http.js";
 import { renderRecurring } from "../pages/recurring.js";
 import { shiftDate } from "../../parse/derive.js";
+import { getDayEnd } from "../../db/timers.js";
+import { hasDatabase } from "../../config.js";
+import { workdayOf } from "../work.js";
 import { shell } from "../shell.js";
 import type { FastifyInstance } from "fastify";
 
 export function registerRecurring(app: FastifyInstance): void {
   // Today, and any day ahead — ?day= picks it, tomorrow by default.
   app.get<{ Querystring: { day?: string } }>("/recurring", async (request, reply) => {
-    const today = shortsDay();
-    const first = tomorrow();
+    // Today is the day My Day is on: past midnight before it's ended, still the day before;
+    // ended early, already tomorrow. So a tick here is on the batch My Day shows.
+    const w = workdayOf(new Date(), hasDatabase ? await getDayEnd() : null);
+    const myDay = w.carried || w.ahead ? w.day : null;
+    const today = myDay ?? shortsDay();
+    const first = myDay ? shiftDate(myDay, 1) : tomorrow();
     const picked = safeDate(request.query.day);
     const day = picked && picked >= first ? picked : first;
     const [s, todayNow, aheadRows, list, strip] = await Promise.all([
       shell("recurring"),
-      todayStatus(),
+      myDay ? batchStatus(myDay).then((rows) => ({ date: myDay, rows: rows.map((r) => ({ ...r, date: myDay })) })) : todayStatus(),
       batchStatus(day),
       listBatchesOn(today),
       batchDays(first, shiftDate(first, 13)),
@@ -30,7 +37,10 @@ export function registerRecurring(app: FastifyInstance): void {
       .send(
         renderRecurring(
           s,
-          { date: today, rows: todayNow.rows },
+          {
+            date: today, rows: todayNow.rows,
+            note: w.carried ? "It's past midnight, but you haven't ended your day in My Day, so these are still that day's batches. End my day moves this on." : w.ahead ? "You've ended today in My Day, so these are tomorrow's batches." : undefined,
+          },
           { date: day, rows: aheadRows },
           list,
           strip,
