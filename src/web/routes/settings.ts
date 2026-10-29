@@ -12,7 +12,7 @@ import { RAIL_ITEMS } from "../page.js";
 import { TASK_CATEGORY } from "../../tasks/parse.js";
 import { WORK_TYPES } from "../work.js";
 import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelEvery, setChannelUnits } from "../../db/channelsettings.js";
-import { EVERY_BOUNDS, UNITS_BOUNDS, canSetEvery, canSetUnits, defaultEvery } from "../targets.js";
+import { EVERY_BOUNDS, UNITS_BOUNDS, canSetEvery, canSetUnits, defaultEvery, everyFor } from "../targets.js";
 import { shortsDay } from "../../parse/derive.js";
 import { aiRunSummary } from "../../db/storylab.js";
 import { colourSources, distinctColour, sampleAvatars, sampledChannels, setChannelColour } from "../../jobs/avatars.js";
@@ -22,7 +22,9 @@ import { listOffShifted } from "../../db/records.js";
 import { renderSettings } from "../pages/settings.js";
 import { resetEstimates, saveEstimates } from "../../db/estimates.js";
 import { endEverySession, saveBoardPassword } from "../../db/password.js";
-import { cookieList, forgetGaps, forgetPaces, shell } from "../shell.js";
+import { cookieList, forgetGaps, forgetPaces, refreshOwnPaces, shell } from "../shell.js";
+import { keepUndo, respaceChannel } from "../moves.js";
+import type { MoveSnapshot } from "../../db/records.js";
 import type { FastifyInstance } from "fastify";
 
 const keysView = (q: { key?: string; keymsg?: string; keyerr?: string }) => {
@@ -159,7 +161,7 @@ export function registerSettings(app: FastifyInstance): void {
   });
 
   app.get<{
-    Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; pw?: string; pwerr?: string; key?: string; keymsg?: string; keyerr?: string; limits?: string };
+    Querystring: { saved?: string; colours?: string; estimates?: string; chmsg?: string; cherr?: string; undo?: string; pw?: string; pwerr?: string; key?: string; keymsg?: string; keyerr?: string; limits?: string };
   }>("/settings", async (request, reply) => {
     const [s, shifted, sources, settings] = await Promise.all([shell("settings"), listOffShifted(), colourSources(), listChannelSettings().catch(() => [])]);
     const sampled = new Set(sampledChannels());
@@ -197,6 +199,7 @@ export function registerSettings(app: FastifyInstance): void {
         coloursSaved:
           request.query.chmsg ? request.query.chmsg.slice(0, 300) : request.query.colours === "saved" ? "Saved." : request.query.colours === "read" ? "Read the avatars again." : "",
         channelError: (request.query.cherr ?? "").slice(0, 300),
+        channelUndo: /^[0-9a-f-]{36}$/.test(request.query.undo ?? "") ? request.query.undo! : "",
       }),
     );
   });
@@ -230,6 +233,7 @@ export function registerSettings(app: FastifyInstance): void {
     }
     // Upload frequencies: "" its category's, "0" no target, else every N days within EVERY_BOUNDS.
     let paced = 0;
+    const repaced: string[] = [];
     for (const c of CHANNELS.filter(canSetEvery)) {
       const raw = body[`e_${c.id}`];
       if (typeof raw !== "string") continue;
@@ -237,6 +241,7 @@ export function registerSettings(app: FastifyInstance): void {
       const every = raw === "" ? null : raw === "0" ? 0 : Number.isInteger(n) && n >= EVERY_BOUNDS.min && n <= EVERY_BOUNDS.max ? n : undefined;
       if (every === undefined || every === (c.every ?? null)) continue;
       await setChannelEvery(c.id, every);
+      repaced.push(c.id);
       paced += 1;
     }
     // Shorts uploads a day: the daily batch's size, from its current day on.
@@ -251,8 +256,34 @@ export function registerSettings(app: FastifyInstance): void {
       forgetGaps();
       forgetPaces();
     }
+    // A new frequency moves the channel's upcoming uploads to it, deadlines and all, with one Undo.
+    const respaced: string[] = [];
+    const snaps: MoveSnapshot[] = [];
+    if (repaced.length && hasDatabase) {
+      await refreshOwnPaces();
+      for (const id of repaced) {
+        const c = CHANNELS.find((x) => x.id === id);
+        const every = c ? everyFor(c.name) : null;
+        if (!c || !every) continue;
+        try {
+          const r = await respaceChannel(c.name, every);
+          if (!r.moved) continue;
+          snaps.push(...r.snaps);
+          respaced.push(`${r.moved} upcoming video${r.moved === 1 ? "" : "s"} on ${c.name} to every ${every} day${every === 1 ? "" : "s"}`);
+        } catch (err) {
+          console.error(`[settings] respacing ${c.name} failed:`, err);
+          failed.push(`${c.name}'s frequency is saved, but its upcoming videos couldn't be moved to it.`);
+        }
+      }
+      if (snaps.length) forgetGaps();
+    }
     const q = new URLSearchParams({ colours: "saved" });
-    if (renamed.length) q.set("chmsg", `${renamed.join("; ")} — everywhere on the board.`);
+    const said = [
+      renamed.length ? `${renamed.join("; ")} — everywhere on the board.` : "",
+      respaced.length ? `Respaced ${respaced.join("; ")}; their VO and script deadlines moved with them.` : "",
+    ].filter(Boolean);
+    if (said.length) q.set("chmsg", said.join(" "));
+    if (snaps.length) q.set("undo", keepUndo(snaps, said.join(" ")));
     if (failed.length) q.set("cherr", failed.join(" "));
     return reply.redirect(`/settings?${q.toString()}#colours`);
   });

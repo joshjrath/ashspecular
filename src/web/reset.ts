@@ -3,7 +3,11 @@
  * pending VOs, late and upcoming, are laid out a set number a day from the
  * start day, every day filled, and each upload moves to at least six days
  * after its VO (the studio's buffer), taking the rest of its channel's
- * schedule with it, spacing kept.
+ * schedule with it.
+ *
+ * Spacing: each channel's uploads stay at least its upload frequency apart
+ * (Settings → Channels, else its category's), or keep their own gaps where
+ * it has none; nothing moves earlier.
  *
  * Order: late VOs first, then the rest; each by channel average long-form
  * views, highest first, in rounds — every channel's first before any
@@ -63,6 +67,8 @@ export function planReset(o: {
   upcoming: ResetVo[];
   schedule: ResetVideo[];
   avgViews: Map<string, number>;
+  /** Each channel's upload frequency in days (Settings, or its category's): uploads are kept at least this far apart. */
+  every?: Map<string, number>;
 }): ResetPlan {
   const perDay = Math.max(RESET_BOUNDS.min, Math.min(RESET_BOUNDS.max, Math.round(o.perDay)));
   const lateIds = new Set(o.late.map((v) => v.id));
@@ -85,23 +91,59 @@ export function planReset(o: {
   };
   const queue = [...rounds(o.late), ...rounds(o.upcoming)];
 
-  // Pushes so far, per channel: a video moved `delta` days takes every video after it along.
-  const pushes = new Map<string, Array<{ id: number; air: string; delta: number }>>();
-  const shiftOf = (ch: string, air: string | null, self?: number) =>
-    air ? (pushes.get(ch) ?? []).filter((p) => p.air < air || p.id === self).reduce((n, p) => n + p.delta, 0) : 0;
-  /** A VO's own day as things stand: its due day, moved with its channel's pushes so far. */
-  const ownDay = (v: ResetVo) => shiftDate(v.voDay, shiftOf(v.channel, v.airDate));
+  // Each channel's uploads as they stand: in order, none earlier than it was, none before
+  // its VO's day + the buffer, and each at least the channel's frequency after the one
+  // before (a channel with none keeps its own gaps).
+  const needs = new Map<string, Map<number, string>>();
+  const schedOf = new Map<string, ResetVideo[]>();
+  for (const x of o.schedule) schedOf.set(x.channel, [...(schedOf.get(x.channel) ?? []), x]);
+  for (const list of schedOf.values()) list.sort((a, b) => a.airDate.localeCompare(b.airDate) || a.id - b.id);
+  const memo = new Map<string, Map<number, string>>();
+  const airsOf = (ch: string): Map<number, string> => {
+    const hit = memo.get(ch);
+    if (hit) return hit;
+    const out = new Map<number, string>();
+    const every = o.every?.get(ch);
+    let prevOld: string | null = null, prevNew: string | null = null;
+    for (const x of schedOf.get(ch) ?? []) {
+      let air = x.airDate;
+      const need = needs.get(ch)?.get(x.id);
+      if (need && need > air) air = need;
+      if (prevNew && prevOld) {
+        const gap = every && every > 0 ? every : daysBetween(prevOld, x.airDate);
+        const after = shiftDate(prevNew, gap);
+        if (after > air) air = after;
+      }
+      out.set(x.id, air);
+      prevOld = x.airDate;
+      prevNew = air;
+    }
+    memo.set(ch, out);
+    return out;
+  };
+  /** How many days a video has moved so far. */
+  const shiftOf = (ch: string, air: string | null, id: number) => {
+    const now = air ? airsOf(ch).get(id) : undefined;
+    return air && now ? daysBetween(air, now) : 0;
+  };
+  /** A VO's own day as things stand: its due day, moved as far as its upload has. */
+  const ownDay = (v: ResetVo) => shiftDate(v.voDay, shiftOf(v.channel, v.airDate, v.id));
   const placed = new Map<number, { day: string; newAir: string | null; kind: "late" | "moved" | "stays" }>();
   const assign = new Map<number, string>();
   const place = (v: ResetVo, day: string) => {
     const own = ownDay(v);
-    const cur = v.airDate ? shiftDate(v.airDate, shiftOf(v.channel, v.airDate)) : null;
+    if (v.airDate) {
+      const list = needs.get(v.channel) ?? new Map<number, string>();
+      list.set(v.id, shiftDate(day, VO_BUFFER_DAYS));
+      needs.set(v.channel, list);
+      memo.delete(v.channel);
+    }
     const need = shiftDate(day, VO_BUFFER_DAYS);
-    const delta = cur && cur < need ? daysBetween(cur, need) : 0;
-    if (v.airDate && delta > 0) pushes.set(v.channel, [...(pushes.get(v.channel) ?? []), { id: v.id, air: v.airDate, delta }]);
+    // Not on the schedule read for its channel: its own upload just goes to its VO + the buffer.
+    const newAir = v.airDate ? airsOf(v.channel).get(v.id) ?? (need > v.airDate ? need : v.airDate) : null;
     const kind = lateIds.has(v.id) ? "late" : day !== own ? "moved" : "stays";
     if (kind !== "stays") assign.set(v.id, day);
-    placed.set(v.id, { day, newAir: cur ? shiftDate(cur, delta) : null, kind });
+    placed.set(v.id, { day, newAir, kind });
   };
   // A channel's VOs go in their order: one waits for the one before it.
   const ready = (v: ResetVo) => {
@@ -128,10 +170,9 @@ export function planReset(o: {
     }
   }
 
-  // Every video that moves: its channel's pushes before it, and its own.
+  // Every video that moves: pushed by a VO, by the one before it, or to keep the channel's frequency.
   const moves: ResetPlan["moves"] = [];
   for (const x of o.schedule) {
-    if (!pushes.has(x.channel)) continue;
     const shift = shiftOf(x.channel, x.airDate, x.id);
     if (shift > 0) moves.push({ id: x.id, channel: x.channel, label: x.label, from: x.airDate, to: shiftDate(x.airDate, shift), shift });
   }

@@ -32,7 +32,7 @@ import { fetchScriptReport, readReport } from "../src/web/scriptcheck.js";
 import { config, configProblems, siteAddress } from "../src/config.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../src/web/ics.js";
 import { channelIdFromPage, parseFeed, readChannelInput, readLongFormFeed, readShortsFeed } from "../src/jobs/youtube.js";
-import { cadenceFor, dailyFor, usualGap } from "../src/web/cadence.js";
+import { cadenceFor, dailyFor, respacePlan, usualGap } from "../src/web/cadence.js";
 import { analyzeIdeas, checkIdea, formatOf, subjectsOf, type IdeaVideo } from "../src/web/ideas.js";
 import { compactViews, formatMultiple, scoreVideo, typicalViews, viewsAtAge, type VideoViews } from "../src/web/performance.js";
 import { breakoutMessage } from "../src/jobs/breakouts.js";
@@ -1760,7 +1760,7 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
     schedule: sched, avgViews: new Map(),
   });
   t("…late VOs first: one already due makes room and moves to the next working day (a day off gets none)", [...one.assign.entries()], [[1, "2026-10-19"], [2, "2026-10-20"], [9, "2026-10-22"]]);
-  t("…each upload at least six days after its VO, and the channel's next ones move with it, spacing kept", one.moves.map((m) => [m.id, m.from, m.to]), [[1, "2026-10-12", "2026-10-25"], [2, "2026-10-16", "2026-10-29"], [3, "2026-10-20", "2026-11-02"]]);
+  t("…each upload at least six days after its VO, and the channel's next ones move with it (no frequency set: spacing kept)", one.moves.map((m) => [m.id, m.from, m.to]), [[1, "2026-10-12", "2026-10-25"], [2, "2026-10-16", "2026-10-29"], [3, "2026-10-20", "2026-11-02"]]);
   // Started today with the next day already full of VOs due: no day is skipped, every day gets its 5.
   const due = (id: number, channel: string, voDay: string): import("../src/web/reset.js").ResetVo => ({ id, channel, title: `U${id}`, airDate: shiftDate(voDay, 6), voDay });
   const tomorrowFull = ["Specular Comics", "Specular Law", "Specular Manga", "Specular Horror", "Specular YOU"].map((ch, i) => due(700 + i, ch, "2026-10-19"));
@@ -1770,6 +1770,26 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
     busy.days[1]!.vos.map((v) => v.kind).sort(), [...busy.assign.entries()].filter(([id]) => id >= 700).every(([, d]) => d > "2026-10-19"), busy.days.flatMap((d) => d.vos).length,
   ], [["late", "late", "late", "stays", "stays"], true, 13]);
   t("…nothing late, nothing planned", planReset({ start: "2026-10-19", perDay: 5, daysOff: new Set(), late: [], upcoming: [], schedule: [], avgViews: new Map() }).assign.size, 0);
+  // The same channel posting every 7 days: its uploads stay a week apart, not their old 4.
+  const weekly = planReset({
+    start: "2026-10-19", perDay: 1, daysOff: new Set(),
+    late: [lateVo(1, "Specular Studios", "2026-10-12"), lateVo(2, "Specular Studios", "2026-10-16")], upcoming: [],
+    schedule: sched, avgViews: new Map(), every: new Map([["Specular Studios", 7]]),
+  });
+  t("…with an upload frequency set, the channel's uploads stay that far apart", weekly.moves.map((m) => [m.id, m.to]), [[1, "2026-10-25"], [2, "2026-11-01"], [3, "2026-11-08"]]);
+  t("…and each VO's new day shows its upload's", weekly.days.flatMap((d) => d.vos.map((v) => [v.id, v.newAir])), [[1, "2026-10-25"], [2, "2026-11-01"]]);
+}
+
+// Respacing to a new upload frequency: from the last upload on, never before the VO buffer, nothing uploaded moves.
+{
+  const vids = (...airs: string[]) => airs.map((air, i) => ({ id: i + 1, air }));
+  t("Respace: slower (every 7) spaces from the last upload, a week apart", respacePlan(vids("2026-10-24", "2026-10-28", "2026-11-01"), 7, "2026-10-20", "2026-10-26").map((m) => [m.id, m.to]), [[1, "2026-10-27"], [2, "2026-11-03"], [3, "2026-11-10"]]);
+  t("…faster (every 2) pulls them in, but no nearer than the VO buffer", respacePlan(vids("2026-10-27", "2026-11-03", "2026-11-10"), 2, "2026-10-20", "2026-10-26").map((m) => [m.id, m.from, m.to]), [[1, "2026-10-27", "2026-10-26"], [2, "2026-11-03", "2026-10-28"], [3, "2026-11-10", "2026-10-30"]]);
+  t("…one already inside the buffer isn't pulled in further; with no upload yet the first stays put", [
+    respacePlan(vids("2026-10-22", "2026-11-05"), 3, "2026-10-01", "2026-10-26").map((m) => [m.id, m.to]),
+    respacePlan(vids("2026-11-01", "2026-11-02"), 7, null, "2026-10-26").map((m) => [m.id, m.to]),
+  ], [[[2, "2026-10-26"]], [[2, "2026-11-08"]]]);
+  t("…already on the spacing: nothing moves", respacePlan(vids("2026-10-27", "2026-11-03"), 7, "2026-10-20", "2026-10-26").length, 0);
 }
 
 // Calendar snapshot: the layout follows the range, and outside text is escaped.

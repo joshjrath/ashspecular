@@ -39,7 +39,7 @@ export function renderReset(shell: Shell, v: ResetView): string {
   ].join("");
 
   const intro = `<section class="panel rsintro">
-    <p><b>A last resort for when work is far behind.</b> The pending VOs are laid out ${v.perDay} a day from ${esc(short(v.start))}, every day filled (days off skipped): every overdue VO gets a day, and VOs already due on a day stay if there's room, else move to the next day with room. Nothing is pulled earlier. Each video's upload moves to at least ${VO_BUFFER_DAYS} days after its VO, and the rest of that channel's schedule moves with it, spacing kept.</p>
+    <p><b>A last resort for when work is far behind.</b> The pending VOs are laid out ${v.perDay} a day from ${esc(short(v.start))}, every day filled (days off skipped): every overdue VO gets a day, and VOs already due on a day stay if there's room, else move to the next day with room. Nothing is pulled earlier. Each video's upload moves to at least ${VO_BUFFER_DAYS} days after its VO, and the rest of that channel's schedule moves with it, each upload at least the channel's upload frequency (Settings → Channels) after the one before.</p>
     <p>Late VOs go first, then ones already due where there's room. Channels with the most average long-form views go first, in rounds: every channel's first VO before any channel's second. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
     <form method="get" action="/calendar/reset" class="rsper"><label>VOs a day <select name="per" onchange="this.form.submit()">${Array.from({ length: RESET_BOUNDS.max - RESET_BOUNDS.min + 1 }, (_, i) => i + RESET_BOUNDS.min).map((n) => `<option${n === v.perDay ? " selected" : ""}>${n}</option>`).join("")}</select></label>
       <label>Start <select name="from" onchange="this.form.submit()"><option value="today"${v.from === "today" ? " selected" : ""}>Today, ${esc(short(v.starts.today))}: a fresh ${v.perDay} now</option><option value="tomorrow"${v.from === "tomorrow" ? " selected" : ""}>Tomorrow, ${esc(short(v.starts.tomorrow))}</option></select></label><noscript><button class="clear secondary">Show</button></noscript></form>
@@ -68,7 +68,7 @@ export function renderReset(shell: Shell, v: ResetView): string {
   const listed = new Set(p.days.flatMap((d) => d.vos.map((x) => x.id)));
   const others = p.moves.filter((m) => !listed.has(m.id));
   const rest = others.length
-    ? `<details class="panel rsrest"><summary><b>${others.length} more upload${others.length === 1 ? "" : "s"} move with their channels</b> <span class="sub">— later by the same days, so each channel keeps its spacing</span></summary>
+    ? `<details class="panel rsrest"><summary><b>${others.length} more upload${others.length === 1 ? "" : "s"} move with their channels</b> <span class="sub">— later, so each channel keeps its upload frequency</span></summary>
         <div class="rsrows">${others.map((m) => `<div class="rsrow" style="--ch:${channelColour(m.channel)}"><i></i><div class="rsmain"><a href="/r/${m.id}">${esc(m.label)}</a><small>${esc(m.channel)}</small></div><div class="rsair"><s>${esc(short(m.from))}</s> → <b>${esc(short(m.to))}</b> <small>+${m.shift}d</small></div></div>`).join("")}</div>
       </details>`
     : "";

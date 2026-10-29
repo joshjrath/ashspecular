@@ -152,3 +152,24 @@ export function dailyFor(channel: string, uploads: Date[], perDay: number, now: 
     last: uploads.length ? new Date(Math.max(...uploads.map((u) => u.getTime()))) : null,
   };
 }
+
+/**
+ * A channel's upcoming uploads laid out at a new frequency: the first `every`
+ * days after its last posted video (where it is, with none), each next one
+ * `every` days after that. One is never pulled earlier than `floor` (today +
+ * the VO buffer, so no VO lands in the past) unless it was sooner already.
+ * Only what changes comes back.
+ */
+export function respacePlan(videos: Array<{ id: number; air: string }>, every: number, lastPosted: string | null, floor: string): Array<{ id: number; from: string; to: string }> {
+  const list = [...videos].sort((a, b) => a.air.localeCompare(b.air) || a.id - b.id);
+  if (!list.length || every <= 0) return [];
+  let target = lastPosted ? shiftDate(lastPosted, every) : list[0]!.air;
+  const out: Array<{ id: number; from: string; to: string }> = [];
+  for (const v of list) {
+    const lowest = v.air < floor ? v.air : floor;
+    const to = target > lowest ? target : lowest;
+    if (to !== v.air) out.push({ id: v.id, from: v.air, to });
+    target = shiftDate(to, every);
+  }
+  return out;
+}

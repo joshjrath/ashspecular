@@ -67,6 +67,8 @@ export function renderSettings(
     newColour?: string;
     /** Why a rename or an addition didn't go through. */
     channelError?: string;
+    /** Undo for the uploads a frequency change just respaced. */
+    channelUndo?: string;
     /** The login password: when it was last changed here, and how the last change went; `ended` after Sign out everywhere else. */
     password?: { changedAt: Date | null; saved: boolean; error: string; ended?: boolean };
     /** API keys and daily limits set here instead of on Railway. */
@@ -119,7 +121,7 @@ export function renderSettings(
       ${daysOffStrip(data.daysOff, data.shifted)}
     </section>
     ${estimateSettings(data.estimatesSaved ?? false)}
-    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93") : ""}`,
+    ${data.colours ? colourSettings(data.colours, data.coloursSaved ?? "", data.channelError ?? "", data.newColour ?? "#8A8A93", data.channelUndo ?? "") : ""}`,
   );
 }
 
@@ -312,7 +314,7 @@ function estimateSettings(saved: boolean): string {
  * and Reading take theirs from their YouTube avatars. Below, a channel can be
  * added to any category.
  */
-function colourSettings(rows: ColourRow[], saved: string, error: string, newColour: string): string {
+function colourSettings(rows: ColourRow[], saved: string, error: string, newColour: string, undo: string): string {
   const why = (r: ColourRow) =>
     r.source === "hand"
       ? `set by hand <button class="linkbtn" name="reset" value="${esc(r.id)}">Reset</button>`
@@ -348,13 +350,14 @@ function colourSettings(rows: ColourRow[], saved: string, error: string, newColo
     <h2>Channels <span class="sub">— rename or recolour any channel: click a name to change it. A new name is used everywhere on the board straight away,
       past videos included, and a Discord message that still uses the old one finds it. It doesn't have to match the
       YouTube channel's own name. Bits and Reading wear their YouTube avatars' colours unless you pick one. A long-form channel's
-      <b>Uploads</b> sets how often it posts: Nothing assigned, Next to assign and Uploads' pace all go by it. A Shorts channel's
+      <b>Uploads</b> sets how often it posts: Nothing assigned, Next to assign, Uploads' pace and Future reset all go by it, and
+      changing it moves the channel's upcoming uploads to the new spacing, their VO and script deadlines with them (with Undo). A Shorts channel's
       <b>Uploads a day</b> is the size of its daily batch, from today's on.</span></h2>
     <div class="colgrid">${groups}</div>
     <div class="setsave">
       <button class="clear">Save channels</button>
       <button class="clear secondary" name="sample" value="1" formnovalidate title="Read every Bits and Reading avatar again now">Read the avatars again</button>
-      ${saved ? `<span class="saved" role="status">${esc(saved)}</span>` : ""}
+      ${saved ? `<span class="saved" role="status">${esc(saved)}${undo ? ` <button class="linkbtn" formaction="/moves/undo" name="token" value="${esc(undo)}" formnovalidate>Undo</button>` : ""}</span>` : ""}
       ${error ? `<span class="seterr" role="alert">${esc(error)}</span>` : ""}
     </div>
   </form>

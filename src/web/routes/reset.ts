@@ -14,7 +14,8 @@ import { isVo, workdayOf } from "../work.js";
 import { voFor } from "../moves.js";
 import { displayTitle } from "../page.js";
 import { formText } from "../http.js";
-import { forgetGaps, loadWork, shell } from "../shell.js";
+import { forgetGaps, loadWork, refreshOwnPaces, shell } from "../shell.js";
+import { everyFor } from "../targets.js";
 import { renderReset } from "../pages/reset.js";
 
 /** Undo stays offered this long after a reset. */
@@ -54,7 +55,10 @@ async function makePlan(perDay: number, from: StartFrom, now = new Date()) {
   ).flat().filter((r) => r.airDate && !r.uploadedAt).map((r) => ({ id: r.id, channel: r.channel!, airDate: r.airDate!, label: r.code ?? displayTitle(r) }));
   const starts = startDays(workday);
   const start = starts[from];
-  const plan = planReset({ start, perDay, daysOff: new Set(daysOff), late, upcoming, schedule, avgViews });
+  // Each channel's upload frequency: uploads in the plan stay at least that far apart.
+  await refreshOwnPaces();
+  const every = new Map([...new Set(schedule.map((x) => x.channel))].map((ch) => [ch, everyFor(ch)] as const).filter((e): e is [string, number] => e[1] !== null));
+  const plan = planReset({ start, perDay, daysOff: new Set(daysOff), late, upcoming, schedule, avgViews, every });
   return { plan, start, starts, workday, lateCount: late.length };
 }
 

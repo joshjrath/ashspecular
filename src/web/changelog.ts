@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-29-frequency-moves-uploads",
+    title: "A channel's upload frequency now moves its calendar",
+    changes: [
+      { text: "Settings → Channels: changing a channel's Uploads respaces its upcoming uploads to the new frequency, and their VO and script deadlines move with them. Undo is next to the saved message.", href: "/settings#colours" },
+      { text: "Future reset keeps each channel's uploads at least its upload frequency apart when it moves them.", href: "/calendar/reset" },
+    ],
+  },
+  {
     id: "2026-10-29-shorts-per-day-and-remove",
     title: "Shorts uploads a day in Settings, and × on My Day's batches",
     changes: [

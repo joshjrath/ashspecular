@@ -100,7 +100,9 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .setcols input, .setrow input { width: 17px; height: 17px; margin: 0; accent-color: var(--yellow); flex: none; }
 .setcols i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
 .setrow { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; }
-.setsave { display: flex; align-items: center; gap: 14px; }
+.setsave { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* Settings → Channels: a long saved message (a respace, with Undo) takes its own line */
+.setsave .saved, .setsave .seterr { flex: 1 1 240px; }
 .setsave .saved { color: #7EE2B8; font-weight: 700; font-size: 13.5px; }
 .settings .offstrip { margin: 12px 0 0; padding: 0; background: none; }
 .settings .offstrip .lbl { display: none; }

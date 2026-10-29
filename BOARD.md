@@ -328,8 +328,10 @@ plots the day the work is due.
     (their last ten long-form videos at least a week old), highest first, in
     rounds: every channel's first VO is placed before any channel's second.
   - Each video's upload moves to at least 6 days after its new VO day (the
-    buffer), and the rest of that channel's schedule moves later by the same
-    days, spacing kept.
+    buffer), and the rest of that channel's schedule moves later with it:
+    each upload at least the channel's upload frequency (Settings →
+    Channels, else its category's) after the one before. A channel with no
+    frequency keeps its own gaps.
   - The preview shows every VO on each day (late, moved there, or already
     due and staying) with its old and new upload days, the channel order,
     and every other upload that moves with its channel.
@@ -469,8 +471,15 @@ apart.
   and Movies except Specular's daily batch) has an **Uploads** choice:
   *Default* (Stories every 4 days, Gaming its usual pace), every 1 to 30
   days, or *No target*. Saved with *Save channels*, it applies at once to
-  Nothing assigned, Next to assign, the upload-gap notices and Uploads'
-  pace. *Default* goes back to the category's.
+  Nothing assigned, Next to assign, the upload-gap notices, Uploads' pace
+  and Future reset. *Default* goes back to the category's.
+  - A new frequency also **moves the channel's upcoming uploads** to it:
+    the first one after its last upload (or its first planned one, if it
+    hasn't posted yet) goes that many days on, and each after it that many
+    days after the one before. Each video's VO and script deadlines move
+    with its upload. Nothing is pulled nearer than 6 days from today (the VO
+    buffer), and uploaded, paused and batch videos stay put. The saved
+    message says how many moved, with **Undo** beside it (15 minutes).
 - **Change a Shorts channel's uploads a day:** each Bits and Reading channel
   has **Uploads a day** (1 to 50), the size of its daily batch. Saved with
   *Save channels*, it applies to its batch from its current day on (one

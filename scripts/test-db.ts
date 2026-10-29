@@ -286,6 +286,37 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and back to its category's", [everyFor("Specular FNAF"), (await pool.query("SELECT every_days FROM channel_settings WHERE id = $1", [fnaf.id])).rows[0]?.every_days], [4, null]);
 }
 
+// ── A new upload frequency respaces the channel's upcoming uploads, deadlines too, with Undo ──
+{
+  const { CHANNELS } = await import("../src/catalog.js");
+  const { saveRecord } = await import("../src/db/records.js");
+  const { derive } = await import("../src/parse/derive.js");
+  const force = CHANNELS.find((c) => c.name === "Specular Force")!;
+  const mk = async (code: string, air: string) => {
+    const record = derive({
+      kind: "assignment", code, title: `Pace ${code}`, category: "stories", channel: force.name, tag: null, air_date: air, stage: "script",
+      word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+    } as never, "", new Date());
+    return Number(await saveRecord(record, { messageId: `pace-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  };
+  const ids = [await mk("PC-1", shiftDate(today, 10)), await mk("PC-2", shiftDate(today, 12)), await mk("PC-3", shiftDate(today, 14))];
+  const state = async () => (await pool.query(
+    `SELECT to_char(air_date, 'YYYY-MM-DD') AS air, to_char(vo_due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS vo FROM records WHERE id = ANY($1::bigint[]) ORDER BY id`, [ids],
+  )).rows as Array<{ air: string; vo: string }>;
+  const before = await state();
+  const saved = await post("/settings/colours", { [`e_${force.id}`]: "7" });
+  const after = await state();
+  const page = await app.inject({ method: "GET", url: saved.location ?? "/settings", headers: { cookie } });
+  const token = new URL(saved.location ?? "/", "http://x").searchParams.get("undo") ?? "";
+  t("Settings: a new upload frequency moves the channel's upcoming uploads to it, each VO six days before, and says so with Undo", [
+    after.map((r) => r.air), after.map((r) => r.vo), page.body.includes("Respaced 2 upcoming videos on Specular Force to every 7 days"), page.body.includes(`name="token" value="${token}"`), token.length,
+  ], [[shiftDate(today, 10), shiftDate(today, 17), shiftDate(today, 24)], [shiftDate(today, 4), shiftDate(today, 11), shiftDate(today, 18)], true, true, 36]);
+  await post("/moves/undo", { token });
+  t("…Undo puts the uploads and deadlines back", JSON.stringify(await state()), JSON.stringify(before));
+  await pool.query("UPDATE records SET status = 'removed' WHERE id = ANY($1::bigint[])", [ids]);
+  await post("/settings/colours", { [`e_${force.id}`]: "" });
+}
+
 // ── A Shorts channel's uploads a day, and × on a daily batch in My Day ──────
 {
   const { CHANNELS } = await import("../src/catalog.js");
@@ -387,7 +418,8 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const start = w.ahead ? w.day : shiftDate(w.day, 1);
   const [a1, a2, a3] = after;
   t("…applied: each late VO on a day from tomorrow on, its upload six days after or later", [a1!.vo >= start, a3!.vo >= start, a1!.vo !== a3!.vo, a1!.air >= shiftDate(a1!.vo, 6), a3!.air >= shiftDate(a3!.vo, 6)], [true, true, true, true, true]);
-  t("…the channel's next upload moved at least as far, spacing kept or wider, never earlier", [daysBetweenTest(a1!.air, a2!.air) >= daysBetweenTest(before[0]!.air, before[1]!.air), a2!.vo >= before[1]!.vo, a2!.air >= shiftDate(a2!.vo, 6)], [true, true, true]);
+  const battlesEvery = (await import("../src/web/targets.js")).everyFor("Specular Battles") ?? daysBetweenTest(before[0]!.air, before[1]!.air);
+  t("…the channel's next upload moves too, kept its upload frequency after the one before, never earlier", [daysBetweenTest(a1!.air, a2!.air) >= battlesEvery, a2!.vo >= before[1]!.vo, a2!.air >= shiftDate(a2!.vo, 6)], [true, true, true]);
   const page = await app.inject({ method: "GET", url: "/calendar/reset", headers: { cookie } });
   t("…and Undo is offered", page.body.includes('action="/calendar/reset/undo"'), true);
   await post("/calendar/reset/undo", {});

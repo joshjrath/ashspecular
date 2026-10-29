@@ -49,7 +49,7 @@ src/
     http.ts           request/response helpers: safe redirects, safeDate, formText/formId, toCsv, wantsJson, originIsThisBoard
     html.ts           esc, safeUrl, safeHref, jsonForScript — the only ways outside text enters HTML
     auth.ts           the password check, session tokens, sign-in throttling
-    moves.ts          moving a record with the rest of its channel's schedule, and undo
+    moves.ts          moving a record with the rest of its channel's schedule, respacing a channel to a new upload frequency, and undo
     snapshot.ts       Calendar → Snapshot: a range of the calendar as one self-contained SVG poster (PNG made in the browser)
     reset.ts          Future reset's plan: overdue VOs spread a few a day, uploads after them (routes/pages reset.ts)
     work.ts           Ash's workload model (estimates, My Day, VO queue, forgotten work)

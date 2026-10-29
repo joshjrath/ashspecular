@@ -7,11 +7,11 @@
  *
  * Used by the calendar drag, a record's date box, and the daily posting check.
  */
-import { type CalendarMode, type MoveSnapshot, type StoredRecord, channelSchedule, moveAir, moveDue, snapshotMoves } from "../db/records.js";
+import { type CalendarMode, type MoveSnapshot, type StoredRecord, channelSchedule, lastPostedDay, moveAir, moveDue, snapshotMoves } from "../db/records.js";
 import { type Cascade, cascadeText, planCascade } from "./cascade.js";
 import { DEADLINE_TIME, ORG_TZ, VO_BUFFER_DAYS, dateIn, instantIn, shiftDate } from "../parse/derive.js";
 import { type Db, inTransaction } from "../db/pool.js";
-import { dayOf, daysBetween } from "./cadence.js";
+import { dayOf, daysBetween, respacePlan } from "./cadence.js";
 import { displayTitle } from "./page.js";
 import { randomUUID } from "node:crypto";
 
@@ -65,7 +65,7 @@ export function takeUndo(token: string) {
   undos.delete(token);
   return kept;
 }
-function keepUndo(snaps: MoveSnapshot[], text: string): string {
+export function keepUndo(snaps: MoveSnapshot[], text: string): string {
   for (const [k, v] of undos) if (Date.now() - v.at > UNDO_MS) undos.delete(k);
   const token = randomUUID();
   undos.set(token, { at: Date.now(), snaps, text });
@@ -116,4 +116,23 @@ export async function moveWithRest(
   // Posting moves take each video's deadlines along (moveAir), so the note says so.
   const text = plan.moves.length ? `${cascadeText(record.channel!, plan)}${mode === "posting" ? " Their VO and script deadlines moved with them." : ""}` : "";
   return { ok: true, plan, undo: plan.moves.length ? keepUndo(snaps, text) : null, text };
+}
+
+/**
+ * A channel's upcoming uploads respaced to a new upload frequency (see
+ * respacePlan), each taking its VO and script deadlines along. Uploaded,
+ * paused and batch videos stay put. All or nothing; returns what moved and
+ * how it was, for Undo.
+ */
+export async function respaceChannel(channel: string, every: number): Promise<{ moved: number; snaps: MoveSnapshot[] }> {
+  const today = dateIn(ORG_TZ);
+  const [schedule, last] = await Promise.all([channelSchedule(channel, "posting", today), lastPostedDay(channel, today)]);
+  const videos = schedule.filter((r) => r.airDate && !r.uploadedAt).map((r) => ({ id: r.id, air: r.airDate! }));
+  const plan = respacePlan(videos, every, last, shiftDate(today, VO_BUFFER_DAYS));
+  if (!plan.length) return { moved: 0, snaps: [] };
+  const snaps = await snapshotMoves(plan.map((m) => m.id));
+  await inTransaction(async (db) => {
+    for (const m of plan) await moveAir(m.id, m.to, voFor(m.to), db, daysBetween(m.from, m.to));
+  });
+  return { moved: plan.length, snaps };
 }

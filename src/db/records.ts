@@ -269,6 +269,18 @@ export async function clearResetUndo(): Promise<void> {
   await pool.query("DELETE FROM app_settings WHERE key = 'calendar_reset_undo'");
 }
 
+/** A channel's last posted video before a day: its latest past air date, or latest upload, whichever is later. */
+export async function lastPostedDay(channel: string, before: string): Promise<string | null> {
+  const { rows } = await pool.query<{ d: string | null }>(
+    `SELECT to_char(GREATEST(
+       (SELECT max(air_date) FROM records WHERE channel = $1 AND batch_no IS NULL AND air_date < $2::date AND status <> 'removed'),
+       (SELECT max((published_at AT TIME ZONE '${ORG_TZ}')::date) FROM uploads WHERE channel = $1 AND board AND (published_at AT TIME ZONE '${ORG_TZ}')::date < $2::date)
+     ), 'YYYY-MM-DD') AS d`,
+    [channel, before],
+  );
+  return rows[0]?.d ?? null;
+}
+
 /** Daily batches per day over a range (they're counted on the calendar snapshot, not drawn one by one). */
 export async function batchCountsByDay(from: string, to: string): Promise<Map<string, number>> {
   const { rows } = await pool.query<{ day: string; n: string }>(
