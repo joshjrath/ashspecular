@@ -465,6 +465,12 @@ apart.
   name doesn't have to match the YouTube channel's own name.
 - **Recolour one** with its picker. A hand-set colour always wins; *Reset*
   goes back. *Read the avatars again* re-samples them now.
+- **Change how often it posts:** each long-form channel (Stories, Gaming,
+  and Movies except Specular's daily batch) has an **Uploads** choice:
+  *Default* (Stories every 4 days, Gaming its usual pace), every 1 to 30
+  days, or *No target*. Saved with *Save channels*, it applies at once to
+  Nothing assigned, Next to assign, the upload-gap notices and Uploads'
+  pace. *Default* goes back to the category's.
 - **Add a channel:** give it a name, a category and a colour (one no other
   channel wears is picked for you). A Bits or Reading channel also takes how
   many uploads it posts a day, and opens that daily batch like the others.

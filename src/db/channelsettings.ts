@@ -62,6 +62,7 @@ const settingOf = (r: Record<string, unknown>): ChannelSetting => ({
   colour: (r.colour as string) ?? null,
   units: r.units === null || r.units === undefined ? null : Number(r.units),
   previous: (r.previous as string[]) ?? [],
+  every: r.every_days === null || r.every_days === undefined ? null : Number(r.every_days),
 });
 
 export async function listChannelSettings(): Promise<ChannelSetting[]> {
@@ -209,4 +210,19 @@ export async function removeChannel(id: string): Promise<{ ok: true } | { error:
   await pool.query("DELETE FROM channel_colours WHERE channel = $1", [channel.name]);
   await loadChannelSettings();
   return { ok: true };
+}
+
+/**
+ * A channel's upload frequency: every N days (EVERY_BOUNDS), 0 for no target,
+ * null for its category's. Kept on its settings row, made for a catalog
+ * channel that has none yet; every process picks it up within the minute.
+ */
+export async function setChannelEvery(id: string, every: number | null): Promise<void> {
+  const ch = CHANNELS.find((c) => c.id === id);
+  if (!ch) return;
+  await pool.query(
+    `INSERT INTO channel_settings (id, name, every_days) VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET every_days = $3, updated_at = now()`,
+    [id, ch.name, every],
+  );
 }

@@ -270,6 +270,22 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and running it again changes nothing", [again.missed.length, await rows(), await airs(old)], [0, after, [day(-5), day(4), day(8)]]);
 }
 
+// ── A channel's upload frequency, set in Settings ───────────────────────────
+{
+  const { CHANNELS } = await import("../src/catalog.js");
+  const { everyFor } = await import("../src/web/targets.js");
+  const fnaf = CHANNELS.find((c) => c.name === "Specular FNAF")!;
+  const page = await app.inject({ method: "GET", url: "/settings", headers: { cookie } });
+  const saved = await post("/settings/colours", { [`e_${fnaf.id}`]: "7" });
+  const row = (await pool.query("SELECT every_days FROM channel_settings WHERE id = $1", [fnaf.id])).rows[0]?.every_days;
+  const after = await app.inject({ method: "GET", url: "/settings", headers: { cookie } });
+  t("Settings: a long-form channel's Uploads frequency is offered, saved, and used straight away", [
+    page.body.includes(`name="e_${fnaf.id}"`), page.body.includes("Default: every 4 days"), saved.status, row, everyFor("Specular FNAF"), after.body.includes('<option value="7" selected>'),
+  ], [true, true, 302, 7, 7, true]);
+  await post("/settings/colours", { [`e_${fnaf.id}`]: "" });
+  t("…and back to its category's", [everyFor("Specular FNAF"), (await pool.query("SELECT every_days FROM channel_settings WHERE id = $1", [fnaf.id])).rows[0]?.every_days], [4, null]);
+}
+
 // ── End my day: My Day moves on when Ash says ───────────────────────────────
 {
   const { workdayOf } = await import("../src/web/work.js");

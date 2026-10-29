@@ -11,7 +11,8 @@ import { KEY_DEFS, LIMIT_DEFS, keyStates, keysInEffect, mask, setKey, setLimit, 
 import { RAIL_ITEMS } from "../page.js";
 import { TASK_CATEGORY } from "../../tasks/parse.js";
 import { WORK_TYPES } from "../work.js";
-import { addChannel, channelUse, listChannelSettings, removeChannel, renameChannel } from "../../db/channelsettings.js";
+import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelEvery } from "../../db/channelsettings.js";
+import { EVERY_BOUNDS, canSetEvery, defaultEvery } from "../targets.js";
 import { aiRunSummary } from "../../db/storylab.js";
 import { colourSources, distinctColour, sampleAvatars, sampledChannels, setChannelColour } from "../../jobs/avatars.js";
 import { config, hasDatabase } from "../../config.js";
@@ -20,7 +21,7 @@ import { listOffShifted } from "../../db/records.js";
 import { renderSettings } from "../pages/settings.js";
 import { resetEstimates, saveEstimates } from "../../db/estimates.js";
 import { endEverySession, saveBoardPassword } from "../../db/password.js";
-import { cookieList, shell } from "../shell.js";
+import { cookieList, forgetGaps, forgetPaces, shell } from "../shell.js";
 import type { FastifyInstance } from "fastify";
 
 const keysView = (q: { key?: string; keymsg?: string; keyerr?: string }) => {
@@ -183,6 +184,7 @@ export function registerSettings(app: FastifyInstance): void {
             id: c.id, name: c.name, category: c.category, colour: c.color, source: src?.source ?? "catalog",
             sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
             previous: set?.previous ?? [], added: Boolean(set?.added), removable: unused.has(c.id), daily: c.recurring?.units ?? null,
+            every: canSetEvery(c) ? { value: c.every ?? null, fallback: defaultEvery(c.category) } : null,
           };
         }),
         newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
@@ -223,6 +225,22 @@ export function registerSettings(app: FastifyInstance): void {
     for (const c of CHANNELS) {
       const v = body[`c_${c.id}`];
       if (v && /^#[0-9a-f]{6}$/i.test(v) && v.toUpperCase() !== c.color.toUpperCase()) await setChannelColour(c.name, v);
+    }
+    // Upload frequencies: "" its category's, "0" no target, else every N days within EVERY_BOUNDS.
+    let paced = 0;
+    for (const c of CHANNELS.filter(canSetEvery)) {
+      const raw = body[`e_${c.id}`];
+      if (typeof raw !== "string") continue;
+      const n = Number(raw);
+      const every = raw === "" ? null : raw === "0" ? 0 : Number.isInteger(n) && n >= EVERY_BOUNDS.min && n <= EVERY_BOUNDS.max ? n : undefined;
+      if (every === undefined || every === (c.every ?? null)) continue;
+      await setChannelEvery(c.id, every);
+      paced += 1;
+    }
+    if (paced) {
+      await loadChannelSettings();
+      forgetGaps();
+      forgetPaces();
     }
     const q = new URLSearchParams({ colours: "saved" });
     if (renamed.length) q.set("chmsg", `${renamed.join("; ")} — everywhere on the board.`);

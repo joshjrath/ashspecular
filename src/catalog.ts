@@ -104,6 +104,8 @@ export interface Channel {
   };
   /** Names it had before a rename in Settings, as they were written. */
   formerly?: string[];
+  /** Its upload frequency set in Settings (every N days; 0 for no target). Unset: its category's. */
+  every?: number;
   /**
    * Matched only by its exact name or an alias, never by appearing inside a
    * longer message. The main channel is called just "Specular", which is in
@@ -196,6 +198,8 @@ export interface ChannelSetting {
   units: number | null;
   /** Names it had before: a message that uses one still finds it. */
   previous: string[];
+  /** Its upload frequency set in Settings: every N days, 0 for no target, null for its category's. */
+  every?: number | null;
 }
 
 /**
@@ -212,6 +216,7 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
     c.name = o.name;
     c.aliases = o.aliases ? [...o.aliases] : undefined;
     c.formerly = undefined;
+    c.every = undefined;
   }
   addedColours.clear();
   for (const s of settings) {
@@ -221,6 +226,7 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
     if (known) {
       if (s.added) continue;
       known.name = name;
+      if (s.every != null && s.every >= 0) known.every = s.every;
       continue;
     }
     if (!s.added || !s.category || !CATEGORY_IDS.includes(s.category)) continue;
@@ -232,6 +238,7 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
       color: colour,
       category: s.category,
       ...(s.units && s.units > 0 ? { recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00", units: Math.min(50, Math.round(s.units)) } } : {}),
+      ...(s.every != null && s.every >= 0 ? { every: s.every } : {}),
     };
     const last = CHANNELS.map((c) => c.category).lastIndexOf(s.category);
     if (last >= 0) CHANNELS.splice(last + 1, 0, ch);

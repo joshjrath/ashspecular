@@ -33,6 +33,24 @@ export interface ColourRow {
   removable?: boolean;
   /** A daily batch's uploads, for a channel that opens one. */
   daily?: number | null;
+  /** A long-form channel's upload frequency: what's set (days, 0 for none, null for its category's), and what that default is. */
+  every?: { value: number | null; fallback: string } | null;
+}
+
+/** The frequencies offered, in days; one set by hand that isn't among them is offered too. */
+const EVERY_CHOICES = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 28, 30];
+
+/** A long-form channel's upload frequency, as a select: its category's, every N days, or no target. */
+function everySelect(r: ColourRow): string {
+  if (!r.every) return "";
+  const v = r.every.value;
+  const days = [...new Set([...EVERY_CHOICES, ...(v && v > 0 ? [v] : [])])].sort((a, b) => a - b);
+  const opt = (value: string, label: string, on: boolean) => `<option value="${value}"${on ? " selected" : ""}>${esc(label)}</option>`;
+  return `<label class="every">Uploads <select name="e_${esc(r.id)}" aria-label="${esc(r.name)}'s upload frequency">
+    ${opt("", `Default: ${r.every.fallback}`, v === null)}
+    ${days.map((d) => opt(String(d), d === 1 ? "Every day" : `Every ${d} days`, v === d)).join("")}
+    ${opt("0", "No target", v === 0)}
+  </select></label>`;
 }
 
 export function renderSettings(
@@ -315,6 +333,7 @@ function colourSettings(rows: ColourRow[], saved: string, error: string, newColo
           <span class="src">${why(r)}${r.added ? ` · added here${r.daily ? ` · ${r.daily} a day` : ""}` : ""}${
             r.previous?.length ? ` · <span title="A Discord message that uses an earlier name still finds it">was ${esc(r.previous.join(", "))}</span>` : ""
           }${r.removable ? ` <button class="linkbtn" formaction="/settings/channels/remove" name="remove" value="${esc(r.id)}" formnovalidate onclick="return confirm('Take ${esc(r.name).replace(/'/g, "")} off the board?')">Take off</button>` : ""}</span>
+          ${everySelect(r)}
         </div>`,
       )
       .join("")}</fieldset>`;
@@ -323,7 +342,8 @@ function colourSettings(rows: ColourRow[], saved: string, error: string, newColo
   return `<form class="panel setgroup settings colourset" id="colours" method="post" action="/settings/colours" style="margin-top:14px">
     <h2>Channels <span class="sub">— rename or recolour any channel: click a name to change it. A new name is used everywhere on the board straight away,
       past videos included, and a Discord message that still uses the old one finds it. It doesn't have to match the
-      YouTube channel's own name. Bits and Reading wear their YouTube avatars' colours unless you pick one.</span></h2>
+      YouTube channel's own name. Bits and Reading wear their YouTube avatars' colours unless you pick one. A long-form channel's
+      <b>Uploads</b> sets how often it posts: Nothing assigned, Next to assign and Uploads' pace all go by it.</span></h2>
     <div class="colgrid">${groups}</div>
     <div class="setsave">
       <button class="clear">Save channels</button>

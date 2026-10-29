@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-29-channel-frequency",
+    title: "Set how often each channel posts",
+    changes: [
+      { text: "Settings → Channels: each long-form channel has an Uploads choice: its default (Stories every 4 days, Gaming its usual pace), every 1 to 30 days, or no target.", href: "/settings#colours" },
+      { text: "Nothing assigned, Next to assign, the upload-gap notices and Uploads' pace all follow it straight away." },
+    ],
+  },
+  {
     id: "2026-10-28-recurring-follows-my-day",
     title: "Finishing a batch after midnight no longer eats the next day's",
     changes: [

@@ -42,10 +42,24 @@ export function setOwnPaces(paces: Map<string, number | null>): void {
   ownPaces = new Map(paces);
 }
 
+/** A channel's upload frequency as set in Settings, in days (0 there means no target). */
+export const EVERY_BOUNDS = { min: 1, max: 60 };
+
+/** Whether a channel's frequency can be set in Settings: long form, and not a daily batch (Specular's is one a day). */
+export function canSetEvery(channel: { category: CategoryId; recurring?: unknown }): boolean {
+  return formatFor(channel.category) === "long" && !channel.recurring;
+}
+
+/** What a channel follows when nothing's set in Settings, in words. */
+export function defaultEvery(category: CategoryId): string {
+  const t = UPLOAD_TARGETS[category];
+  return t.kind === "every" ? `every ${t.days} days` : t.kind === "own" ? "its usual pace" : t.kind === "daily" ? "daily" : "no target";
+}
+
 /** Whether a channel is held to its own usual pace rather than a set one. */
 export function isOwnPace(channel: string): boolean {
   const ch = CHANNELS.find((c) => c.name === channel);
-  return Boolean(ch && !isLongFormRecurring(ch) && UPLOAD_TARGETS[ch.category].kind === "own");
+  return Boolean(ch && !isLongFormRecurring(ch) && ch.every === undefined && UPLOAD_TARGETS[ch.category].kind === "own");
 }
 
 /** The channels whose target is their own pace. */
@@ -55,13 +69,16 @@ export function ownPaceChannels(): string[] {
 
 /**
  * A long-form channel's own target, in days between uploads, or null for
- * none: a channel with a daily long-form batch (Specular) is one a day; a
- * Gaming channel its own usual gap; otherwise its category's target.
+ * none: a channel with a daily long-form batch (Specular) is one a day; one
+ * set in Settings, that; a Gaming channel its own usual gap; otherwise its
+ * category's target.
  */
 export function everyFor(channel: string): number | null {
   const ch = CHANNELS.find((c) => c.name === channel);
   if (!ch) return null;
   if (isLongFormRecurring(ch)) return 1;
+  // Set in Settings: every N days, or 0 for none.
+  if (ch.every !== undefined) return ch.every > 0 ? ch.every : null;
   const t = UPLOAD_TARGETS[ch.category];
   if (t.kind === "own") return ownPaces.get(channel) ?? null;
   return t.kind === "every" ? t.days : null;

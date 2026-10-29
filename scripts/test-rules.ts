@@ -1575,6 +1575,17 @@ t("…with no target until it's read", everyFor("Specular Minecraft"), null);
 setOwnPaces(new Map([["Specular Minecraft", 3], ["Specular Roblox", null]]));
 t("…then its usual gap, like a Stories channel's four days", [everyFor("Specular Minecraft"), everyFor("Specular Roblox"), everyFor("Specular FNAF")], [3, null, 4]);
 t("…so a gap past it is late, and an empty day is Nothing assigned", [cadenceFor("Specular Minecraft", [gAt("2026-09-20")], gAt("2026-09-25"), everyFor("Specular Minecraft")!).state, channelGaps("Specular Minecraft", everyFor("Specular Minecraft")!, ["2026-09-24"], "2026-09-26").map((g) => g.date)], ["behind", ["2026-09-27", "2026-09-30", "2026-10-03"]]);
+{
+  // Upload frequency set in Settings wins over the category's (and over a Gaming channel's own pace).
+  const fnaf = CHANNELS.find((c) => c.name === "Specular FNAF")!;
+  const mc = CHANNELS.find((c) => c.name === "Specular Minecraft")!;
+  fnaf.every = 7; mc.every = 2;
+  const set = [everyFor("Specular FNAF"), everyFor("Specular Minecraft"), isOwnPace("Specular Minecraft"), channelGaps("Specular FNAF", everyFor("Specular FNAF")!, ["2026-09-24"], "2026-09-26").map((g) => g.date)];
+  fnaf.every = 0;
+  const none = everyFor("Specular FNAF");
+  fnaf.every = undefined; mc.every = undefined;
+  t("upload frequency set in Settings: every 7 days for a Stories channel, 2 for a Gaming one (not its own pace), 0 none; unset, back to the category's", [...set, none, everyFor("Specular FNAF"), isOwnPace("Specular Minecraft")], [7, 2, false, ["2026-10-01"], null, 4, true]);
+}
 t("Gaming says what it's held to", describeTarget("gaming").includes("its own usual gap"), true);
 
 const gv = (channel: string, title: string, day: string, multiple: number | null): SeriesVideo =>

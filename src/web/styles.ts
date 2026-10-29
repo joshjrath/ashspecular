@@ -120,6 +120,8 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .colrow .nm { font-weight: 700; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .colrow .src { color: var(--ink3); font-size: 12px; }
 .colrow .src a { color: #9FDDF4; }
+.colrow .every { grid-column: 2; display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--ink3); font-size: 12px; }
+.colrow .every select { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; font-size: 12px; max-width: 100%; }
 .colrow .chname { min-width: 0; width: 100%; padding: 4px 8px; margin: 0 0 2px -8px; border: 1px solid transparent; border-radius: 8px;
   border-bottom: 1px dashed #4A4A55; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 13.5px; }
 .colrow .chname:hover { border-color: var(--line); }
