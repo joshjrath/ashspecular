@@ -167,7 +167,7 @@ export const CHANNELS: Channel[] = [
 ];
 
 /** Each catalog channel as written above, before any rename, addition or colour set on the board. */
-const ORIGINAL = new Map(CHANNELS.map((c) => [c.id, { name: c.name, aliases: c.aliases ? [...c.aliases] : undefined, color: c.color }]));
+const ORIGINAL = new Map(CHANNELS.map((c) => [c.id, { name: c.name, aliases: c.aliases ? [...c.aliases] : undefined, color: c.color, units: c.recurring?.units }]));
 
 /** An added channel's own colour, picked when it was added. */
 const addedColours = new Map<string, string>();
@@ -217,6 +217,7 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
     c.aliases = o.aliases ? [...o.aliases] : undefined;
     c.formerly = undefined;
     c.every = undefined;
+    if (c.recurring && o.units !== undefined) c.recurring.units = o.units;
   }
   addedColours.clear();
   for (const s of settings) {
@@ -227,6 +228,8 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
       if (s.added) continue;
       known.name = name;
       if (s.every != null && s.every >= 0) known.every = s.every;
+      // A daily batch's uploads, changed in Settings.
+      if (known.recurring && s.units != null && s.units > 0) known.recurring.units = Math.min(50, Math.round(s.units));
       continue;
     }
     if (!s.added || !s.category || !CATEGORY_IDS.includes(s.category)) continue;

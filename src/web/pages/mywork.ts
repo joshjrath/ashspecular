@@ -83,7 +83,12 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
             on
               ? `<form method="post" action="/timer/stop"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn on" title="Stop the timer">${PAUSE_ICON}</button></form>`
               : `<form method="post" action="/timer/start"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Start the timer">${PLAY_ICON}</button></form>`
-          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>`
+          }<form method="post" action="/timer/done"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="${esc(back)}"><button class="wbtn ok" title="Done — clear it">✓</button></form>${
+            // A daily batch that isn't happening today can be taken off the day.
+            i.record?.batchNo
+              ? `<form method="post" action="/my-day/remove" onsubmit="return confirm('Remove this from the day? It goes to Removed, where you can put it back.')"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn x" title="Remove it from the day">×</button></form>`
+              : ""
+          }`
     }</div>
   </div>`;
 }
@@ -332,6 +337,8 @@ function loadBar(d: DayLoad, max: number, today: string, trackedToday: number): 
 
 export interface MyDayData {
   now: Date;
+  /** Just removed with ×: its note, with Undo. */
+  removed?: { id: number; title: string } | null;
   /** The day My Day is on (it turns over with End my day, not at midnight). */
   today: string;
   workday?: Workday;
@@ -481,6 +488,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     shell,
     `${pageHeader("My Day", `<a class="clear secondary" href="/vo">VO Queue</a>${w && !w.ahead && !w.carried ? `<form method="post" action="/my-day/end" class="mdendf"><button class="clear">End my day</button></form>` : ""}`)}
     ${dayBanner(d)}
+    ${d.removed ? `<div class="mdend quiet"><p>Removed <b>${esc(d.removed.title)}</b> from the day. It's under Removed if you need it back.</p><form method="post" action="/r/${d.removed.id}/open" class="mdendf"><button class="linkbtn">Undo</button></form></div>` : ""}
     ${timerBar(d.running, back)}
     ${mydaySwitches(d.hidden ?? [], d.exploded ?? false)}
     <div class="stats">${tiles}</div>

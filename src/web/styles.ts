@@ -121,6 +121,7 @@ aside .settings-link:hover, aside .settings-link.on { color: #fff; background: #
 .colrow .src { color: var(--ink3); font-size: 12px; }
 .colrow .src a { color: #9FDDF4; }
 .colrow .every { grid-column: 2; display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--ink3); font-size: 12px; }
+.colrow .every input[type=number] { width: 64px; background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; font-size: 12px; }
 .colrow .every select { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; font-size: 12px; max-width: 100%; }
 .colrow .chname { min-width: 0; width: 100%; padding: 4px 8px; margin: 0 0 2px -8px; border: 1px solid transparent; border-radius: 8px;
   border-bottom: 1px dashed #4A4A55; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 13.5px; }
@@ -1168,6 +1169,8 @@ header.page .checknow button { white-space: nowrap; }
 .wbtn:hover { border-color: var(--ok); color: var(--ok); }
 .wbtn.on { background: var(--ok); border-color: var(--ok); color: #06170E; }
 .wbtn.ok:hover { background: #26805A; border-color: #26805A; color: #fff; }
+.wbtn.x { font-size: 18px; line-height: 1; }
+.wbtn.x:hover { background: #8E2F2A; border-color: #8E2F2A; color: #fff; }
 .wproj { font-size: 11.5px; color: var(--ink3); white-space: nowrap; }
 .wwords, .wair { color: var(--ink3); }
 .focus { margin-bottom: 14px; }

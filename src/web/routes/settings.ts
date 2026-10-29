@@ -11,8 +11,9 @@ import { KEY_DEFS, LIMIT_DEFS, keyStates, keysInEffect, mask, setKey, setLimit, 
 import { RAIL_ITEMS } from "../page.js";
 import { TASK_CATEGORY } from "../../tasks/parse.js";
 import { WORK_TYPES } from "../work.js";
-import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelEvery } from "../../db/channelsettings.js";
-import { EVERY_BOUNDS, canSetEvery, defaultEvery } from "../targets.js";
+import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelEvery, setChannelUnits } from "../../db/channelsettings.js";
+import { EVERY_BOUNDS, UNITS_BOUNDS, canSetEvery, canSetUnits, defaultEvery } from "../targets.js";
+import { shortsDay } from "../../parse/derive.js";
 import { aiRunSummary } from "../../db/storylab.js";
 import { colourSources, distinctColour, sampleAvatars, sampledChannels, setChannelColour } from "../../jobs/avatars.js";
 import { config, hasDatabase } from "../../config.js";
@@ -185,6 +186,7 @@ export function registerSettings(app: FastifyInstance): void {
             sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
             previous: set?.previous ?? [], added: Boolean(set?.added), removable: unused.has(c.id), daily: c.recurring?.units ?? null,
             every: canSetEvery(c) ? { value: c.every ?? null, fallback: defaultEvery(c.category) } : null,
+            units: canSetUnits(c) ? c.recurring?.units ?? 1 : null,
           };
         }),
         newColour: distinctColour([...CHANNELS.map((c) => c.color), ...CATEGORIES.map((c) => c.color)]),
@@ -235,6 +237,13 @@ export function registerSettings(app: FastifyInstance): void {
       const every = raw === "" ? null : raw === "0" ? 0 : Number.isInteger(n) && n >= EVERY_BOUNDS.min && n <= EVERY_BOUNDS.max ? n : undefined;
       if (every === undefined || every === (c.every ?? null)) continue;
       await setChannelEvery(c.id, every);
+      paced += 1;
+    }
+    // Shorts uploads a day: the daily batch's size, from its current day on.
+    for (const c of CHANNELS.filter(canSetUnits)) {
+      const n = Number(body[`u_${c.id}`]);
+      if (!Number.isInteger(n) || n < UNITS_BOUNDS.min || n > UNITS_BOUNDS.max || n === c.recurring?.units) continue;
+      await setChannelUnits(c.id, n, shortsDay());
       paced += 1;
     }
     if (paced) {

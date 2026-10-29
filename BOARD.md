@@ -471,6 +471,10 @@ apart.
   days, or *No target*. Saved with *Save channels*, it applies at once to
   Nothing assigned, Next to assign, the upload-gap notices and Uploads'
   pace. *Default* goes back to the category's.
+- **Change a Shorts channel's uploads a day:** each Bits and Reading channel
+  has **Uploads a day** (1 to 50), the size of its daily batch. Saved with
+  *Save channels*, it applies to its batch from its current day on (one
+  already past the new number is done) and to Uploads' daily target.
 - **Add a channel:** give it a name, a category and a colour (one no other
   channel wears is picked for you). A Bits or Reading channel also takes how
   many uploads it posts a day, and opens that daily batch like the others.
@@ -755,6 +759,9 @@ can be changed.)
   Gaming. Switch one off and that kind of work leaves the whole page: the
   tiles, Today, the week's load, What next and Do ahead. The choice is kept
   in this browser.
+- **× on a daily batch** takes it off the day, for a day it isn't happening.
+  It goes to **Removed** (sidebar), and a note at the top has **Undo**.
+  Videos, revisions and tasks don't have it: clear or move those as usual.
 - **Today:** everything late or due today. Each piece shows tracked time
   against its estimate on a bar, with ▶ to time it and ✓ to clear it.
   Today's Bits/Reading batches fold into one line you can open.

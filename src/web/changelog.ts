@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-10-29-shorts-per-day-and-remove",
+    title: "Shorts uploads a day in Settings, and × on My Day's batches",
+    changes: [
+      { text: "Settings → Channels: each Bits and Reading channel has Uploads a day (1 to 50), the size of its daily batch. It changes today's batch and every one after.", href: "/settings#colours" },
+      { text: "My Day: × on a daily batch takes it off the day. It goes to Removed, and Undo is right there.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-10-29-channel-frequency",
     title: "Set how often each channel posts",
     changes: [

@@ -226,3 +226,28 @@ export async function setChannelEvery(id: string, every: number | null): Promise
     [id, ch.name, every],
   );
 }
+
+/**
+ * A Shorts channel's uploads a day (UNITS_BOUNDS): the size of its daily batch.
+ * Kept on its settings row; open batches from its current day on take the new
+ * size at once (one already past it is done).
+ */
+export async function setChannelUnits(id: string, units: number, fromDay: string): Promise<void> {
+  const ch = CHANNELS.find((c) => c.id === id);
+  if (!ch?.recurring) return;
+  await inTransaction(async (db) => {
+    await db.query(
+      `INSERT INTO channel_settings (id, name, units) VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE SET units = $3, updated_at = now()`,
+      [id, ch.name, units],
+    );
+    await db.query(
+      `UPDATE records SET batch_target = $2, batch_done = LEAST(batch_done, $2),
+         status = CASE WHEN batch_done >= $2 THEN 'done' ELSE status END,
+         done_at = CASE WHEN batch_done >= $2 THEN COALESCE(done_at, now()) ELSE done_at END,
+         updated_at = now()
+       WHERE channel = $1 AND batch_no IS NOT NULL AND status = 'open' AND air_date >= $3::date`,
+      [ch.name, units, fromDay],
+    );
+  });
+}

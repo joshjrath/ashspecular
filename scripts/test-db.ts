@@ -286,6 +286,39 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and back to its category's", [everyFor("Specular FNAF"), (await pool.query("SELECT every_days FROM channel_settings WHERE id = $1", [fnaf.id])).rows[0]?.every_days], [4, null]);
 }
 
+// ── A Shorts channel's uploads a day, and × on a daily batch in My Day ──────
+{
+  const { CHANNELS } = await import("../src/catalog.js");
+  const { openBatchesFor } = await import("../src/jobs/batches.js");
+  const { shortsDay } = await import("../src/parse/derive.js");
+  const bits = CHANNELS.find((c) => c.category === "bits" && c.recurring && (c.recurring.units ?? 1) > 1)!;
+  const before = bits.recurring!.units;
+  const day = shortsDay();
+  await openBatchesFor(day, (c) => c.id === bits.id);
+  const page = await app.inject({ method: "GET", url: "/settings", headers: { cookie } });
+  await post("/settings/colours", { [`u_${bits.id}`]: "3" });
+  const batch = (await pool.query("SELECT id, batch_target FROM records WHERE channel = $1 AND batch_no IS NOT NULL AND air_date = $2", [bits.name, day])).rows[0];
+  t("Settings: a Shorts channel's uploads a day is offered, saved, and today's batch takes the new size", [
+    page.body.includes(`name="u_${bits.id}"`), bits.recurring!.units, Number(batch?.batch_target), (await pool.query("SELECT units FROM channel_settings WHERE id = $1", [bits.id])).rows[0]?.units,
+  ], [true, 3, 3, 3]);
+  await post("/settings/colours", { [`u_${bits.id}`]: String(before) });
+  t("…and back", bits.recurring!.units, before);
+
+  // ×: the batch leaves the day (to Removed), and Undo puts it back; a video can't be removed this way.
+  await pool.query("UPDATE records SET status = 'open' WHERE id = $1", [batch.id]);
+  const myDay = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  const gone = await post("/my-day/remove", { id: String(batch.id), back: "/my-day" });
+  const status = (await pool.query("SELECT status FROM records WHERE id = $1", [batch.id])).rows[0]?.status;
+  const note = await app.inject({ method: "GET", url: gone.location ?? "/my-day", headers: { cookie } });
+  const video = (await pool.query("SELECT id FROM records WHERE batch_no IS NULL AND status = 'open' LIMIT 1")).rows[0]?.id;
+  if (video) await post("/my-day/remove", { id: String(video), back: "/my-day" });
+  const videoStatus = video ? (await pool.query("SELECT status FROM records WHERE id = $1", [video])).rows[0]?.status : "open";
+  await post(`/r/${batch.id}/open`, {});
+  t("My Day: × takes a daily batch off the day with a note and Undo; Undo puts it back; videos have no ×", [
+    myDay.body.includes('action="/my-day/remove"'), status, note.body.includes(`/r/${batch.id}/open`), videoStatus, (await pool.query("SELECT status FROM records WHERE id = $1", [batch.id])).rows[0]?.status,
+  ], [true, "removed", true, "open", "open"]);
+}
+
 // ── End my day: My Day moves on when Ash says ───────────────────────────────
 {
   const { workdayOf } = await import("../src/web/work.js");

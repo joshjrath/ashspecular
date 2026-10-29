@@ -84,6 +84,14 @@ export function everyFor(channel: string): number | null {
   return t.kind === "every" ? t.days : null;
 }
 
+/** A Shorts channel's uploads a day as set in Settings: the size of its daily batch. */
+export const UNITS_BOUNDS = { min: 1, max: 50 };
+
+/** Whether a channel's uploads a day can be set in Settings: a Shorts channel with a daily batch. */
+export function canSetUnits(channel: { category: CategoryId; recurring?: unknown }): boolean {
+  return formatFor(channel.category) === "short" && Boolean(channel.recurring);
+}
+
 /** A channel's uploads a day, for the daily categories. */
 export function perDayFor(channel: string): number {
   return CHANNELS.find((c) => c.name === channel)?.recurring?.units ?? 1;

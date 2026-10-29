@@ -4,11 +4,12 @@
  */
 import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
 import { ORG_TZ, instantIn, shiftDate } from "../../parse/derive.js";
-import { type StoredRecord, setStatus } from "../../db/records.js";
+import { type StoredRecord, getRecord, setStatus } from "../../db/records.js";
 import { clearTime, forgetUntracked, getDayEnd, loggedBetween, minutesSince, runningTimer, setDayEnd, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
 import { hasDatabase } from "../../config.js";
 import { localPath } from "../http.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "../pages/mywork.js";
+import { titleOnDay } from "../page.js";
 import { repeatTask, setTaskStatus } from "../../db/tasks.js";
 import { openMyDayBatches } from "../../jobs/batches.js";
 import { loadWork, shell } from "../shell.js";
@@ -32,11 +33,31 @@ async function timeLog(range: LogRange, today: string, shown?: Set<string>) {
   return logByDay(entries, days);
 }
 
+/** The batch just removed with ×, for its note with Undo (only while it's still removed). */
+async function removedNote(raw: string | undefined): Promise<{ id: number; title: string } | null> {
+  const id = Number(raw);
+  if (!hasDatabase || !Number.isSafeInteger(id) || id <= 0) return null;
+  const r = await getRecord(id).catch(() => null);
+  return r && r.status === "removed" ? { id, title: titleOnDay(r) } : null;
+}
+
 // My Day's switches, kept in this browser: which kinds of work show, and batches as one row each upload.
 const keepYear = { path: "/", sameSite: "lax" as const, httpOnly: true, maxAge: 60 * 60 * 24 * 365 };
 
 export function registerMyWork(app: FastifyInstance): void {
-  app.get<{ Querystring: { next?: string; budget?: string; log?: string } }>("/my-day", async (request, reply) => {
+  // ×: a daily batch taken off the day (it goes to Removed, where Restore puts it back).
+  app.post<{ Body: { id?: string; back?: string } }>("/my-day/remove", async (request, reply) => {
+    const id = Number(request.body?.id);
+    const back = localPath(request.body?.back, "/my-day");
+    const record = hasDatabase && Number.isSafeInteger(id) && id > 0 ? await getRecord(id) : null;
+    if (!record?.batchNo || record.status !== "open") return reply.redirect(back);
+    const running = await runningTimer();
+    if (running?.recordId === id) await stopTimer();
+    await setStatus(id, "removed");
+    return reply.redirect(`${back}${back.includes("?") ? "&" : "?"}removed=${id}`);
+  });
+
+  app.get<{ Querystring: { next?: string; budget?: string; log?: string; removed?: string } }>("/my-day", async (request, reply) => {
     const now = new Date();
     // The day My Day is on: it turns over when Ash presses End my day, not at midnight.
     const ended = hasDatabase ? await getDayEnd() : null;
@@ -61,7 +82,7 @@ export function registerMyWork(app: FastifyInstance): void {
     const vos = work.items.filter((i) => isVo(i.type));
     return reply.type("text/html").send(
       renderMyDay(s, {
-        now, today, workday, lastEnd: ended, required,
+        now, today, workday, lastEnd: ended, required, removed: await removedNote(request.query.removed),
         // Still on the day before past midnight: the next day's batches (opened by the clock) wait for End my day.
         ahead: doAhead(work.items.filter((i) => !(workday.carried && i.record?.batchNo && i.airDate && i.airDate > today)), now, 10, today),
         done: work.doneItems,
