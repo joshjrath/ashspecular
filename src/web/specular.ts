@@ -244,7 +244,7 @@ export function renderCompilation(shell: Shell, c: Compilation, d: { typical: nu
           }</div>`
       : "";
     pkg = `<section class="panel"><h2>Editor package <span class="sub">— the play order, one intro, a transition into each story after the first</span></h2>
-      ${d.error ? `<div class="scripterr" role="alert">${esc(d.error)}</div>` : ""}
+      ${d.error ? `<div class="scripterr" role="alert">${esc(d.error)}${d.error.includes("Settings → Keys") ? ` <a href="/settings#keys">Open Settings → Keys</a>` : ""}</div>` : ""}
       ${body}
       ${c.intro && !d.writing ? `${note$}${copyBox("sppkg", packageBlock(c))}` : ""}
       ${

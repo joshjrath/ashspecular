@@ -128,7 +128,8 @@ import { gunzipSync } from "node:zlib";
 import { COMP_BOUNDS, compSetting } from "../src/db/competitors.js";
 import { IDEA_BOUNDS, ideaSetting } from "../src/db/ideas.js";
 import { NAME_ARRAYS, NAME_COLUMNS } from "../src/db/channelsettings.js";
-import { modelFor } from "../src/ai/claude.js";
+import { claudeErrorOf, modelFor } from "../src/ai/claude.js";
+import Anthropic from "@anthropic-ai/sdk";
 import { applyChannelSettings, checkChannelName, newChannelId } from "../src/catalog.js";
 import { systemPrompt } from "../src/parse/classify.js";
 import { distinctColour } from "../src/jobs/avatars.js";
@@ -2461,6 +2462,13 @@ section("Claude models: one table");
   if (saved.a === undefined) delete process.env.ANTHROPIC_MODEL; else process.env.ANTHROPIC_MODEL = saved.a;
   if (saved.i === undefined) delete process.env.IDEAS_MODEL; else process.env.IDEAS_MODEL = saved.i;
   t("each feature's default, ANTHROPIC_MODEL for all, a feature's own variable for one", [defaults, everywhere, own], [["claude-opus-5", "claude-opus-5-5", "claude-opus-5-5"], ["claude-sonnet-5-5", "claude-sonnet-5-5"], ["claude-haiku-4-5", "claude-sonnet-5-5"]]);
+}
+
+section("Claude errors: in plain words");
+{
+  const rejected = claudeErrorOf(Anthropic.APIError.generate(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, undefined, new Headers()));
+  const busy = claudeErrorOf(Anthropic.APIError.generate(429, { type: "error", error: { type: "rate_limit_error", message: "slow down" } }, undefined, new Headers()));
+  t("a rejected key says where to fix it, not the raw 401; a rate limit tries again", [rejected.message.includes("Settings → Keys"), rejected.message.includes("401"), rejected.retryable, busy.retryable], [true, false, false, true]);
 }
 
 section("Database: channel names");

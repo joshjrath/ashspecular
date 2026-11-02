@@ -337,6 +337,9 @@ t("every page opens with a little of everything in it", await crawl(), []);
 
   // ×: the batch leaves the day (to Removed), and Undo puts it back; a video can't be removed this way.
   await pool.query("UPDATE records SET status = 'open' WHERE id = $1", [batch.id]);
+  // The day before ended, so My Day is on the batch's day even before noon (else it's still carrying the day before).
+  const { setDayEnd } = await import("../src/db/timers.js");
+  await setDayEnd({ day: shiftDate(day, -1), at: new Date(), prev: null });
   const myDay = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
   const gone = await post("/my-day/remove", { id: String(batch.id), back: "/my-day" });
   const status = (await pool.query("SELECT status FROM records WHERE id = $1", [batch.id])).rows[0]?.status;
@@ -348,6 +351,7 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("My Day: × takes a daily batch off the day with a note and Undo; Undo puts it back; videos have no ×", [
     myDay.body.includes('action="/my-day/remove"'), status, note.body.includes(`/r/${batch.id}/open`), videoStatus, (await pool.query("SELECT status FROM records WHERE id = $1", [batch.id])).rows[0]?.status,
   ], [true, "removed", true, "open", "open"]);
+  await setDayEnd(null);
 }
 
 // ── End my day: My Day moves on when Ash says ───────────────────────────────

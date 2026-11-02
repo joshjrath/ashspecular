@@ -7,7 +7,7 @@
  *
  * Never from titles alone: every source needs its text first.
  */
-import { anthropic, modelFor } from "../ai/claude.js";
+import { anthropic, claudeErrorOf, modelFor } from "../ai/claude.js";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
@@ -87,6 +87,8 @@ export async function writePackage(title: string, sources: PackageSource[], voic
         ].join("\n"),
       },
     ],
+  }).catch((err: unknown) => {
+    throw claudeErrorOf(err);
   });
   const out = response.parsed_output;
   if (response.stop_reason === "refusal" || !out) throw new Error("Claude didn't return a package — try again.");

@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-02-claude-key-message",
+    title: "A turned-down Claude key says where to fix it",
+    changes: [
+      { text: "When Anthropic turns down the Claude key, the editor package (and anything else that shows Claude's errors) says so plainly and links to Settings → Keys, instead of showing the raw 401.", href: "/settings#keys" },
+    ],
+  },
+  {
     id: "2026-10-29-frequency-moves-uploads",
     title: "A channel's upload frequency now moves its calendar",
     changes: [

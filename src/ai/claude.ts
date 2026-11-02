@@ -59,6 +59,19 @@ export class ClaudeError extends Error {
   }
 }
 
+/** A failed call in plain words: what went wrong and what to do (a rejected key says where to paste a new one). */
+export function claudeErrorOf(err: unknown): ClaudeError {
+  if (err instanceof ClaudeError) return err;
+  if (err instanceof Anthropic.BadRequestError) return new ClaudeError(`Claude couldn't take this request: ${err.message}`, false);
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return new ClaudeError("Anthropic turned down the Claude key. Paste a working one in Settings → Keys (Test checks it), then try again.", false);
+  }
+  if (err instanceof Anthropic.RateLimitError) return new ClaudeError("Claude's rate limit — trying again shortly.", true);
+  if (err instanceof Anthropic.APIConnectionError) return new ClaudeError("Couldn't reach Claude — trying again shortly.", true);
+  if (err instanceof Anthropic.APIError) return new ClaudeError(`Claude answered ${err.status ?? "an error"} — trying again shortly.`, (err.status ?? 500) >= 500);
+  return new ClaudeError(err instanceof Error ? err.message : String(err), true);
+}
+
 export async function askClaude<T>(opts: {
   model: string;
   system: string;
@@ -82,12 +95,7 @@ export async function askClaude<T>(opts: {
       messages: [{ role: "user", content: opts.content }],
     });
   } catch (err) {
-    if (err instanceof Anthropic.BadRequestError) throw new ClaudeError(`Claude couldn't take this request: ${err.message}`, false);
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) throw new ClaudeError("Claude didn't accept ANTHROPIC_API_KEY.", false);
-    if (err instanceof Anthropic.RateLimitError) throw new ClaudeError("Claude's rate limit — trying again shortly.", true);
-    if (err instanceof Anthropic.APIConnectionError) throw new ClaudeError("Couldn't reach Claude — trying again shortly.", true);
-    if (err instanceof Anthropic.APIError) throw new ClaudeError(`Claude answered ${err.status ?? "an error"} — trying again shortly.`, (err.status ?? 500) >= 500);
-    throw new ClaudeError(err instanceof Error ? err.message : String(err), true);
+    throw claudeErrorOf(err);
   }
   const usage: Usage = {
     input: response.usage.input_tokens ?? 0,

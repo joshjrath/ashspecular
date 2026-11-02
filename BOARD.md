@@ -1280,7 +1280,9 @@ Use then opens the compilation's page, which has:
   the last story actually ends to the next premise, in the scripts' own plain
   voice. It's written from the scripts, never from titles. A source with no
   script is listed with a link to attach one. It needs `ANTHROPIC_API_KEY` on
-  the server. **↻ Write it again** gives a fresh take.
+  the server. **↻ Write it again** gives a fresh take. If Anthropic turns the
+  key down, the panel says so in plain words with a link to Settings → Keys,
+  where you paste a working key and *Test* checks it.
 - **For a Sleep, the editor notes.** Keep stories back to back, remove outros and
   end screens, normalize audio, one uninterrupted listen. There's no intro and
   no transitions.
