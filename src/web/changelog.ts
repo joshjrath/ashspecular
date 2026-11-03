@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-03-repeat-past-midnight",
+    title: "Repeating tasks finished past midnight land on the next day",
+    changes: [
+      { text: "A daily task you finish past midnight, before End my day, now opens the new day's, so it's on My Day after you end the day. Before, it skipped to the day after.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-11-02-claude-key-message",
     title: "A turned-down Claude key says where to fix it",
     changes: [

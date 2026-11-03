@@ -679,7 +679,10 @@ add a task from the **New task** box at the top, and it's read the same way.
 - **Repeating tasks** (every day, every weekday, every week, every 2 weeks,
   every month) have their own **Recurring** section. When you finish one,
   the next is opened, due on the next day it falls at the same time.
-  Finishing one late opens the next upcoming one, never a backlog. Saying it
+  Finishing one late opens the next upcoming one, never a backlog. Past
+  midnight before you've pressed End my day, finishing one still counts for
+  the day before, so a daily task ticked at 1 AM opens the new day's and it's
+  on My Day once you end the day. Saying it
   in the task works too: "Renew Adobe every month", "Check comments daily",
   "Send Vyasa the script every Monday".
 - **Capitals.** Names in a new task get their capitals: people the board
@@ -747,6 +750,8 @@ can be changed.)
     midnight before you've ended the day, still that day's batches (it says
     so); after ending the day early, tomorrow's. So ticking uploads there
     never finishes the next day's batch by mistake.
+  - Repeating tasks follow it too: one finished past midnight before you
+    end the day opens the new day's, so it's on My Day after End my day.
   - The day it moves on to gets its daily batches straight away (Specular's
     long-form, Bits and Reading), instead of at their usual opening time
     (12:05 AM, or 6 AM for Bits and Reading).

@@ -10,6 +10,8 @@ import { hasDatabase } from "../../config.js";
 import { localPath } from "../http.js";
 import { renderTasks } from "../pages/tasks.js";
 import { loadWork, shell } from "../shell.js";
+import { repeatToday, workdayOf } from "../work.js";
+import { getDayEnd } from "../../db/timers.js";
 import type { FastifyInstance } from "fastify";
 
 // ── Tasks: anything forwarded into #tasks, or added here ───────────────
@@ -57,8 +59,8 @@ export function registerTasks(app: FastifyInstance): void {
     switch (request.params.action) {
       case "done":
         await setTaskStatus(id, true);
-        // A repeating task opens its next occurrence.
-        await repeatTask(id);
+        // A repeating task opens its next occurrence (past midnight before End my day, the new day's).
+        await repeatTask(id, repeatToday(workdayOf(new Date(), await getDayEnd())));
         break;
       case "reopen":
         await setTaskStatus(id, false);

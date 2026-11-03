@@ -2,7 +2,7 @@
  * Ash's own work: My Day and its switches, the timers, the VO Queue and
  * recording mode, and Forgotten work.
  */
-import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
+import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, repeatToday, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
 import { ORG_TZ, instantIn, shiftDate } from "../../parse/derive.js";
 import { type StoredRecord, getRecord, setStatus } from "../../db/records.js";
 import { clearTime, forgetUntracked, getDayEnd, loggedBetween, minutesSince, runningTimer, setDayEnd, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
@@ -148,7 +148,7 @@ export function registerMyWork(app: FastifyInstance): void {
     if (hasDatabase && id && request.body?.kind === "task") {
       // Clearing a task stops its timer too; a repeating one opens its next.
       await setTaskStatus(id, true);
-      await repeatTask(id);
+      await repeatTask(id, repeatToday(workdayOf(new Date(), await getDayEnd())));
     } else if (hasDatabase && id) {
       const running = await runningTimer();
       if (running?.recordId === id) await stopTimer();

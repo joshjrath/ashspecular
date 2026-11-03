@@ -135,13 +135,13 @@ export async function editTask(
 
 /**
  * A repeating task is done: open its next occurrence — same everything, due
- * on the next day it falls, at the same time of day. Returns the new id.
+ * on the next day it falls after `today` (the day it counts as done on, see
+ * repeatToday), at the same time of day. Returns the new id.
  */
-export async function repeatTask(id: number, now = new Date()): Promise<number | null> {
+export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date())): Promise<number | null> {
   const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
   const t = rows[0] ? row(rows[0]) : null;
   if (!t?.repeat) return null;
-  const today = dateIn(ORG_TZ, now);
   const from = t.due ? dateIn(ORG_TZ, t.due) : today;
   const time = t.due
     ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due)

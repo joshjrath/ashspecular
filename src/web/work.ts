@@ -477,6 +477,16 @@ export function workdayOf(now: Date, ended: DayEnd | null): Workday {
   return { day: calendar, calendar, startedAt: from(calendar), carried: false, ahead: false };
 }
 
+/**
+ * The day a repeating task finished now counts as done on, for its next one:
+ * past midnight before End my day it's still the day before, so a daily task
+ * ticked at 1 AM opens the new day's (not the day after's). Ended early, it's
+ * still today: the calendar day, so tomorrow's isn't skipped.
+ */
+export function repeatToday(w: Workday): string {
+  return w.carried ? w.day : w.calendar;
+}
+
 /** The days a page covers, from today (or the day My Day is on). */
 export function nextDays(n: number, now = new Date(), today = dateIn(ORG_TZ, now)): string[] {
   return Array.from({ length: n }, (_, i) => shiftDate(today, i));

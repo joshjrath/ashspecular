@@ -75,7 +75,7 @@ import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "..
 import { fmtMin } from "../src/web/page.js";
 import { renderTasks } from "../src/web/pages/tasks.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
-import { taskItem, isRequired, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
+import { taskItem, isRequired, repeatToday, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
 import { planReset } from "../src/web/reset.js";
 import { layoutFor as snapLayout, snapshotSvg } from "../src/web/snapshot.js";
 import { withCodes } from "../src/web/gaps.js";
@@ -1738,6 +1738,12 @@ const endedLate = workdayOf(ins("2026-10-18T13:00:00Z"), { day: "2026-10-17", at
 t("…ended at 2:40 AM: Sunday from then, Done counts from then", [endedLate.day, endedLate.carried, endedLate.startedAt.toISOString()], ["2026-10-18", false, "2026-10-18T06:40:00.000Z"]);
 const endedEarly = workdayOf(ins("2026-10-18T01:00:00Z"), { day: "2026-10-17", at: ins("2026-10-18T00:30:00Z") }); // Sat 9 PM, Sat ended at 8:30 PM
 t("…ended early (9 PM): tomorrow's list now, to get ahead; next morning it's simply today", [endedEarly.day, endedEarly.ahead, workdayOf(ins("2026-10-18T13:00:00Z"), { day: "2026-10-17", at: ins("2026-10-18T00:30:00Z") }).day], ["2026-10-18", true, "2026-10-18"]);
+t("…a daily task ticked at 1:30 AM before End my day opens the new day's, not the day after's; ended early, tomorrow's isn't skipped", [
+  nextOccurrence("2026-10-17", "daily", repeatToday(workdayOf(ins("2026-10-18T05:30:00Z"), { day: "2026-10-16", at: ins("2026-10-17T05:00:00Z") }))),
+  nextOccurrence("2026-10-17", "daily", repeatToday(endedLate)),
+  nextOccurrence("2026-10-17", "daily", repeatToday(endedEarly)),
+  nextOccurrence("2026-10-18", "daily", repeatToday(endedEarly)),
+], ["2026-10-18", "2026-10-19", "2026-10-18", "2026-10-19"]);
 const satBatch = toItem(mk({ id: 240, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-28" }))!;
 t("…on the carried-over day, the next day's work is 'tomorrow' and waits in Do ahead", [whyNow(satBatch, ins("2026-09-28T05:00:00Z"), "2026-09-27"), isRequired(satBatch, "2026-09-27"), doAhead([satBatch], ins("2026-09-28T05:00:00Z"), 10, "2026-09-27").length], ["tomorrow", false, 1]);
 const banner = renderMyDay(shellFix, { now: ins("2026-10-18T05:30:00Z"), today: "2026-10-17", workday: workdayOf(ins("2026-10-18T05:30:00Z"), null), required: [], ahead: [], done: [], loads: [], trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });
