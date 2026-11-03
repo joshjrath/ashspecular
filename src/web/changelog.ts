@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-03-compilation-channel-labels",
+    title: "Channel names on a compilation are readable",
+    changes: [
+      { text: "A compilation's sources show their channel's name in a lighter shade of its colour, so dark ones like Specular Anime read on the dark page." },
+    ],
+  },
+  {
     id: "2026-11-03-repeat-past-midnight",
     title: "Repeating tasks finished past midnight land on the next day",
     changes: [

@@ -1875,7 +1875,8 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .splist li:last-child { border-bottom: 0; }
 .spn { color: var(--ink3); font-weight: 700; font-variant-numeric: tabular-nums; }
 .splist .spt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.spch { font-size: 11px; font-weight: 700; color: var(--ch); white-space: nowrap; }
+/* Specular compilations: a source's channel, in its colour lightened until it reads on the dark panel */
+.spch { font-size: 11px; font-weight: 700; color: var(--chink); white-space: nowrap; }
 .sprt { font-variant-numeric: tabular-nums; color: var(--ink2); white-space: nowrap; text-align: right; }
 .sprt em, .sptable em { font-style: normal; font-size: 10.5px; color: var(--ink3); font-weight: 700; }
 .sptotal { margin: 0; font-size: 12.5px; color: var(--ink2); } .sptotal b { color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -2001,6 +2002,7 @@ h2 .spok, h2 .spwait { font-family: var(--ui); margin-left: 8px; vertical-align:
 .relchanges { margin: 12px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 13.5px; line-height: 1.55; color: var(--ink2); }
 .relchanges a { color: var(--nc); font-weight: 700; white-space: nowrap; }
 .scripterr { background: #3A1D1D; color: #FFB4B4; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-bottom: 10px; }
+.scripterr a { color: #FFFFFF; font-weight: 700; text-decoration: underline; }
 .sform .or { font-size: 12px; color: var(--ink3); text-align: center; }
 .unassigned { margin-bottom: 14px; }
 .unassigned > summary { list-style: none; cursor: pointer; }

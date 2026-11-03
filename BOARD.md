@@ -1277,7 +1277,9 @@ three weeks.
 Use then opens the compilation's page, which has:
 
 - **The output block**, ready to copy: `DATE | MOVIE ### | TITLE`, the
-  numbered videos with runtimes, and the total source runtime.
+  numbered videos with runtimes, and the total source runtime. Below it, each
+  source with its channel's name, in the channel's colour lightened so it
+  reads on the dark page (Anime's deep purple included).
 - **For a Movie, the editor package.** Claude reads all four scripts, checks the
   title fits every one (if it doesn't, it says which and offers an accurate
   title, one click to use), picks the play order, and writes one short intro

@@ -13,6 +13,7 @@ import { moviePicks, nextMovieSlot, nextSleepSlot, sleepPicks, typicalRuntime, t
 import { canWritePackages, writePackage } from "../compilations/package.js";
 import { usDate } from "../parse/derive.js";
 import { channelColour, layout, pageHeader, type Shell } from "./page.js";
+import { channelInk } from "../catalog.js";
 import { esc } from "./html.js";
 import { compactViews } from "./performance.js";
 
@@ -112,7 +113,7 @@ export function startPackage(id: number): void {
 function sourceRow(s: { title: string; channel: string; runtime: number | null; runtimeFrom?: string | null }, typical: number, i: number): string {
   const rt = s.runtime !== null ? clock(s.runtime) : `~${Math.round(typical / 60)}m`;
   const est = s.runtime === null ? ` <em title="Runtime not known yet — the catalog's typical length is used">est.</em>` : s.runtimeFrom && s.runtimeFrom !== "youtube" && s.runtimeFrom !== "manual" ? ` <em title="From its ${esc(s.runtimeFrom)}">≈</em>` : "";
-  return `<li><span class="spn">${i + 1}</span><span class="spt">${esc(s.title)}</span><span class="spch" style="--ch:${channelColour(s.channel)}">${esc(shortChannel(s.channel))}</span><span class="sprt">${rt}${est}</span></li>`;
+  return `<li><span class="spn">${i + 1}</span><span class="spt">${esc(s.title)}</span><span class="spch" style="--chink:${channelInk(channelColour(s.channel))}">${esc(shortChannel(s.channel))}</span><span class="sprt">${rt}${est}</span></li>`;
 }
 
 function pickCard(k: KindState, typical: number): string {
@@ -298,7 +299,7 @@ export function renderSpecularCatalog(
     .join("");
   const rows = [...d.sources]
     .sort((a, b) => b.published.localeCompare(a.published))
-    .map((s) => `<tr><td class="t">${esc(s.title)}</td><td><span class="spch" style="--ch:${channelColour(s.channel)}">${esc(shortChannel(s.channel))}</span></td><td>${esc(usDate(s.published))}</td><td>${
+    .map((s) => `<tr><td class="t">${esc(s.title)}</td><td><span class="spch" style="--chink:${channelInk(channelColour(s.channel))}">${esc(shortChannel(s.channel))}</span></td><td>${esc(usDate(s.published))}</td><td>${
       s.runtime !== null ? `${clock(s.runtime)}${s.runtimeFrom && s.runtimeFrom !== "youtube" ? ` <em>${esc(s.runtimeFrom)}</em>` : ""}` : `<em>unknown</em>`
     }</td><td>${s.views !== null ? esc(compactViews(s.views)) : "—"}</td><td>${s.movieUses || ""}</td><td>${s.sleepUses || ""}</td></tr>`)
     .join("");

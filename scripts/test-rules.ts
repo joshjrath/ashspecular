@@ -87,7 +87,7 @@ import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finPr
 import { parseMultipart } from "../src/web/finance/routes.js";
 import { moviePicks, sleepPicks, shapeOf, oneEach, nextMovieSlot, nextSleepSlot, maxOverlap, type Source as CompSource } from "../src/compilations/engine.js";
 import { tidyPackage } from "../src/compilations/package.js";
-import { clock, outputBlock, packageBlock, parseRuntime, videoIdOf } from "../src/web/specular.js";
+import { clock, outputBlock, packageBlock, parseRuntime, renderCompilation, videoIdOf } from "../src/web/specular.js";
 import { readSplits, voiceBox, checkMark, channelChips } from "../src/web/finance/ui.js";
 import { readByRules, missingFor, amountsIn, channelsIn } from "../src/finance/voice.js";
 import { payChannels } from "../src/finance/pay.js";
@@ -2056,6 +2056,12 @@ const comp = { id: 1, kind: "movie" as const, number: 7, title: "What If X? (Ful
 t("the output block: DATE | MOVIE ### | TITLE, the list in play order, the total", outputBlock(comp, 600).split("\n"), ["9/29/2026 | MOVIE 007 | What If X? (Full Movie)", "", "1. B — ~10:00 (est.)", "2. A — 20:00", "", "Total Source Runtime: 30:00 (some estimated)"]);
 t("the editor package reads as a script", packageBlock(comp), "INTRO\nIntro.\n\n[ 1. B ]\n\nTRANSITION 1\nInto A.\n\n[ 2. A ]");
 t("a Sleep's package is the editor notes", packageBlock({ ...comp, kind: "sleep" }).startsWith("Editor Notes:\nKeep stories back to back"), true);
+{
+  const dark = { ...comp, sources: [{ ...comp.sources[0]!, channel: "Specular Anime" }, { ...comp.sources[1]!, channel: "Specular Verse" }] };
+  const page = renderCompilation({ ...shellFix, active: "storylab" } as never, dark, { typical: 600, missing: [], writing: false, error: null, canWrite: true });
+  const inks = [...page.matchAll(/class="spch" style="--chink:(#[0-9A-F]{6})"/g)].map((m) => m[1]!);
+  t("a compilation's channel labels read on the dark panel, even dark-coloured channels", [inks.length, inks.every((h) => DARK_SURFACES.every((bg) => ratio(h, bg) >= 4.5))], [2, true]);
+}
 
 section("Time logged");
 t("ranges: this week Mon–Sun; the rest end today in whole weeks", [logDays("week", "2026-09-30")[0], logDays("week", "2026-09-30").at(-1), logDays("month", "2026-09-30").length, logDays("quarter", "2026-09-30")[0], logDays("year", "2026-09-30").length], ["2026-09-28", "2026-10-04", 31, "2026-07-06", 367]);
