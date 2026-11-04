@@ -21,7 +21,7 @@
  * estimate less what's been tracked on it.
  */
 import { CATEGORIES, CHANNELS, isLongFormRecurring } from "../catalog.js";
-import { ORG_TZ, dateIn, instantIn, shiftDate, shortsDay } from "../parse/derive.js";
+import { ORG_TZ, dateIn, instantIn, shiftDate, shortsDay, usDate } from "../parse/derive.js";
 import type { StoredRecord } from "../db/records.js";
 import type { Task } from "../db/tasks.js";
 import { TASK_CATEGORY } from "../tasks/parse.js";
@@ -165,7 +165,8 @@ export function toItem(r: StoredRecord, spent = 0): WorkItem | null {
     category: r.category,
     code: r.code,
     due,
-    day: due ? dateIn(ORG_TZ, due) : r.airDate,
+    // A batch worked ahead (a day off's, or one opened ahead on Recurring) counts on that day.
+    day: r.batchNo && r.workDay ? r.workDay : due ? dateIn(ORG_TZ, due) : r.airDate,
     airDate: r.airDate,
     est: r.batchNo && r.channel ? channelEstimate(r.channel) : typeEstimate(type),
     spent,
@@ -290,6 +291,10 @@ export function urgency(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): nu
 
 /** Why a piece is where it is, in a few words. */
 export function whyNow(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): string {
+  // A batch worked ahead of its own day: which day's it is.
+  if (i.record?.batchNo && i.record.workDay && i.airDate && i.airDate > today) {
+    return `ahead, for ${new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${i.airDate}T12:00:00Z`))} ${usDate(i.airDate).replace(/\/\d{4}$/, "")}`;
+  }
   if (i.due) {
     const h = (i.due.getTime() - now.getTime()) / 3_600_000;
     const span = (x: number) => (Math.abs(x) < 1 ? "<1h" : Math.abs(x) < 24 ? `${Math.round(Math.abs(x))}h` : `${Math.round(Math.abs(x) / 24)}d`);

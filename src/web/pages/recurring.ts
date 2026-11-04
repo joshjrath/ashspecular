@@ -204,7 +204,7 @@ export function renderRecurring(
           ? `<div class="empty">🌙 A day off — no batches. Make it a working day again on the calendar and they open.</div>`
           : missing === channelCount
           ? `<p class="hint">Nothing open for this day yet. It opens by itself that morning — or open it now to work ahead.</p>`
-          : `${sections(ahead.rows, ahead.date)}
+          : `${offDays.has(ahead.date) ? `<p class="hint">🌙 A day off: its uploads still go up, so these are done ahead, on the working days before it (they're in My Day on those days).</p>` : ""}${sections(ahead.rows, ahead.date)}
              <p class="hint">Clear anything you get ahead on and it stays cleared — the morning run finds
              these and leaves them alone.</p>`
       }

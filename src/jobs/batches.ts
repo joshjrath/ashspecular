@@ -41,6 +41,8 @@ export interface OpenResult {
   date: string;
   opened: number;
   alreadyThere: number;
+  /** The batches it created. */
+  ids: number[];
 }
 
 /**
@@ -50,10 +52,13 @@ export interface OpenResult {
 export async function openBatchesFor(
   date?: string,
   only: (c: Channel) => boolean = () => true,
+  opts: { onDayOff?: boolean } = {},
 ): Promise<OpenResult> {
   let opened = 0;
   let alreadyThere = 0;
-  const off = await daysOff();
+  const ids: number[] = [];
+  // A day off opens its batches only when it's marked, to be done ahead (see the calendar's markDayOff).
+  const off = opts.onDayOff ? new Set<string>() : await daysOff();
   const paused = await pausedChannelNames();
 
   for (const channel of recurringChannels().filter(only)) {
@@ -71,14 +76,14 @@ export async function openBatchesFor(
     // batch on a day Story Lab planned a Movie for takes the Movie's title.
     const movie = channel.id === COMPILATION_CHANNEL_ID.movie;
     for (let i = 1; i <= perDay; i += 1) {
-      const { rowCount } = await pool.query(
+      const { rows: made } = await pool.query<{ id: string }>(
         `INSERT INTO records (
            kind, category, channel, code, title, air_date, deadline, vo_source,
            status, parsed_by, confidence, batch_no, source_message_id, raw_content, batch_target
          ) VALUES ($8, $9, $1, $2,
            COALESCE(CASE WHEN $11 THEN (SELECT c.title FROM compilations c WHERE c.kind = 'movie' AND c.status = 'planned' AND c.slot_date = $4::date ORDER BY c.id DESC LIMIT 1) END, $3),
            $4, $5, 'none', 'open', 'recurring', 1, $6, $7, '', $10)
-         ON CONFLICT (source_message_id) DO NOTHING`,
+         ON CONFLICT (source_message_id) DO NOTHING RETURNING id`,
         [
           channel.name,
           null,
@@ -95,12 +100,12 @@ export async function openBatchesFor(
         ],
       );
 
-      if (rowCount) opened += 1;
+      if (made[0]) { opened += 1; ids.push(Number(made[0].id)); }
       else alreadyThere += 1;
     }
   }
 
-  return { date: date ?? shortsDay(), opened, alreadyThere };
+  return { date: date ?? shortsDay(), opened, alreadyThere, ids };
 }
 
 async function pausedChannelNames(): Promise<Set<string>> {
@@ -146,18 +151,6 @@ async function daysOff(): Promise<Set<string>> {
 }
 
 /**
- * A day just marked off: its batches go, unless someone's already started on
- * one (a batch with uploads ticked, or cleared, stays exactly as it is).
- */
-export async function clearBatchesOn(day: string): Promise<number> {
-  const { rowCount } = await pool.query(
-    `DELETE FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open' AND COALESCE(batch_done, 0) = 0`,
-    [day],
-  );
-  return rowCount ?? 0;
-}
-
-/**
  * A day off made a working day again: its batches come back, if the day is
  * one that was already open (today, or ahead of it up to the furthest day
  * opened) — a day further out opens with the rest when its time comes.
@@ -180,14 +173,17 @@ export const MAX_AHEAD_DAYS = 90;
  * a day that is already open is left exactly as it is — and a day that is
  * only partly open (a channel added since) gets just the channels it lacks.
  */
-export async function openBatchesThrough(from: string, to: string): Promise<{ opened: number; days: number }> {
+export async function openBatchesThrough(from: string, to: string): Promise<{ opened: number; days: number; ids: number[] }> {
   let opened = 0;
   let days = 0;
+  const ids: number[] = [];
   for (let d = from; d <= to && days < MAX_AHEAD_DAYS; d = shiftDate(d, 1)) {
-    opened += (await openBatchesFor(d)).opened;
+    const r = await openBatchesFor(d);
+    opened += r.opened;
+    ids.push(...r.ids);
     days += 1;
   }
-  return { opened, days };
+  return { opened, days, ids };
 }
 
 /** For each day in a range: how many channels are open, and uploads done of total. */

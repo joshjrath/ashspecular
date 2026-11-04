@@ -2,7 +2,7 @@
  * Repeating tasks: how often, and when the next one falls. The next is
  * counted from when this one was due (or today, with no date), and always
  * lands after today — finishing a daily task three days late opens
- * tomorrow's, not three already-late ones.
+ * tomorrow's, not three already-late ones — and never on a day off.
  */
 import { shiftDate } from "../parse/derive.js";
 
@@ -36,9 +36,21 @@ function step(d: string, r: Repeat): string {
   }
 }
 
-/** The day the next occurrence falls: after `from`, and after today. */
-export function nextOccurrence(from: string, repeat: Repeat, today: string): string {
+/**
+ * The day the next occurrence falls: after `from`, and after today. One that
+ * falls on a day off is done the working day before it instead, if that's
+ * still after today (a weekly report due on a Tuesday off: the Monday);
+ * otherwise the first working day after it (a daily task: the day off is
+ * simply skipped).
+ */
+export function nextOccurrence(from: string, repeat: Repeat, today: string, daysOff: Set<string> = new Set()): string {
   let next = step(from, repeat);
   for (let guard = 0; next <= today && guard < 400; guard++) next = step(next, repeat);
-  return next;
+  if (!daysOff.has(next)) return next;
+  let before = shiftDate(next, -1);
+  for (let guard = 0; daysOff.has(before) && guard < 400; guard++) before = shiftDate(before, -1);
+  if (before > today) return before;
+  let after = shiftDate(next, 1);
+  for (let guard = 0; daysOff.has(after) && guard < 400; guard++) after = shiftDate(after, 1);
+  return after;
 }

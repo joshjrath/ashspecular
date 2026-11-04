@@ -51,6 +51,8 @@ export interface StoredRecord extends DerivedRecord {
    * ones that stand — a day off already taken into account.
    */
   offFrom: Date | null;
+  /** A daily batch worked on another day than its own (a day off's, done ahead; one opened ahead on Recurring): that day. */
+  workDay?: string | null;
   createdAt: Date;
 }
 
@@ -350,6 +352,31 @@ export async function dueOnDay(day: string): Promise<StoredRecord[]> {
   return rows.map(hydrate);
 }
 
+/** Daily batches to be worked on other days than their own: batch → that day. */
+export async function setWorkDays(days: Map<number, string>): Promise<void> {
+  for (const [id, day] of days) await pool.query(`UPDATE records SET work_day = $2::date WHERE id = $1 AND batch_no IS NOT NULL`, [id, day]);
+}
+
+/** A day off made a working day again: its batches are worked on their own day again. */
+export async function clearWorkDaysOn(day: string): Promise<void> {
+  await pool.query(`UPDATE records SET work_day = NULL WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open'`, [day]);
+}
+
+/** A day's batches still to start (nothing ticked, not cleared): what a day off can send ahead. */
+export async function batchesToDoOn(day: string): Promise<StoredRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `${SELECT} WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open' AND paused_at IS NULL AND COALESCE(batch_done, 0) = 0`,
+    [day],
+  );
+  return rows.map(hydrate);
+}
+
+/** Batches just opened ahead on Recurring: worked on `day` (My Day's), so My Day has them now. */
+export async function bringAhead(ids: number[], day: string): Promise<void> {
+  if (!ids.length) return;
+  await pool.query(`UPDATE records SET work_day = $2::date WHERE id = ANY($1::bigint[]) AND batch_no IS NOT NULL AND air_date > $2::date`, [ids, day]);
+}
+
 /** Where a day off spread its work: record → the working day it's now due. */
 export async function saveDayOffMoves(dayOff: string, moves: Map<number, string>): Promise<void> {
   await pool.query(`DELETE FROM day_off_moves WHERE day_off = $1::date`, [dayOff]);
@@ -520,6 +547,7 @@ interface Row {
   no_script_at: Date | null;
   uploaded_at: Date | null;
   off_from?: Date | null;
+  work_day?: string | null;
   created_at: Date;
 }
 
@@ -559,6 +587,7 @@ function hydrate(r: Row): StoredRecord {
     noScriptAt: r.no_script_at ?? null,
     uploadedAt: r.uploaded_at ?? null,
     offFrom: r.off_from ?? null,
+    workDay: r.work_day ?? null,
     createdAt: r.created_at,
   };
 }
@@ -587,7 +616,7 @@ const COLUMNS = `id, kind, category, channel, code, title, tag, stage,
   ${standing("deadline")} AS deadline, word_count, assignee,
   version, links, brief, note, status, parsed_by, confidence, warnings,
   source_url, source_author, raw_content, batch_no, batch_target, batch_done, pinned_at, paused_at, no_script_at, uploaded_at,
-  CASE WHEN ${DUE} IS DISTINCT FROM ${SET_DUE} THEN ${SET_DUE} END AS off_from, created_at`;
+  CASE WHEN ${DUE} IS DISTINCT FROM ${SET_DUE} THEN ${SET_DUE} END AS off_from, to_char(work_day, 'YYYY-MM-DD') AS work_day, created_at`;
 
 const SELECT = `SELECT ${COLUMNS} FROM records`;
 

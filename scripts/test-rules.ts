@@ -1746,6 +1746,14 @@ t("…a daily task ticked at 1:30 AM before End my day opens the new day's, not 
   nextOccurrence("2026-10-17", "daily", repeatToday(endedEarly)),
   nextOccurrence("2026-10-18", "daily", repeatToday(endedEarly)),
 ], ["2026-10-18", "2026-10-19", "2026-10-18", "2026-10-19"]);
+// Days off: a repeating task never lands on one; a batch worked ahead counts on its work day.
+t("Repeating tasks and days off: a daily one skips the day off, a weekly one is done the working day before (if that's after today)", [
+  nextOccurrence("2026-11-09", "daily", "2026-11-09", new Set(["2026-11-10"])),
+  nextOccurrence("2026-11-03", "weekly", "2026-11-04", new Set(["2026-11-10"])),
+  nextOccurrence("2026-11-03", "weekly", "2026-11-09", new Set(["2026-11-10", "2026-11-11"])),
+], ["2026-11-11", "2026-11-09", "2026-11-12"]);
+const aheadBatch = toItem({ ...mk({ id: 241, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-11-07", deadline: new Date("2026-11-07T23:00:00Z") }), workDay: "2026-11-04" })!;
+t("…a batch worked ahead is today's work in My Day, saying whose day it is", [aheadBatch.day, isRequired(aheadBatch, "2026-11-04"), whyNow(aheadBatch, new Date("2026-11-04T15:00:00Z"), "2026-11-04")], ["2026-11-04", true, "ahead, for Sat 11/7"]);
 const satBatch = toItem(mk({ id: 240, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-28" }))!;
 t("…on the carried-over day, the next day's work is 'tomorrow' and waits in Do ahead", [whyNow(satBatch, ins("2026-09-28T05:00:00Z"), "2026-09-27"), isRequired(satBatch, "2026-09-27"), doAhead([satBatch], ins("2026-09-28T05:00:00Z"), 10, "2026-09-27").length], ["tomorrow", false, 1]);
 const banner = renderMyDay(shellFix, { now: ins("2026-10-18T05:30:00Z"), today: "2026-10-17", workday: workdayOf(ins("2026-10-18T05:30:00Z"), null), required: [], ahead: [], done: [], loads: [], trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });

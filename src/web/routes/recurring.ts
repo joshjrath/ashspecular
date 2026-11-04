@@ -4,7 +4,7 @@
  */
 import { CHANNELS } from "../../catalog.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, shortsDay, todayStatus, tomorrow } from "../../jobs/batches.js";
-import { clearBatches, listBatchesOn } from "../../db/records.js";
+import { bringAhead, clearBatches, listBatchesOn } from "../../db/records.js";
 import { refererPath, safeDate } from "../http.js";
 import { renderRecurring } from "../pages/recurring.js";
 import { shiftDate } from "../../parse/derive.js";
@@ -60,18 +60,21 @@ export function registerRecurring(app: FastifyInstance): void {
     const through = safeDate(body.through);
     const n = Math.min(Math.max(Number(body.days) || 0, 0), MAX_AHEAD_DAYS);
     let show = first;
+    let opened: number[];
     if (day && day >= first) {
-      await openBatchesFor(day);
+      opened = (await openBatchesFor(day)).ids;
       show = day;
     } else if (through && through >= first) {
       const last = through <= shiftDate(first, MAX_AHEAD_DAYS - 1) ? through : shiftDate(first, MAX_AHEAD_DAYS - 1);
-      await openBatchesThrough(first, last);
+      opened = (await openBatchesThrough(first, last)).ids;
       show = first;
     } else if (n > 0) {
-      await openBatchesThrough(first, shiftDate(first, n - 1));
+      opened = (await openBatchesThrough(first, shiftDate(first, n - 1))).ids;
     } else {
-      await openBatchesFor(first);
+      opened = (await openBatchesFor(first)).ids;
     }
+    // Opened ahead to work on now: they join today's My Day as new batches.
+    await bringAhead(opened, workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day);
     return reply.redirect(`/recurring?day=${show}`);
   });
 

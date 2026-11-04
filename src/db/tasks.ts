@@ -146,7 +146,8 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
   const time = t.due
     ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due)
     : DEADLINE_TIME;
-  const due = instantIn(nextOccurrence(from, t.repeat, today), time, ORG_TZ);
+  const { rows: off } = await pool.query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM days_off WHERE day > $1::date`, [today]);
+  const due = instantIn(nextOccurrence(from, t.repeat, today, new Set(off.map((r) => r.day))), time, ORG_TZ);
   const { rows: out } = await pool.query<{ id: string }>(
     `INSERT INTO tasks (title, body, category, priority, person, due, est_min, author, notes, repeat)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
@@ -155,6 +156,36 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
   // The finished one stays in Done, but only the new one repeats.
   await pool.query("UPDATE tasks SET repeat = NULL WHERE id = $1", [id]);
   return Number(out[0]!.id);
+}
+
+/** Open tasks due on a day (ET), not snoozed past it: what a day off moves. */
+export async function tasksDueOn(day: string): Promise<Task[]> {
+  const { rows } = await pool.query(
+    `SELECT * FROM tasks WHERE status = 'open' AND due IS NOT NULL AND (due AT TIME ZONE '${ORG_TZ}')::date = $1::date ORDER BY ${ORDER}`,
+    [day],
+  );
+  return rows.map(row);
+}
+
+/** A day off's tasks to the working days before it (task → day), same time of day; their due as set is kept to put back. */
+export async function moveTasksForDayOff(dayOff: string, moves: Map<number, string>): Promise<void> {
+  for (const [id, day] of moves) {
+    await pool.query(
+      `UPDATE tasks SET off_from = COALESCE(off_from, due), off_day = $2::date,
+         due = ((($3::date + ((due AT TIME ZONE '${ORG_TZ}')::time)) AT TIME ZONE '${ORG_TZ}')), updated_at = now()
+       WHERE id = $1 AND status = 'open'`,
+      [id, dayOff, day],
+    );
+  }
+}
+
+/** A day off made a working day again: its tasks still open are due when they were. */
+export async function restoreTasksOn(dayOff: string): Promise<number> {
+  const { rowCount } = await pool.query(
+    `UPDATE tasks SET due = off_from, off_from = NULL, off_day = NULL, updated_at = now() WHERE off_day = $1::date AND status = 'open' AND off_from IS NOT NULL`,
+    [dayOff],
+  );
+  return rowCount ?? 0;
 }
 
 export async function setTaskStatus(id: number, done: boolean): Promise<void> {

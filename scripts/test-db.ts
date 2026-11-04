@@ -619,6 +619,41 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and Undo is offered, and puts it back", [(await app.inject({ method: "GET", url: "/calendar/even-deadlines", headers: { cookie } })).body.includes('action="/calendar/even-deadlines/undo"'), (await post("/calendar/even-deadlines/undo", {})).status, JSON.stringify(await state())], [true, 302, JSON.stringify(dueBefore)]);
 }
 
+// ── A day off takes its recurring work along; a day opened ahead joins My Day ──
+{
+  const { workdayOf } = await import("../src/web/work.js");
+  const { getDayEnd } = await import("../src/db/timers.js");
+  const { instantIn } = await import("../src/parse/derive.js");
+  const off = shiftDate(today, 9);
+  const category = (await pool.query("SELECT category FROM tasks LIMIT 1")).rows[0]?.category ?? "other";
+  const task = Number((await pool.query(
+    "INSERT INTO tasks (title, body, category, priority, due, repeat) VALUES ('Weekly report', '', $1, 'normal', $2, 'weekly') RETURNING id",
+    [category, instantIn(off, "10:00", ORG_TZ)],
+  )).rows[0].id);
+  const taskDay = async () => (await pool.query(`SELECT to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD HH24:MI') AS due, to_char(off_day, 'YYYY-MM-DD') AS off FROM tasks WHERE id = $1`, [task])).rows[0];
+  const batches = async () => (await pool.query(
+    `SELECT count(*)::int AS n, count(*) FILTER (WHERE work_day > $2::date AND work_day < $1::date)::int AS ahead FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open'`, [off, today],
+  )).rows[0];
+  await post("/days-off", { date: off });
+  const marked = { batches: await batches(), task: await taskDay() };
+  t("Day off: its daily batches are opened and done ahead on the working days before it; its task moves before it too, same time", [
+    marked.batches.n > 0, marked.batches.ahead === marked.batches.n, marked.task.due < off, marked.task.due.endsWith("10:00"), marked.task.off,
+  ], [true, true, true, true, off]);
+  await post(`/days-off/${off}`, { on: "0" });
+  const back = { batches: (await pool.query(`SELECT count(*) FILTER (WHERE work_day IS NOT NULL)::int AS n FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date`, [off])).rows[0].n, task: await taskDay() };
+  t("…made a working day again: the batches are back on their own day, the task due when it was", [back.batches, back.task], [0, { due: `${off} 10:00`, off: null }]);
+  await pool.query("DELETE FROM tasks WHERE id = $1", [task]);
+
+  // Opening a day ahead on Recurring puts its batches in today's My Day.
+  const ahead = shiftDate(today, 12);
+  await post("/recurring/ahead", { day: ahead });
+  const myDay = workdayOf(new Date(), await getDayEnd()).day;
+  const brought = (await pool.query(`SELECT count(*)::int AS n, count(*) FILTER (WHERE work_day = $2::date)::int AS today FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date`, [ahead, myDay])).rows[0];
+  const page = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${ahead}T12:00:00Z`));
+  t("Recurring: a day opened ahead joins today's My Day as new batches, saying whose day they are", [brought.n > 0, brought.today === brought.n, page.body.includes(`ahead, for ${label}`)], [true, true, true]);
+}
+
 await app.close();
 await pool.end().catch(() => undefined);
 console.log(`\n${pass} passed, ${fail} failed\n`);

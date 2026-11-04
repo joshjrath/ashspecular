@@ -3,13 +3,14 @@
  * off; and the subscribable feed (calendar.ics, signed by its own key).
  */
 import { CATEGORIES, CHANNELS } from "../../catalog.js";
-import { type CalendarMode, type StoredRecord, batchCountsByDay, calendarRange, dueOnDay, feedRecords, listDaysOff, saveDayOffMoves, setDayOff } from "../../db/records.js";
+import { type CalendarMode, type StoredRecord, batchCountsByDay, batchesToDoOn, calendarRange, clearWorkDaysOn, dueOnDay, feedRecords, listDaysOff, saveDayOffMoves, setDayOff, setWorkDays } from "../../db/records.js";
+import { moveTasksForDayOff, restoreTasksOn, tasksDueOn } from "../../db/tasks.js";
 import { DAY_SPAN, type StatusHide, calendarGrid, monthOf, renderCalendar, renderDay, renderWeek, weekStart } from "../pages/calendar.js";
-import { type WorkItem as MyWorkItem, projectBatches, remaining, spreadDayOff, toItem } from "../work.js";
+import { type WorkItem as MyWorkItem, projectBatches, remaining, spreadDayOff, taskItem, toItem } from "../work.js";
 import { ORG_TZ, dateIn, shiftDate } from "../../parse/derive.js";
 import { isMonth } from "../../finance/money.js";
 import { buildIcs, checkFeedKey, feedKey, parseFeedOptions } from "../ics.js";
-import { clearBatchesOn, reopenBatchesOn } from "../../jobs/batches.js";
+import { openBatchesFor, reopenBatchesOn } from "../../jobs/batches.js";
 import { hasDatabase } from "../../config.js";
 import { renderList } from "../pages/lists.js";
 import { renderSnapshot } from "../pages/snapshot.js";
@@ -119,27 +120,39 @@ async function calendar(
     .send(renderCalendar(s, ym, mode, shown, hide, st, `${baseUrlOf(request)}/calendar.ics?key=${feedKey()}`, chide));
 }
 
-/** A day off has no daily batches: they go when it's marked, and come back when it's a working day again. */
+/**
+ * A day off: nobody works it, but its uploads still go up. Its daily batches
+ * are opened now and done ahead, and its tasks and other work move to the
+ * working days before it. Made a working day again, everything is back on
+ * the day.
+ */
 async function markDayOff(date: string, on: boolean): Promise<void> {
   await setDayOff(date, on);
   if (on) {
-    await clearBatchesOn(date);
+    if (date > dateIn(ORG_TZ)) await openBatchesFor(date, () => true, { onDayOff: true }).catch((err) => console.error("[days off] couldn't open the day's batches:", err));
     await spreadOff(date).catch((err) => console.error("[days off] couldn't spread the work:", err));
-  } else await reopenBatchesOn(date);
+  } else {
+    await clearWorkDaysOn(date);
+    await restoreTasksOn(date);
+    await reopenBatchesOn(date);
+  }
   forgetGaps();
 }
 
 /**
- * The work due on a new day off, spread over the working days from
- * tomorrow up to it (today, if it's tomorrow) — balanced against what those
- * days already hold, most pressing first — rather than all on the day before.
+ * The work due on a new day off — its daily batches and tasks included —
+ * spread over the working days from tomorrow up to it (today, if it's
+ * tomorrow), balanced against what those days already hold, most pressing
+ * first, rather than all on the day before.
  */
 async function spreadOff(date: string): Promise<void> {
   const now = new Date();
   const today = dateIn(ORG_TZ, now);
   if (date <= today) return;
-  const [due, offs, work] = await Promise.all([dueOnDay(date), listDaysOff(), loadWork(now)]);
-  const pieces = due.map((r) => toItem(r)).filter((i): i is MyWorkItem => i !== null);
+  const [due, batches, tasks, offs, work] = await Promise.all([dueOnDay(date), batchesToDoOn(date), tasksDueOn(date), listDaysOff(), loadWork(now)]);
+  // Tasks share the spread with records: their ids are kept apart by going negative.
+  const pieces = [...due, ...batches].map((r) => toItem(r)).filter((i): i is MyWorkItem => i !== null)
+    .concat(tasks.map((t) => ({ ...taskItem(t, now), id: -t.id })));
   if (!pieces.length) return;
   const off = new Set(offs);
   const between = (from: string) => {
@@ -150,14 +163,20 @@ async function spreadOff(date: string): Promise<void> {
   let days = between(shiftDate(today, 1));
   if (!days.length) days = between(today);
   if (!days.length) return;
-  const ids = new Set(pieces.map((i) => i.id));
+  const records = new Set(pieces.filter((i) => i.id! > 0).map((i) => i.id));
+  const taskIds = new Set(tasks.map((t) => t.id));
   const projected = projectBatches(days.filter((d) => d > today), work.open, { paused: new Set(work.paused.keys()), daysOff: off });
   const load = new Map<string, number>();
   for (const i of [...work.items, ...projected]) {
-    if (ids.has(i.id) || !i.day || !days.includes(i.day)) continue;
+    if (!i.day || !days.includes(i.day) || (i.task ? taskIds.has(i.task.id) : records.has(i.id))) continue;
     load.set(i.day, (load.get(i.day) ?? 0) + remaining(i));
   }
-  await saveDayOffMoves(date, spreadDayOff(pieces, days, load));
+  const spread = spreadDayOff(pieces, days, load);
+  const batchIds = new Set(batches.map((b) => b.id));
+  const pick = (keep: (id: number) => boolean, map = (id: number) => id) => new Map([...spread].filter(([id]) => keep(id)).map(([id, d]) => [map(id), d] as const));
+  await saveDayOffMoves(date, pick((id) => id > 0 && !batchIds.has(id)));
+  await setWorkDays(pick((id) => batchIds.has(id)));
+  await moveTasksForDayOff(date, pick((id) => id < 0, (id) => -id));
 }
 
 /** A real YYYY-MM from the address, else this month — so a bad URL can't 500. */

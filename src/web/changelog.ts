@@ -19,6 +19,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-day-off-recurring",
+    title: "Days off take their recurring work along",
+    changes: [
+      { text: "Marking a day off no longer drops its daily batches: they open straight away and are done ahead on the working days before it, so its uploads still go up. Tasks due on it, repeating ones included, move before it too.", href: "/calendar" },
+      { text: "A repeating task's next one never lands on a day off: a weekly one is done the working day before, a daily one skips it." },
+      { text: "Recurring: a day you open ahead joins today's My Day as new batches, marked with whose day they are.", href: "/recurring" },
+    ],
+  },
+  {
     id: "2026-11-04-even-out-deadlines",
     title: "Even out deadlines: VOs lined up with their uploads",
     changes: [

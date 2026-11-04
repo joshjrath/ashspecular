@@ -463,11 +463,17 @@ the nudge and Google Calendar (an all-day *🌙 Day off*) all go by the moved
 deadline. Only today and later can be marked. Air dates don't move — posting
 isn't work.
 
-A day off has **no daily batches**. Marking one removes that day's batches,
-except any you've already started (uploads ticked, or cleared), which stay as
-they are. The morning run and *Open* on the Recurring page skip it, and the
-Recurring page shows it as a *day off*. Make it a working day again and its
-batches come back, if the day was already open.
+A day off's **recurring work is done ahead**: its uploads still go up that
+day, so marking one opens its daily batches (Bits, Reading, Specular) straight
+away and spreads them over the working days before it with the rest of its
+work, each showing in My Day on its day as *ahead, for* the day off. Any
+already started (uploads ticked, or cleared) stay as they are. **Tasks** due
+on it move to the working days before it too, at the same time of day, and a
+repeating task's next one never lands on a day off: a weekly one is done the
+working day before (if that's still after today), a daily one simply skips
+it. The morning run and *Open* on the Recurring page don't open a day off,
+and the Recurring page shows it as a *day off*. Make it a working day again
+and its batches are back on their own day and its tasks due when they were.
 
 Dates read M/D/YYYY everywhere, and every air date carries a live countdown:
 "airs 9/28/2026 · in 3 days", turning amber inside three days.
@@ -1903,6 +1909,8 @@ was opened — offers to open just the channels it's missing. Each morning's
 run finds opened days already there and leaves them exactly as you left
 them, cleared ones included — the opener keys every batch by channel, date
 and index, so it can never double-open. Ticking a day ahead keeps you on it.
+Batches you open ahead join **today's My Day** as new batches (*ahead, for
+Sat 11/7*), so you can work them now; ones already open stay where they were.
 
 Run it by hand any time:
 
