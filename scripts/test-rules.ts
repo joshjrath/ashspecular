@@ -77,7 +77,7 @@ import { renderTasks } from "../src/web/pages/tasks.js";
 import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, repeatToday, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
 import { planReset } from "../src/web/reset.js";
-import { planEvenOut } from "../src/web/evenout.js";
+import { EVEN_WINDOW_DAYS, planEvenOut } from "../src/web/evenout.js";
 import { layoutFor as snapLayout, snapshotSvg } from "../src/web/snapshot.js";
 import { withCodes } from "../src/web/gaps.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
@@ -1788,29 +1788,34 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
   t("…and each VO's new day shows its upload's", weekly.days.flatMap((d) => d.vos.map((v) => [v.id, v.newAir])), [[1, "2026-10-25"], [2, "2026-11-01"]]);
 }
 
-// Even out uploads: each channel on its frequency from its last upload, the days evened out.
+// Even out uploads: each channel exactly on its frequency from its last upload; waiting only to keep to a limit.
 {
-  const today = "2026-11-04", floor = shiftDate(today, 6);
+  const today = "2026-11-04", floor = shiftDate(today, EVEN_WINDOW_DAYS);
   const run = (channel: string, last: string | null, airs: string[], every = 7) => ({ channel, every, last, videos: airs.map((air, i) => ({ id: channel.length * 100 + i, air, label: `${channel} ${i}` })) });
-  const you = planEvenOut({ today, floor, fixed: [], spread: false, channels: [run("Specular YOU", "2026-11-02", ["2026-11-08", "2026-11-15"]), run("Specular Studios", "2026-11-02", ["2026-11-09", "2026-11-16"])] });
-  t("Even out: posted 11/2 on every 7 days, the next goes 11/9, not 11/8; one already on it stays", [you.moves.map((m) => [m.channel, m.from, m.to]), you.channels.map((c) => [c.channel, c.moved])], [
-    [["Specular YOU", "2026-11-08", "2026-11-09"], ["Specular YOU", "2026-11-15", "2026-11-16"]], [["Specular Studios", 0], ["Specular YOU", 2]],
+  // Studios and YOU last went up 11/2 and were pushed to 11/14; three other channels go up 11/9 too.
+  const others = ["Specular Verse", "Specular Force", "Specular Anime"].map((ch) => run(ch, "2026-11-02", ["2026-11-09", "2026-11-16"]));
+  const pushed = [run("Specular Studios", "2026-11-02", ["2026-11-14", "2026-11-21"]), run("Specular YOU", "2026-11-02", ["2026-11-14", "2026-11-21"]), ...others];
+  const exact = planEvenOut({ today, floor, fixed: [], channels: pushed });
+  const firsts = (p: ReturnType<typeof planEvenOut>) => p.channels.filter((c) => c.channel === "Specular Studios" || c.channel === "Specular YOU").map((c) => [c.channel, c.first, c.delay]);
+  t("Even out: posted 11/2 on every 7 days, the next goes 11/9 (five days from 11/4 is enough), however many others go up then", [firsts(exact), exact.moves.filter((m) => m.channel === "Specular YOU").map((m) => m.to)], [
+    [["Specular Studios", "2026-11-09", 0], ["Specular YOU", "2026-11-09", 0]], ["2026-11-09", "2026-11-16"],
   ]);
+  t("…under a limit nobody waits: at most 5 a day, both still 11/9", firsts(planEvenOut({ today, floor, fixed: [], channels: pushed, cap: 5 })), [["Specular Studios", "2026-11-09", 0], ["Specular YOU", "2026-11-09", 0]]);
   const six = ["Specular Studios", "Specular YOU", "Specular Verse", "Specular Force", "Specular Anime", "Specular FNAF"].map((ch) => run(ch, "2026-11-02", ["2026-11-09", "2026-11-16", "2026-11-23"]));
-  const spaced = planEvenOut({ today, floor, fixed: [], spread: false, channels: six });
-  const spread = planEvenOut({ today, floor, fixed: [], channels: six });
   const busiest = (p: ReturnType<typeof planEvenOut>) => Math.max(...p.days.map((d) => d.after));
-  t("…six channels all due the same day: spacing only leaves 6 that day; evened out, at most 1 a day", [busiest(spaced), busiest(spread)], [6, 1]);
-  t("…evened out, every channel still a week apart, none sooner than a week after its last upload", spread.channels.every((c) => c.first >= "2026-11-09") && six.every((ch) => {
-    const days = spread.moves.filter((m) => m.channel === ch.channel).map((m) => m.to).concat(ch.videos.filter((v) => !spread.moves.some((m) => m.id === v.id)).map((v) => v.air)).sort();
+  const one = planEvenOut({ today, floor, fixed: [], channels: six, cap: 1 });
+  t("…six channels due the same day: no limit leaves 6 that day; at most 2 a day, 2; at most 1, 1", [busiest(planEvenOut({ today, floor, fixed: [], channels: six })), busiest(planEvenOut({ today, floor, fixed: [], channels: six, cap: 2 })), busiest(one)], [6, 2, 1]);
+  t("…kept to a limit, every channel still a week apart, none sooner than a week after its last upload", one.channels.every((c) => c.first >= "2026-11-09") && six.every((ch) => {
+    const days = one.moves.filter((m) => m.channel === ch.channel).map((m) => m.to).concat(ch.videos.filter((v) => !one.moves.some((m) => m.id === v.id)).map((v) => v.air)).sort();
     return days.every((d, i) => i === 0 || daysBetween(days[i - 1]!, d) === 7);
   }), true);
-  const behind = planEvenOut({ today, floor, fixed: [], spread: false, channels: [run("Specular Verse", "2026-10-01", ["2026-11-06", "2026-11-25"]), run("Specular Force", "2026-10-01", ["2026-11-25"])] });
-  t("…a channel behind is pulled in, but never nearer than the VO buffer; one already inside it stays", behind.moves.map((m) => [m.channel, m.from, m.to]), [["Specular Force", "2026-11-25", "2026-11-10"], ["Specular Verse", "2026-11-25", "2026-11-13"]]);
-  t("…fixed uploads count towards a day; nothing to move, nothing planned", [
-    planEvenOut({ today, floor, fixed: ["2026-11-09", "2026-11-09"], channels: [run("Specular Verse", "2026-11-01", ["2026-11-08", "2026-11-15"])] }).channels[0]!.first,
+  const behind = planEvenOut({ today, floor, fixed: [], channels: [run("Specular Verse", "2026-10-01", ["2026-11-06", "2026-11-25"]), run("Specular Force", "2026-10-01", ["2026-11-25"])] });
+  t("…a channel behind is pulled in, but never nearer than five days from today; one already nearer stays", behind.moves.map((m) => [m.channel, m.from, m.to]), [["Specular Force", "2026-11-25", "2026-11-09"], ["Specular Verse", "2026-11-25", "2026-11-13"]]);
+  t("…other uploads count towards a day's limit; nothing to move, nothing planned", [
+    planEvenOut({ today, floor, fixed: ["2026-11-09", "2026-11-09"], channels: [run("Specular Verse", "2026-11-02", ["2026-11-10"])], cap: 2 }).channels[0]!.first,
+    planEvenOut({ today, floor, fixed: ["2026-11-09", "2026-11-09"], channels: [run("Specular Verse", "2026-11-02", ["2026-11-10"])] }).channels[0]!.first,
     planEvenOut({ today, floor, fixed: [], channels: [run("Specular Verse", "2026-11-02", ["2026-11-09"])] }).moves.length,
-  ], ["2026-11-08", 0]);
+  ], ["2026-11-10", "2026-11-09", 0]);
 }
 
 // Respacing to a new upload frequency: from the last upload on, never before the VO buffer, nothing uploaded moves.

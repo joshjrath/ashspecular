@@ -1,31 +1,35 @@
 /**
  * Even out uploads: the posting calendar's Future reset. Each channel with
  * an upload frequency (Settings → Channels, else its category's) gets its
- * upcoming uploads exactly that far apart, counted from its last upload, and
- * channels are staggered so the days carry about the same number of uploads.
+ * upcoming uploads exactly that far apart, counted from its last upload:
+ * posted 11/2 on every 7 days, its next is 11/9.
  *
  * Rules, per channel:
- * - The first upload is at least its frequency after the last one that went
- *   up (no gap shorter than the frequency), or, if it hasn't posted, no
- *   earlier than its first planned one.
- * - Nothing goes nearer than the VO buffer from today unless it was already
- *   that near (its VO would be due before today).
- * - To even out the days, a channel's whole run may start up to its
- *   frequency − 1 days later (at most MAX_DELAY): once, then every gap is the
- *   frequency again. Each day of delay costs a little, so a channel only
- *   waits when that clearly spreads the week out.
+ * - The next upload is its frequency after the last one that went up (or,
+ *   if it hasn't posted, its first planned one), and each after that its
+ *   frequency on.
+ * - Nothing goes nearer than EVEN_WINDOW_DAYS from today (the least time to
+ *   record a VO and cut it) unless it was already that near.
+ * - Only with a limit set (at most N uploads a day): where a day would go
+ *   over it, a channel's whole run may start later, once, by up to its
+ *   frequency − 1 days (at most MAX_DELAY); then its gaps are its frequency
+ *   again. Under the limit nobody waits.
  *
- * Uploads of channels it doesn't plan (no frequency, paused) and other fixed
- * days count towards each day's load but don't move. Daily batches aren't
- * part of it. Pure: the route gathers the schedule and applies the plan.
+ * Uploads of channels it doesn't plan (no frequency, paused) count towards
+ * each day's load but don't move. Daily batches aren't part of it. Pure: the
+ * route gathers the schedule and applies the plan.
  */
 import { shiftDate } from "../parse/derive.js";
 import { daysBetween } from "./cadence.js";
 
-/** A channel's whole run starts this many days later, at most, to even the days out. */
+/** Days from today an upload needs at least, to record its VO and cut it. */
+export const EVEN_WINDOW_DAYS = 5;
+/** The uploads-a-day limit offered; none set means every channel exactly on its frequency. */
+export const EVEN_BOUNDS = { min: 1, max: 6 };
+/** A channel's whole run starts this many days later, at most, to keep a day within the limit. */
 export const MAX_DELAY = 6;
-/** What one day of delay costs, against the sum of each day's uploads squared. */
-const DELAY_COST = 0.6;
+/** An upload over a day's limit costs this, a day of waiting 1: a channel waits only to keep a day within it. */
+const OVER_COST = 10;
 
 export interface EvenChannel {
   channel: string;
@@ -39,7 +43,7 @@ export interface EvenChannel {
 
 export interface EvenPlan {
   moves: Array<{ id: number; channel: string; label: string; from: string; to: string; shift: number }>;
-  /** Each channel planned: where its run now starts, and how many days it waits to even the days out. */
+  /** Each channel planned: where its run now starts, and how many days it waits to keep a day within the limit. */
   channels: Array<{ channel: string; every: number; last: string | null; first: string; delay: number; videos: number; moved: number }>;
   /** Uploads a day, before and after, from today to the last one planned. */
   days: Array<{ day: string; before: number; after: number }>;
@@ -47,13 +51,13 @@ export interface EvenPlan {
 
 export function planEvenOut(o: {
   today: string;
-  /** Today + the VO buffer: nothing is pulled nearer than this. */
+  /** Today + EVEN_WINDOW_DAYS: nothing is pulled nearer than this. */
   floor: string;
   channels: EvenChannel[];
   /** Upload days that stay put but count towards a day's load. */
   fixed: string[];
-  /** false: only fix each channel's spacing, nobody waits to even the days out. */
-  spread?: boolean;
+  /** At most this many uploads a day, where waiting can manage it; null or left out: no limit, nobody waits. */
+  cap?: number | null;
 }): EvenPlan {
   const load = new Map<string, number>();
   const add = (day: string, n: number) => load.set(day, (load.get(day) ?? 0) + n);
@@ -76,19 +80,20 @@ export function planEvenOut(o: {
   const daysOf = (r: (typeof runs)[number], delay: number) => r.videos.map((_, i) => shiftDate(r.base, delay + i * r.c.every));
   for (const r of runs) for (const d of daysOf(r, r.delay)) add(d, 1);
 
-  // Settle each channel's delay in turn, the busiest first, until none changes.
+  // With a limit: settle each channel's delay in turn, the busiest first, until none changes.
+  const cap = o.cap ?? null;
   const order = [...runs].sort((a, b) => b.videos.length - a.videos.length || a.c.every - b.c.every || a.c.channel.localeCompare(b.c.channel));
-  for (let pass = 0; pass < 8; pass++) {
+  for (let pass = 0; cap !== null && pass < 8; pass++) {
     let changed = false;
     for (const r of order) {
       for (const d of daysOf(r, r.delay)) add(d, -1);
-      const most = o.spread === false ? 0 : Math.min(r.c.every - 1, MAX_DELAY);
+      const most = Math.min(r.c.every - 1, MAX_DELAY);
       let best = r.low, bestCost = Infinity;
       for (let extra = 0; extra <= most; extra++) {
         const delay = r.low + extra;
-        // Adding one upload to a day with n already adds 2n + 1 to the sum of squares.
-        const cost = daysOf(r, delay).reduce((sum, d) => sum + 2 * (load.get(d) ?? 0) + 1, 0) + DELAY_COST * extra;
-        if (cost < bestCost - 1e-9) { best = delay; bestCost = cost; }
+        const over = daysOf(r, delay).filter((d) => (load.get(d) ?? 0) >= cap).length;
+        const cost = OVER_COST * over + extra;
+        if (cost < bestCost) { best = delay; bestCost = cost; }
       }
       if (best !== r.delay) changed = true;
       r.delay = best;

@@ -586,17 +586,18 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const before = await state();
   const every = everyFor("Specular Manga")!;
   const calendar = await app.inject({ method: "GET", url: "/calendar", headers: { cookie } });
-  const preview = await app.inject({ method: "GET", url: "/calendar/even?how=spacing", headers: { cookie } });
-  const unconfirmed = await post("/calendar/even", { how: "spacing" });
+  const preview = await app.inject({ method: "GET", url: "/calendar/even", headers: { cookie } });
+  const unconfirmed = await post("/calendar/even", {});
   t("Even out uploads: on the calendar, the preview lists the moves and changes nothing; without the box ticked, nothing happens", [
     calendar.body.includes('href="/calendar/even"'), preview.statusCode, preview.body.includes("EV-1 · Even EV-1"), unconfirmed.status, JSON.stringify(await state()) === JSON.stringify(before),
   ], [true, 200, true, 302, true]);
-  await post("/calendar/even", { how: "spacing", confirm: "1" });
+  await post("/calendar/even", { confirm: "1" });
   const after = await state();
-  // Its frequency after yesterday's is inside the VO buffer, so the next goes 6 days out, the one after a frequency on.
-  const first = shiftDate(today, Math.max(every - 1, 6));
-  t("…applied: the next upload a frequency on from the last (never inside the VO buffer), the one after a frequency later, VOs six days before", [after.map((r) => r.air), after.map((r) => r.vo)], [
-    [first, shiftDate(first, every)], [shiftDate(first, -6), shiftDate(first, every - 6)],
+  // A frequency after yesterday's is nearer than five days, so the next goes five days out, the one after a frequency on.
+  const first = shiftDate(today, Math.max(every - 1, 5));
+  const voOf = (air: string) => (shiftDate(air, -6) < today ? today : shiftDate(air, -6));
+  t("…applied: the next upload a frequency on from the last (never nearer than five days), the one after a frequency later; a VO that would be past is due today", [after.map((r) => r.air), after.map((r) => r.vo)], [
+    [first, shiftDate(first, every)], [voOf(first), voOf(shiftDate(first, every))],
   ]);
   const page = await app.inject({ method: "GET", url: "/calendar/even", headers: { cookie } });
   t("…and Undo is offered", page.body.includes('action="/calendar/even/undo"'), true);

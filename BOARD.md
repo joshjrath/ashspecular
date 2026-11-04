@@ -340,17 +340,17 @@ plots the day the work is due.
 - **Even out uploads…** (beside Future reset) does the same for the posting
   calendar. Each long-form channel with an upload frequency (Settings →
   Channels, else its category's) gets its upcoming uploads exactly that far
-  apart, counted from its last upload that went up: posted Monday on every 7
-  days, its next is the following Monday, not Sunday.
-  - **Even out the days** (the default) also staggers channels so no day
-    piles up: a channel may start up to its frequency − 1 days later (6 at
-    most), once, and only where that clearly spreads the week out. After that
-    its gaps are its frequency again. **Fix the spacing only** moves nothing
-    later than its frequency needs.
-  - Nothing goes nearer than 6 days from today (the VO buffer) unless it
-    already was, and uploads already up, paused channels and videos, and daily
-    batches stay put. Other channels' uploads count towards each day's load.
-  - Each video's VO and script deadlines move with its upload.
+  apart, counted from its last upload that went up: posted 11/2 on every 7
+  days, its next is 11/9, however many other channels go up that day.
+  - **Uploads a day** is *No limit* by default: nobody waits. Pick *At most
+    N a day* and, only where a day would go over it, a channel starts a few
+    days later (up to its frequency − 1, 6 at most), once; after that its
+    gaps are its frequency again.
+  - Nothing goes nearer than 5 days from today unless it already was, and
+    uploads already up, paused channels and videos, and daily batches stay
+    put. Other channels' uploads count towards a day's limit.
+  - Each video's VO and script deadlines move with its upload. A VO that
+    would fall before today (an upload 5 days out) is due today.
   - The preview shows uploads a day week by week (after, with before struck
     through), where each channel's run now starts, and every move. Nothing
     changes until you tick the box and press the button; **Undo** is offered

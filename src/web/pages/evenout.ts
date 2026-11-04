@@ -5,12 +5,12 @@
  */
 import { esc } from "../html.js";
 import { channelColour, layout, pageHeader, type Shell } from "../page.js";
-import { ORG_TZ, VO_BUFFER_DAYS, usDate } from "../../parse/derive.js";
-import type { EvenPlan } from "../evenout.js";
+import { ORG_TZ, usDate } from "../../parse/derive.js";
+import { EVEN_BOUNDS, EVEN_WINDOW_DAYS, type EvenPlan } from "../evenout.js";
 
 export interface EvenView {
-  /** Stagger channels to even the days out, or only fix each one's spacing. */
-  spread: boolean;
+  /** At most this many uploads a day (a channel may wait to keep to it), or null: exact frequency, nobody waits. */
+  cap: number | null;
   plan: EvenPlan | null;
   undo: { at: Date; text: string } | null;
   done: string;
@@ -51,10 +51,12 @@ export function renderEvenOut(shell: Shell, v: EvenView): string {
     !v.done && v.undo ? `<div class="rsnote"><p>Last evened out ${esc(when(v.undo.at))}: ${esc(v.undo.text)}</p>${undoForm("Undo it")}</div>` : "",
   ].join("");
 
+  const capOptions = [`<option value=""${v.cap === null ? " selected" : ""}>No limit: every channel exactly on its frequency</option>`]
+    .concat(Array.from({ length: EVEN_BOUNDS.max - EVEN_BOUNDS.min + 1 }, (_, i) => i + EVEN_BOUNDS.min).map((n) => `<option value="${n}"${v.cap === n ? " selected" : ""}>At most ${n} a day</option>`)).join("");
   const intro = `<section class="panel rsintro">
-    <p><b>Lines the upcoming uploads up with each channel's upload frequency</b> (Settings → Channels): every channel's next upload goes its frequency after its last one that went up, and each after that the same distance on. Only uploads from today on move, never ones already up, paused or daily batches, and nothing is pulled nearer than ${VO_BUFFER_DAYS} days from today (the VO buffer). Each video's VO and script deadlines move with its upload.</p>
-    <p>To even the days out, a channel may start a few days later, once; after that its gaps are its frequency again. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
-    <form method="get" action="/calendar/even" class="rsper"><label>How <select name="how" onchange="this.form.submit()"><option value="spread"${v.spread ? " selected" : ""}>Even out the days</option><option value="spacing"${v.spread ? "" : " selected"}>Fix the spacing only</option></select></label><noscript><button class="clear secondary">Show</button></noscript></form>
+    <p><b>Lines the upcoming uploads up with each channel's upload frequency</b> (Settings → Channels): every channel's next upload goes its frequency after its last one that went up (posted 11/2 on every 7 days: next 11/9), and each after that the same distance on. Only uploads from today on move, never ones already up, paused or daily batches, and nothing goes nearer than ${EVEN_WINDOW_DAYS} days from today unless it already was. Each video's VO and script deadlines move with its upload; a VO that would fall before today is due today.</p>
+    <p><b>Uploads a day:</b> with no limit nobody waits. Pick a limit and, only where a day would go over it, a channel starts a few days later, once; after that its gaps are its frequency again. Nothing changes until you press the button at the bottom, and Undo puts everything back for a day after.</p>
+    <form method="get" action="/calendar/even" class="rsper"><label>Uploads a day <select name="cap" onchange="this.form.submit()">${capOptions}</select></label><noscript><button class="clear secondary">Show</button></noscript></form>
   </section>`;
 
   const header = pageHeader("Even out uploads", `<a class="clear secondary" href="/calendar?mode=posting">← Calendar</a>`);
@@ -66,7 +68,7 @@ export function renderEvenOut(shell: Shell, v: EvenView): string {
   const channels = `<section class="panel"><h2>Channels <span class="sub">— where each one's run starts now</span></h2>
     <div class="rsrows">${p.channels.map((c) => `<div class="rsrow${c.moved ? "" : " stays"}" style="--ch:${channelColour(c.channel)}"><i></i>
       <div class="rsmain"><b>${esc(c.channel)}</b><small>every ${days(c.every)} · ${c.last ? `last up ${esc(short(c.last))}` : "nothing up yet"} · ${c.videos} upcoming</small></div>
-      <div class="rsair">next <b>${esc(short(c.first))}</b>${c.delay ? ` <small>+${days(c.delay)} to even out</small>` : ""}<br><small>${c.moved ? `${c.moved} move${c.moved === 1 ? "s" : ""}` : "already on it"}</small></div>
+      <div class="rsair">next <b>${esc(short(c.first))}</b>${c.delay ? ` <small>+${days(c.delay)} to keep to ${v.cap} a day</small>` : ""}<br><small>${c.moved ? `${c.moved} move${c.moved === 1 ? "s" : ""}` : "already on it"}</small></div>
     </div>`).join("")}</div>
   </section>`;
 
@@ -76,7 +78,7 @@ export function renderEvenOut(shell: Shell, v: EvenView): string {
 
   const n = new Set(p.moves.map((m) => m.channel)).size;
   const apply = `<form method="post" action="/calendar/even" class="panel rsapply">
-    <input type="hidden" name="how" value="${v.spread ? "spread" : "spacing"}">
+    <input type="hidden" name="cap" value="${v.cap ?? ""}">
     <p>${p.moves.length} upload${p.moves.length === 1 ? "" : "s"} on ${n} channel${n === 1 ? "" : "s"} move to their upload frequency, each with its VO and script deadlines.</p>
     <label class="rsconfirm"><input type="checkbox" name="confirm" value="1" required> I understand this moves uploads and deadlines across ${n} channel${n === 1 ? "" : "s"}.</label>
     <button class="clear">Even out the uploads</button>

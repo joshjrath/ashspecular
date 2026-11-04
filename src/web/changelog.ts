@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-even-out-exact",
+    title: "Even out uploads keeps every channel exactly on its frequency",
+    changes: [
+      { text: "Even out uploads no longer makes a channel wait just to spread the week: each channel's next upload is its frequency after its last (11/2 on every 7 days: 11/9), as long as that's 5 days or more from today.", href: "/calendar/even" },
+      { text: "To spread a busy week, pick At most N uploads a day: a channel waits only where a day would go over it. A VO that would fall before today is due today." },
+    ],
+  },
+  {
     id: "2026-11-04-even-out-uploads",
     title: "Even out uploads: the calendar on each channel's frequency",
     changes: [
