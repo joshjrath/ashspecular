@@ -371,6 +371,21 @@ export async function batchesToDoOn(day: string): Promise<StoredRecord[]> {
   return rows.map(hydrate);
 }
 
+/**
+ * A day opened ahead, closed again: its batches nobody's started (no upload
+ * ticked, no time tracked, not cleared) go, and any that were started go
+ * back to their own day, out of today's My Day. Its morning opens it as usual.
+ */
+export async function closeBatchesOn(day: string): Promise<{ closed: number; kept: number }> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM records r WHERE r.batch_no IS NOT NULL AND r.air_date = $1::date AND r.status = 'open' AND COALESCE(r.batch_done, 0) = 0
+       AND NOT EXISTS (SELECT 1 FROM time_entries e WHERE e.record_id = r.id)`,
+    [day],
+  );
+  const kept = await pool.query(`UPDATE records SET work_day = NULL WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open' AND work_day IS NOT NULL`, [day]);
+  return { closed: rowCount ?? 0, kept: kept.rowCount ?? 0 };
+}
+
 /** Batches just opened ahead on Recurring: worked on `day` (My Day's), so My Day has them now. */
 export async function bringAhead(ids: number[], day: string): Promise<void> {
   if (!ids.length) return;

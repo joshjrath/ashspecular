@@ -4,7 +4,7 @@
  */
 import { CHANNELS } from "../../catalog.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, shortsDay, todayStatus, tomorrow } from "../../jobs/batches.js";
-import { bringAhead, clearBatches, listBatchesOn } from "../../db/records.js";
+import { bringAhead, clearBatches, closeBatchesOn, listBatchesOn } from "../../db/records.js";
 import { refererPath, safeDate } from "../http.js";
 import { renderRecurring } from "../pages/recurring.js";
 import { shiftDate } from "../../parse/derive.js";
@@ -76,6 +76,17 @@ export function registerRecurring(app: FastifyInstance): void {
     // Opened ahead to work on now: they join today's My Day as new batches.
     await bringAhead(opened, workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day);
     return reply.redirect(`/recurring?day=${show}`);
+  });
+
+  // Close a day opened ahead: what nobody's started goes, and it leaves My Day. Only days after My Day's.
+  app.post<{ Body: { day?: string } }>("/recurring/close", async (request, reply) => {
+    const day = safeDate(request.body?.day);
+    const myDay = workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day;
+    if (day && day > myDay) {
+      const r = await closeBatchesOn(day);
+      console.log(`[recurring] closed ${day}: ${r.closed} batch(es) gone, ${r.kept} started kept`);
+    }
+    return reply.redirect(`/recurring${day ? `?day=${day}` : ""}`);
   });
 
   // One segment on a reading channel's day: how many of its uploads are done.

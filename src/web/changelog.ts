@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-batch-groups-close-day",
+    title: "Batches grouped by kind and day; close a day you opened",
+    changes: [
+      { text: "My Day groups batches by kind and by day: Bits apart from Reading, and each day you open ahead its own group. Each group has its own ⤢ to show its batches as rows and ⤡ Group to fold them back.", href: "/my-day" },
+      { text: "Recurring: Close this day on a day you opened ahead. Its batches nobody has started go, and leave My Day.", href: "/recurring" },
+    ],
+  },
+  {
     id: "2026-11-04-day-off-recurring",
     title: "Days off take their recurring work along",
     changes: [

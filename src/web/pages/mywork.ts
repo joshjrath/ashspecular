@@ -253,8 +253,8 @@ function timeLogPanel(log: NonNullable<MyDayData["log"]>, today: string, now: Da
   </section>`;
 }
 
-/** My Day's category switches, and whether batches show one row per upload. */
-function mydaySwitches(hidden: string[], exploded: boolean): string {
+/** My Day's category switches. */
+function mydaySwitches(hidden: string[]): string {
   return `<form method="post" action="/my-day/show" class="mdsw" aria-label="What My Day shows">
     <span class="mdlab">Show</span>
     ${MYDAY_GROUPS.map((g) => {
@@ -262,48 +262,65 @@ function mydaySwitches(hidden: string[], exploded: boolean): string {
       return `<label style="--wc:${colour}"><input type="checkbox" name="show" value="${g.id}"${hidden.includes(g.id) ? "" : " checked"} onchange="this.form.submit()"><i></i>${esc(g.label)}</label>`;
     }).join("")}
     <noscript><button class="mdpill">Apply</button></noscript>
-    <button class="mdpill mdx" formaction="/my-day/explode" name="on" value="${exploded ? "0" : "1"}" title="${exploded ? "Fold the day's batches back into one row" : "Every batch channel as its own row in Today"}">${exploded ? "⤡ Group batches" : "⤢ Explode batches"}</button>
   </form>`;
 }
 
+/** A batch group's key: its kind and whose day it is ("bits-20261107"), as the explode cookie keeps it. */
+const batchGroupKey = (i: WorkItem) => `${i.type}-${(i.airDate ?? "").replace(/-/g, "")}`;
+
 /**
- * A list of work with the day's batches folded into one line ("12 batches ·
- * 2h left"), opened to tick them one by one — a dozen 10-minute rows would
- * bury the VOs.
+ * A list of work with its batches folded into groups, one per kind (Bits,
+ * Reading) and day ("5 Bits batches · for Sat 11/7"), each opened to tick
+ * them one by one — a dozen 10-minute rows would bury the VOs. Each group
+ * can be ungrouped on its own: then its batches are rows of their own, with
+ * how many uploads are done, under a line that groups them again.
  */
-function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded = false, today?: string): string {
-  // Exploded: each batch channel its own row, with how many of its uploads are done.
-  if (exploded) {
-    return items
-      .map((i) => {
-        const target = i.record?.batchTarget ?? 1;
-        const extra = isBatch(i.type) && target > 1 ? `<span class="wunits">${Math.min(target, i.record?.batchDone ?? 0)}/${target} uploaded</span>` : "";
-        return workRow(i, now, running, back, extra, today);
-      })
-      .join("");
-  }
-  const batches = items.filter((i) => isBatch(i.type));
-  const rest = items.filter((i) => !isBatch(i.type));
-  if (batches.length < 3) return items.map((i) => workRow(i, now, running, back, "", today)).join("");
-  const est = batches.reduce((n, i) => n + i.est, 0);
-  const spent = batches.reduce((n, i) => n + i.spent, 0);
-  const left = batches.reduce((n, i) => n + remaining(i), 0);
-  const t = TYPE_BY_ID.get(batches.every((i) => i.type === "reading") ? "reading" : "bits")!;
-  const each = new Set(batches.map((i) => i.est)).size === 1 ? `${batches[0]!.est}m each` : `~${Math.round(est / batches.length)}m each`;
-  const pct = Math.min(100, Math.round((spent / est) * 100));
-  const group = `<details class="wgroup"${batches.some((i) => itemKey(i) === running) ? " open" : ""}>
-    <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">Batch</span>
-      <div class="wmain"><span class="wt">${batches.length} Bits / Reading batches</span><div class="wmeta"><span class="wwhy">${esc(whyNow(batches[0]!, now, today))}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
+function groupBatches(items: WorkItem[], now: Date, running: string | null, back: string, exploded: string[] = [], today?: string): string {
+  const units = (i: WorkItem) => {
+    const target = i.record?.batchTarget ?? 1;
+    return isBatch(i.type) && target > 1 ? `<span class="wunits">${Math.min(target, i.record?.batchDone ?? 0)}/${target} uploaded</span>` : "";
+  };
+  const groups = new Map<string, WorkItem[]>();
+  for (const i of items) if (isBatch(i.type)) groups.set(batchGroupKey(i), [...(groups.get(batchGroupKey(i)) ?? []), i]);
+  const toggle = (key: string, on: boolean, label: string, title: string) =>
+    `<form method="post" action="/my-day/explode"><input type="hidden" name="group" value="${esc(key)}"><input type="hidden" name="on" value="${on ? "1" : "0"}"><button class="wbtn" title="${esc(title)}">${label}</button></form>`;
+  const groupHtml = (key: string, batches: WorkItem[]) => {
+    const t = TYPE_BY_ID.get(batches[0]!.type)!;
+    const kind = batches[0]!.type === "reading" ? "Reading" : "Bits";
+    const day = batches[0]!.airDate;
+    const whose = day && today && day > today ? whyNow(batches[0]!, now, today) : "today";
+    const name = `${batches.length} ${kind} batches`;
+    if (exploded.includes(key)) {
+      return `<div class="wgrouphead" style="--wc:${t.colour}"><span>${esc(name)} · ${esc(whose)}</span>${toggle(key, false, "⤡ Group", `Fold these ${kind} batches back into one row`)}</div>
+        ${batches.map((i) => workRow(i, now, running, back, units(i), today)).join("")}`;
+    }
+    const est = batches.reduce((n, i) => n + i.est, 0);
+    const spent = batches.reduce((n, i) => n + i.spent, 0);
+    const left = batches.reduce((n, i) => n + remaining(i), 0);
+    const each = new Set(batches.map((i) => i.est)).size === 1 ? `${batches[0]!.est}m each` : `~${Math.round(est / batches.length)}m each`;
+    const pct = est ? Math.min(100, Math.round((spent / est) * 100)) : 0;
+    return `<details class="wgroup"${batches.some((i) => itemKey(i) === running) ? " open" : ""}>
+    <summary class="wrow" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
+      <div class="wmain"><span class="wt">${esc(name)}</span><div class="wmeta"><span class="wwhy">${esc(whose)}</span><span>${esc(fmtMin(left))} left · ${esc(each)}</span></div></div>
       <div class="wtime"><span class="wbar"><i style="width:${pct}%"></i></span><span class="wnum">${spent >= 1 ? `${esc(fmtMin(spent))} / ` : ""}${esc(fmtMin(est))}</span></div>
-      <div class="wacts"><form method="post" action="/my-day/explode"><input type="hidden" name="on" value="1"><button class="wbtn" title="Every batch channel as its own row">⤢</button></form><a class="wbtn" href="/recurring" title="Open Recurring to tick uploads">↗</a></div>
+      <div class="wacts">${toggle(key, true, "⤢", `Each of these ${kind} batches as its own row`)}<a class="wbtn" href="/recurring${day && today && day > today ? `?day=${day}` : ""}" title="Open Recurring to tick uploads">↗</a></div>
     </summary>
-    <div class="wlist">${batches.map((i) => workRow(i, now, running, back, "", today)).join("")}</div>
+    <div class="wlist">${batches.map((i) => workRow(i, now, running, back, units(i), today)).join("")}</div>
   </details>`;
-  // The group sits where its first batch would have.
-  const at = items.indexOf(batches[0]!);
-  const before = rest.filter((i) => items.indexOf(i) < at);
-  const after = rest.filter((i) => items.indexOf(i) > at);
-  return [...before.map((i) => workRow(i, now, running, back, "", today)), group, ...after.map((i) => workRow(i, now, running, back, "", today))].join("");
+  };
+  // Each group sits where its first batch would have; a batch on its own is just a row.
+  const out: string[] = [];
+  const placed = new Set<string>();
+  for (const i of items) {
+    if (!isBatch(i.type)) { out.push(workRow(i, now, running, back, "", today)); continue; }
+    const key = batchGroupKey(i);
+    const batches = groups.get(key)!;
+    if (batches.length < 2) { out.push(workRow(i, now, running, back, units(i), today)); continue; }
+    if (placed.has(key)) continue;
+    placed.add(key);
+    out.push(groupHtml(key, batches));
+  }
+  return out.join("");
 }
 
 /** A kind of work's estimate for the legend: tasks and recurring channels can each have their own. */
@@ -357,7 +374,8 @@ export interface MyDayData {
   /** Category switches turned off (MYDAY_GROUPS ids). */
   hidden?: string[];
   /** Batches shown as one row per upload. */
-  exploded?: boolean;
+  /** The batch groups ungrouped into rows (batchGroupKey). */
+  exploded?: string[];
   /** Time logged over a range: the week's timeline, or a month, quarter or year. */
   log?: { range: LogRange; days: LoggedDay[]; daysOff: string[] };
 }
@@ -446,7 +464,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
   const todayList = `<section class="panel"><h2>${esc(dayName)} <span class="sub">— ${d.required.length} to do · ${esc(fmtMin(leftToday))} left${
     d.required.some((i) => whyNow(i, d.now, d.today).endsWith("late")) ? ` · <b class="late">${d.required.filter((i) => whyNow(i, d.now, d.today).endsWith("late")).length} late</b>` : ""
   }</span></h2>
-    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? false, d.today)}</div>` : `<div class="empty">Everything due ${w && (w.carried || w.ahead) ? `on ${esc(dayName)}` : "today"} is done. Do ahead is below.</div>`}
+    ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? [], d.today)}</div>` : `<div class="empty">Everything due ${w && (w.carried || w.ahead) ? `on ${esc(dayName)}` : "today"} is done. Do ahead is below.</div>`}
   </section>`;
 
   const estDone = d.done.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0);
@@ -490,7 +508,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     ${dayBanner(d)}
     ${d.removed ? `<div class="mdend quiet"><p>Removed <b>${esc(d.removed.title)}</b> from the day. It's under Removed if you need it back.</p><form method="post" action="/r/${d.removed.id}/open" class="mdendf"><button class="linkbtn">Undo</button></form></div>` : ""}
     ${timerBar(d.running, back)}
-    ${mydaySwitches(d.hidden ?? [], d.exploded ?? false)}
+    ${mydaySwitches(d.hidden ?? [])}
     <div class="stats">${tiles}</div>
     ${focus}
     <div class="mydaygrid">${todayList}${week}</div>

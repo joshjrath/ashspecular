@@ -3,11 +3,11 @@
  * recording mode, and Forgotten work.
  */
 import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, repeatToday, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
-import { ORG_TZ, instantIn, shiftDate } from "../../parse/derive.js";
+import { ORG_TZ, dateIn, instantIn, shiftDate } from "../../parse/derive.js";
 import { type StoredRecord, getRecord, setStatus } from "../../db/records.js";
 import { clearTime, forgetUntracked, getDayEnd, loggedBetween, minutesSince, runningTimer, setDayEnd, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
 import { hasDatabase } from "../../config.js";
-import { localPath } from "../http.js";
+import { formText, localPath } from "../http.js";
 import { renderForgotten, renderMyDay, renderRecording, renderVoQueue } from "../pages/mywork.js";
 import { titleOnDay } from "../page.js";
 import { repeatTask, setTaskStatus } from "../../db/tasks.js";
@@ -44,6 +44,10 @@ async function removedNote(raw: string | undefined): Promise<{ id: number; title
 // My Day's switches, kept in this browser: which kinds of work show, and batches as one row each upload.
 const keepYear = { path: "/", sameSite: "lax" as const, httpOnly: true, maxAge: 60 * 60 * 24 * 365 };
 
+/** A batch group's key as kept in the explode cookie: its kind and day ("bits-20261107"). */
+const GROUP_KEY = /^(bits|reading)-\d{8}$/;
+const explodedGroups = (raw: string | undefined) => (raw ?? "").split(".").filter((k) => GROUP_KEY.test(k));
+
 export function registerMyWork(app: FastifyInstance): void {
   // ×: a daily batch taken off the day (it goes to Removed, where Restore puts it back).
   app.post<{ Body: { id?: string; back?: string } }>("/my-day/remove", async (request, reply) => {
@@ -71,7 +75,7 @@ export function registerMyWork(app: FastifyInstance): void {
     // The category switches: only the kinds of work left on count anywhere on the page.
     const hidden = (request.cookies.myday_hide ?? "").split(".").filter((g) => MYDAY_GROUPS.some((x) => x.id === g));
     const shown = shownTypes(hidden);
-    const exploded = request.cookies.myday_explode === "1";
+    const exploded = explodedGroups(request.cookies.myday_explode);
     const logRange: LogRange = LOG_RANGES.find((r) => r.id === request.query.log)?.id ?? "week";
     const work = { ...loaded, items: loaded.items.filter((i) => shown.has(i.type)), doneItems: loaded.doneItems.filter((i) => shown.has(i.type)) };
     const projected = projectBatches(days.slice(1), work.open, { paused: new Set(work.paused.keys()), daysOff: offs }).filter((i) => shown.has(i.type));
@@ -119,8 +123,14 @@ export function registerMyWork(app: FastifyInstance): void {
     if (ended) await setDayEnd(ended.prev ? { ...ended.prev, prev: null } : null);
     return reply.redirect("/my-day");
   });
-  app.post<{ Body: { on?: string } }>("/my-day/explode", async (request, reply) => {
-    reply.setCookie("myday_explode", request.body?.on === "1" ? "1" : "0", keepYear);
+  // One batch group (a kind and a day) ungrouped into rows, or grouped again.
+  app.post<{ Body: { on?: string; group?: string } }>("/my-day/explode", async (request, reply) => {
+    const group = formText(request.body?.group);
+    const keys = explodedGroups(request.cookies.myday_explode).filter((k) => k !== group);
+    if (GROUP_KEY.test(group) && request.body?.on === "1") keys.push(group);
+    // Days gone by drop off, and the cookie stays small.
+    const since = shiftDate(dateIn(ORG_TZ), -2).replace(/-/g, "");
+    reply.setCookie("myday_explode", keys.filter((k) => k.slice(-8) >= since).slice(-30).join("."), keepYear);
     return reply.redirect("/my-day");
   });
   // Clear the time tracked on a piece that's already done — someone else did it.

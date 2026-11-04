@@ -818,10 +818,12 @@ can be changed.)
   Videos, revisions and tasks don't have it: clear or move those as usual.
 - **Today:** everything late or due today. Each piece shows tracked time
   against its estimate on a bar, with ▶ to time it and ✓ to clear it.
-  Today's Bits/Reading batches fold into one line you can open.
-  **⤢ Explode batches** (on that line, or next to the switches) shows each
-  batch channel as its own row, with how many of its uploads are done
-  ("2/5 uploaded"), its time, ▶ and ✓. **⤡ Group batches** folds them back.
+  Batches fold into groups you can open, one for each kind and day: today's
+  Bits, today's Reading, and each day opened ahead its own ("2 Bits batches ·
+  ahead, for Sat 11/7"). **⤢** on a group shows its batches as rows of their
+  own, with how many uploads are done ("2/5 uploaded"), their time, ▶ and ✓;
+  **⤡ Group** on the line above them folds them back. Each group is
+  ungrouped on its own, and this browser remembers which.
 - **Time logged:** what the timer actually saw.
   - **Week** (the default) is a timeline of this week, Monday to Sunday. Each
     day is a lane across the hours, with every stretch of work placed where
@@ -1910,7 +1912,11 @@ run finds opened days already there and leaves them exactly as you left
 them, cleared ones included — the opener keys every batch by channel, date
 and index, so it can never double-open. Ticking a day ahead keeps you on it.
 Batches you open ahead join **today's My Day** as new batches (*ahead, for
-Sat 11/7*), so you can work them now; ones already open stay where they were.
+Sat 11/7*), each day its own group, so you can work them now; ones already
+open stay where they were. **Close this day** on a day ahead takes it back:
+its batches nobody has started (no upload ticked, no time tracked) go and
+leave My Day, any started stay on their own day, and the day opens by itself
+that morning as usual.
 
 Run it by hand any time:
 

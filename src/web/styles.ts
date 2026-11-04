@@ -1159,6 +1159,10 @@ header.page .checknow button { white-space: nowrap; }
 .wgroup > summary .wt::after { content: " ▾"; color: var(--ink3); font-size: 12px; }
 .wgroup[open] > summary .wt::after { content: " ▴"; }
 .wgroup .wlist { margin: 6px 0 0 18px; }
+/* My Day: a batch group ungrouped into rows, under a line that groups it again */
+.wgrouphead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px 2px; border-left: 3px solid var(--wc); color: var(--ink3); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.wgrouphead form { margin: 0; }
+.wgrouphead .wbtn { width: auto; height: 26px; padding: 0 10px; font-size: 12px; text-transform: none; letter-spacing: 0; }
 .wtype { justify-self: start; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
   background: color-mix(in srgb, var(--wc) 24%, transparent); color: color-mix(in srgb, var(--wc) 45%, #fff); white-space: nowrap; }
 .wmain { min-width: 0; }

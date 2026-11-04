@@ -652,6 +652,18 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const page = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
   const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${ahead}T12:00:00Z`));
   t("Recurring: a day opened ahead joins today's My Day as new batches, saying whose day they are", [brought.n > 0, brought.today === brought.n, page.body.includes(`ahead, for ${label}`)], [true, true, true]);
+
+  // Each group ungroups on its own; a day opened ahead can be closed again, and leaves My Day.
+  const key = `bits-${ahead.replace(/-/g, "")}`;
+  const split = await app.inject({ method: "POST", url: "/my-day/explode", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, payload: `group=${key}&on=1` });
+  const junk = await app.inject({ method: "POST", url: "/my-day/explode", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, payload: "group=<x>&on=1" });
+  const rec = await app.inject({ method: "GET", url: `/recurring?day=${ahead}`, headers: { cookie } });
+  await post("/recurring/close", { day: ahead });
+  const closed = (await pool.query(`SELECT count(*)::int AS n FROM records WHERE batch_no IS NOT NULL AND air_date = $1::date`, [ahead])).rows[0].n;
+  const after = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  t("…a group ungroups on its own (nothing else gets in the cookie); Close this day takes its batches away, and out of My Day", [
+    String(split.headers["set-cookie"]).includes(`myday_explode=${key}`), String(junk.headers["set-cookie"]).includes("myday_explode=;"), rec.body.includes('action="/recurring/close"'), closed, after.body.includes(`ahead, for ${label}`),
+  ], [true, true, true, 0, false]);
 }
 
 await app.close();

@@ -197,6 +197,13 @@ export function renderRecurring(
                  }</button>
                </form>`
             : ""
+        }${
+          missing < channelCount && !offDays.has(ahead.date)
+            ? `<form method="post" action="/recurring/close" class="openday" onsubmit="return confirm('Close ${esc(pretty(ahead.date)).replace(/'/g, "")}? Its batches nobody has started go, and leave My Day. It opens by itself that morning.')">
+                 <input type="hidden" name="day" value="${ahead.date}">
+                 <button class="clear secondary">Close this day</button>
+               </form>`
+            : ""
         }
       </div>
       ${

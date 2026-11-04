@@ -1723,11 +1723,25 @@ t("My Day: the load, a timer running, the week by kind, and What next", [myDay.i
 t("…each piece shows tracked against its estimate, with start and done", [myDay.includes("25m / 40m"), myDay.includes('action="/timer/start"'), myDay.includes('action="/timer/done"'), myDay.includes('class="wbtn on"')], [true, true, true, true]);
 t("My Day switches: a kind switched off leaves the page", [[...shownTypes(["vo", "batch"])].sort(), shownTypes([]).size], [["gaming", "longform", "revision", "task"], 8]);
 const bitsRec = mk({ id: 230, category: "bits", channel: "Specular FNAF Bits", title: "Specular FNAF Bits", batchNo: 1, batchTarget: 5, batchDone: 2, airDate: wToday });
-const exploded = renderMyDay(shellFix, { now: wNow, today: wToday, required: [toItem(bitsRec)!], ahead: [], done: [{ ...toItem(lateVo)!, untracked: true }, { ...toItem(todayVo)!, spent: 20 }], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 }, hidden: ["task"], exploded: true });
-t("My Day: switches (Task off), exploded batches one row per channel with their progress, and No time on what's done", [
+const exploded = renderMyDay(shellFix, { now: wNow, today: wToday, required: [toItem(bitsRec)!], ahead: [], done: [{ ...toItem(lateVo)!, untracked: true }, { ...toItem(todayVo)!, spent: 20 }], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 }, hidden: ["task"] });
+t("My Day: switches (Task off), a batch on its own a row with its progress, and No time on what's done", [
   (exploded.match(/name="show" value="[a-z]+" checked/g) ?? []).length, exploded.includes('value="task" onchange'), exploded.includes('<span class="wunits">2/5 uploaded</span>'),
-  exploded.includes("my-day/unit"), exploded.includes("⤡ Group batches"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
-], [5, true, true, false, true, true, 1]);
+  exploded.includes("my-day/unit"), exploded.includes("logged · no time"), (exploded.match(/action="\/timer\/clear"/g) ?? []).length,
+], [5, true, true, false, true, 1]);
+{
+  // Batches group by kind and by day: today's Bits, Sat's Bits (opened ahead), today's Reading; one on its own stays a row.
+  const b = (id: number, category: "bits" | "reading", air: string, workDay: string | null = null) => toItem({ ...mk({ id, category, channel: `Ch ${id}`, title: `Ch ${id}`, batchNo: 1, airDate: air, deadline: new Date(`${air}T22:00:00Z`) }), workDay })!;
+  const sat = shiftDate(wToday, 3);
+  const items = [b(400, "bits", wToday), b(401, "bits", wToday), b(402, "bits", wToday), b(403, "bits", sat, wToday), b(404, "bits", sat, wToday), b(405, "reading", wToday), b(406, "reading", wToday), b(407, "reading", sat, wToday)];
+  const base = { now: wNow, today: wToday, required: items, ahead: [], done: [], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } };
+  const grouped = renderMyDay(shellFix, base);
+  const satKey = `bits-${sat.replace(/-/g, "")}`;
+  const split = renderMyDay(shellFix, { ...base, exploded: [satKey] });
+  t("My Day: batches group by kind and day, each ungrouped on its own", [
+    (grouped.match(/class="wgroup"/g) ?? []).length, grouped.includes("3 Bits batches"), grouped.includes("2 Bits batches"), grouped.includes("2 Reading batches"), grouped.includes(`value="${satKey}"`),
+    (split.match(/class="wgroup"/g) ?? []).length, split.includes('class="wgrouphead"'), split.includes("⤡ Group"),
+  ], [3, true, true, true, true, 2, true, true]);
+}
 // End my day: the day turns over when Ash says, not at midnight (noon the next day if she forgets).
 const ins = (iso: string) => new Date(iso);
 t("End my day: after midnight, the day before carries on until it's ended (or noon)", [
