@@ -4,7 +4,7 @@
  */
 import { CHANNELS } from "../../catalog.js";
 import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
-import { ORG_TZ, instantIn, usDate } from "../../parse/derive.js";
+import { ORG_TZ, dateIn, instantIn, usDate } from "../../parse/derive.js";
 import { PAUSE_ICON, PLAY_ICON, SCRIPT_ICON, type Shell, channelColour, fmtMin, gapStrip, layout, pageHeader, row } from "../page.js";
 import { PRIORITY, TASK_CATEGORY } from "../../tasks/parse.js";
 import type { UploadGap } from "../gaps.js";
@@ -323,6 +323,62 @@ function groupBatches(items: WorkItem[], now: Date, running: string | null, back
   return out.join("");
 }
 
+/** A cleared piece: what it was, tracked against its estimate, and No time if someone else did it. */
+function doneRow(i: WorkItem): string {
+  const t = TYPE_BY_ID.get(i.type)!;
+  const diff = i.spent >= 1 ? Math.round(i.spent - i.est) : null;
+  const kind = i.task ? '<input type="hidden" name="kind" value="task">' : "";
+  return `<div class="wrow done${i.untracked ? " untracked" : ""}" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
+    <div class="wmain"><a class="wt" href="${workHref(i)}">${esc(i.title)}</a>${i.channel && !isBatch(i.type) && i.type !== "longform" ? `<div class="wmeta"><span class="wch" style="--ch:${channelColour(i.channel)}"><i></i>${esc(i.channel.replace(/^Specular /, ""))}</span></div>` : ""}</div>
+    <div class="wnum">${
+      i.untracked
+        ? `<span class="wnt">logged · no time</span>`
+        : `${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
+            diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
+          }`
+    }${
+      !i.untracked && i.id !== null
+        ? `<form method="post" action="/timer/clear" class="wclr" onsubmit="return confirm('Someone else did this? Its ${i.spent >= 1 ? esc(fmtMin(i.spent)) + " of tracked time goes" : "estimate stops counting as yours"}.')"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="/my-day"><button class="mdpill" title="Someone else did it: clear its tracked time and don't count it as yours">No time</button></form>`
+        : ""
+    }</div></div>`;
+}
+
+/** The day a cleared piece was for: a batch its own day, anything else the day it was due. */
+const doneFor = (i: WorkItem): string | null => (isBatch(i.type) || i.type === "longform" ? i.airDate : i.due ? dateIn(ORG_TZ, i.due) : i.day);
+
+/**
+ * Done today, sorted out: a section for each day the work was for — today's
+ * first, then what you got ahead on, then late work caught up — and in each,
+ * a group per kind of work with its count and time. Big batch groups start
+ * folded.
+ */
+function doneToday(done: WorkItem[], today: string): string {
+  const sum = (xs: WorkItem[]) => ({ est: xs.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0), spent: xs.reduce((n, i) => n + i.spent, 0) });
+  const times = (xs: WorkItem[]) => {
+    const s = sum(xs);
+    return `estimated ${fmtMin(s.est)}${s.spent >= 1 ? ` · tracked ${fmtMin(s.spent)}` : ""}`;
+  };
+  const days = [...new Set(done.map(doneFor))].sort((a, b) => {
+    const rank = (d: string | null) => (d === today ? 0 : d && d > today ? 1 : d ? 2 : 3);
+    return rank(a) - rank(b) || (a ?? "").localeCompare(b ?? "");
+  });
+  const label = (d: string | null) => {
+    if (!d) return "No date";
+    const name = `${shortDay(d)} ${md(d)}`;
+    return d === today ? "Today's" : d > today ? `Ahead · for ${name}` : `Late · was due ${name}`;
+  };
+  const sections = days.map((day) => {
+    const mine = done.filter((i) => doneFor(i) === day);
+    const groups = WORK_TYPES.map((t) => ({ t, list: mine.filter((i) => i.type === t.id) })).filter((g) => g.list.length);
+    const body = groups.map(({ t, list }) => `<details class="dgroup" style="--wc:${t.colour}"${isBatch(t.id) && list.length >= 4 ? "" : " open"}>
+        <summary><span class="dkind">${esc(t.label)}</span><span class="dcount">${list.length}</span><span class="dtime">${esc(times(list))}</span></summary>
+        <div class="wlist done">${list.map(doneRow).join("")}</div>
+      </details>`).join("");
+    return `<div class="dday${day === today ? " today" : ""}"><h3>${esc(label(day))} <span class="sub">— ${mine.length} · ${esc(times(mine))}</span></h3>${body}</div>`;
+  }).join("");
+  return `<section class="panel"><h2>Done today <span class="sub">— ${done.length} · ${esc(times(done))}</span></h2>${sections}</section>`;
+}
+
 /** A kind of work's estimate for the legend: tasks and recurring channels can each have their own. */
 function legendEstimate(id: WorkType): string {
   if (id === "task") return "per task";
@@ -467,33 +523,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
     ${d.required.length ? `<div class="wlist">${groupBatches(d.required, d.now, running, back, d.exploded ?? [], d.today)}</div>` : `<div class="empty">Everything due ${w && (w.carried || w.ahead) ? `on ${esc(dayName)}` : "today"} is done. Do ahead is below.</div>`}
   </section>`;
 
-  const estDone = d.done.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0);
-  const spentDone = d.done.reduce((n, i) => n + i.spent, 0);
-  const doneList = d.done.length
-    ? `<section class="panel"><h2>Done today <span class="sub">— ${d.done.length} · estimated ${esc(fmtMin(estDone))}${
-        spentDone >= 1 ? ` · tracked ${esc(fmtMin(spentDone))}` : ""
-      }</span></h2>
-      <div class="wlist done">${d.done
-        .map((i) => {
-          const t = TYPE_BY_ID.get(i.type)!;
-          const diff = i.spent >= 1 ? Math.round(i.spent - i.est) : null;
-          const kind = i.task ? '<input type="hidden" name="kind" value="task">' : "";
-          return `<div class="wrow done${i.untracked ? " untracked" : ""}" style="--wc:${t.colour}"><span class="wtype">${esc(t.short)}</span>
-            <div class="wmain"><a class="wt" href="${workHref(i)}">${esc(i.title)}</a></div>
-            <div class="wnum">${
-              i.untracked
-                ? `<span class="wnt">logged · no time</span>`
-                : `${i.spent >= 1 ? `${esc(fmtMin(i.spent))} of ${esc(fmtMin(i.est))}` : `${esc(fmtMin(i.est))} est.`}${
-                    diff !== null ? ` <b class="${diff > 0 ? "late" : "ok"}">${diff > 0 ? `+${fmtMin(diff)}` : diff < 0 ? `−${fmtMin(-diff)}` : "on the dot"}</b>` : ""
-                  }`
-            }${
-              !i.untracked && i.id !== null
-                ? `<form method="post" action="/timer/clear" class="wclr" onsubmit="return confirm('Someone else did this? Its ${i.spent >= 1 ? esc(fmtMin(i.spent)) + " of tracked time goes" : "estimate stops counting as yours"}.')"><input type="hidden" name="id" value="${i.id}">${kind}<input type="hidden" name="back" value="/my-day"><button class="mdpill" title="Someone else did it: clear its tracked time and don't count it as yours">No time</button></form>`
-                : ""
-            }</div></div>`;
-        })
-        .join("")}</div></section>`
-    : "";
+  const doneList = d.done.length ? doneToday(d.done, d.today) : "";
 
   const ahead = `<section class="panel" id="ahead"><h2>Do ahead <span class="sub">— ${
     d.required.length ? "once today's is done" : "today's is done, so these are next"

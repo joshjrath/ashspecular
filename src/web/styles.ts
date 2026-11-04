@@ -1873,6 +1873,20 @@ a.chlink:hover { text-decoration: underline; text-decoration-color: var(--ink3);
 .mdsw .mdx { margin-left: auto; }
 .mdpill { border: 0; cursor: pointer; border-radius: 999px; padding: 6px 12px; background: var(--card); color: var(--ink2); font: 600 12.5px var(--ui); white-space: nowrap; }
 .mdpill:hover { background: var(--line); color: var(--ink); }
+/* My Day's Done today: a section per day the work was for, a group per kind */
+.dday { margin-top: 14px; }
+.dday:first-of-type { margin-top: 4px; }
+.dday h3 { margin: 0 0 6px; font-size: 14px; color: var(--ink); }
+.dday h3 .sub { font-weight: 500; font-size: 12.5px; color: var(--ink3); }
+.dgroup { margin: 0 0 6px; border-left: 3px solid var(--wc); border-radius: 4px; }
+.dgroup > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 6px 10px; }
+.dgroup > summary::-webkit-details-marker { display: none; }
+.dgroup > summary::before { content: "▸"; color: var(--ink3); font-size: 11px; }
+.dgroup[open] > summary::before { content: "▾"; }
+.dgroup .dkind { font-weight: 700; color: var(--ink); font-size: 13px; }
+.dgroup .dcount { color: var(--ink2); font-size: 12.5px; font-weight: 700; }
+.dgroup .dtime { color: var(--ink3); font-size: 12px; margin-left: auto; }
+.dgroup .wlist { margin: 0 0 4px 8px; }
 .wrow.done .wnum { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
 .wrow.done .wclr { margin: 0 0 0 8px; display: inline; } .wrow.done .wclr .mdpill { background: var(--sunk); padding: 4px 10px; font-size: 11.5px; }
 .wnt { color: var(--ink3); font-size: 12px; }

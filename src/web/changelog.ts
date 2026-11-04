@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-done-today-sorted",
+    title: "Done today, sorted by day and kind",
+    changes: [
+      { text: "My Day's Done today has a section for each day the work was for (today's, ahead, late) and a group per kind in each, with its count and time. Big batch groups start folded.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-11-04-batch-groups-close-day",
     title: "Batches grouped by kind and day; close a day you opened",
     changes: [

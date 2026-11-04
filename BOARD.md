@@ -845,7 +845,11 @@ can be changed.)
   split by kind of work. It includes the batches every recurring channel will
   open that day but hasn't yet. Paused channels and days off open none.
 - **Done today:** what you cleared, estimated against tracked, and by how
-  much it ran over or under.
+  much it ran over or under, sorted into a section for each day it was for:
+  **Today's** first, then **Ahead · for Sat 11/7** (work you got ahead on, a
+  batch by its own day), then **Late · was due Sun 11/1** (caught up). In each,
+  a group per kind (Stories VO, Revision review, Bits batch…) with its count
+  and time; tap a group to fold it. Four or more batches start folded.
 - **Do ahead:** work not due yet, best to do early first. VOs lead, since the
   editors can start once they're recorded; then revisions, Gaming, long-form
   and batches, soonest first within each.

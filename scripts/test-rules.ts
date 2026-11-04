@@ -1742,6 +1742,17 @@ t("My Day: switches (Task off), a batch on its own a row with its progress, and 
     (split.match(/class="wgroup"/g) ?? []).length, split.includes('class="wgrouphead"'), split.includes("⤡ Group"),
   ], [3, true, true, true, true, 2, true, true]);
 }
+{
+  // Done today, sorted: by the day each piece was for (today's, then ahead, then late), then by kind.
+  const sat = shiftDate(wToday, 3), was = shiftDate(wToday, -2);
+  const vo = (id: number, due: string) => toItem(mk({ id, category: "stories", channel: "Specular Verse", title: `VO ${id}`, airDate: shiftDate(due, 6), voDue: new Date(`${due}T22:00:00Z`) }))!;
+  const bit = (id: number, air: string) => toItem({ ...mk({ id, category: "bits", channel: `Ch ${id}`, title: `Ch ${id}`, batchNo: 1, airDate: air, deadline: new Date(`${air}T22:00:00Z`) }), workDay: wToday })!;
+  const page = renderMyDay(shellFix, { now: wNow, today: wToday, required: [], ahead: [], done: [bit(500, sat), vo(501, was), vo(502, wToday), bit(503, wToday)], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });
+  const at = (x: string) => page.indexOf(x);
+  t("Done today: a section per day it was for, today's first, then ahead, then late; a group per kind in each", [
+    at("Today&#39;s") > 0 && at("Today&#39;s") < at("Ahead · for") && at("Ahead · for") < at("Late · was due"), (page.match(/class="dgroup"/g) ?? []).length, page.includes("Stories VO"), page.includes("Bits batch"),
+  ], [true, 4, true, true]);
+}
 // End my day: the day turns over when Ash says, not at midnight (noon the next day if she forgets).
 const ins = (iso: string) => new Date(iso);
 t("End my day: after midnight, the day before carries on until it's ended (or noon)", [
