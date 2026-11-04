@@ -52,6 +52,7 @@ import { registerTasks } from "./routes/tasks.js";
 import { registerUploads } from "./routes/uploads.js";
 import { registerNetwork } from "./routes/network.js";
 import { registerReset } from "./routes/reset.js";
+import { registerEvenOut } from "./routes/evenout.js";
 
 const PUBLIC = new Set(["/login", "/healthz"]);
 
@@ -196,6 +197,7 @@ export async function buildApp(opts: { everyRoute?: boolean; onRoute?: (method: 
     registerCompetitors(app, shell);
     registerNetwork(app);
     registerReset(app);
+    registerEvenOut(app);
   }
 
   app.get<{ Querystring: { out?: string } }>("/login", async (request, reply) =>

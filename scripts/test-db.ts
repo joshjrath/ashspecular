@@ -564,6 +564,46 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…the revenue export carries the day's estimate", csvs[3]!.body.includes("8.86"), true);
 }
 
+// ── Even out uploads: each channel on its frequency from its last upload, with Undo ──
+{
+  const { saveRecord, setUploaded } = await import("../src/db/records.js");
+  const { derive } = await import("../src/parse/derive.js");
+  const { everyFor } = await import("../src/web/targets.js");
+  const mk = async (code: string, air: string) => {
+    const record = derive({
+      kind: "assignment", code, title: `Even ${code}`, category: "stories", channel: "Specular Manga", tag: null, air_date: air, stage: "script",
+      word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+    } as never, "", new Date());
+    return Number(await saveRecord(record, { messageId: `even-${code}`, channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  };
+  // Manga posted yesterday; its next two sit off its frequency (Stories: every 4 days).
+  const up = await mk("EV-0", shiftDate(today, -1));
+  await setUploaded(up, true);
+  const ids = [await mk("EV-1", shiftDate(today, 9)), await mk("EV-2", shiftDate(today, 11))];
+  const state = async () => (await pool.query(
+    `SELECT to_char(air_date, 'YYYY-MM-DD') AS air, to_char(vo_due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS vo FROM records WHERE id = ANY($1::bigint[]) ORDER BY id`, [ids],
+  )).rows as Array<{ air: string; vo: string }>;
+  const before = await state();
+  const every = everyFor("Specular Manga")!;
+  const calendar = await app.inject({ method: "GET", url: "/calendar", headers: { cookie } });
+  const preview = await app.inject({ method: "GET", url: "/calendar/even?how=spacing", headers: { cookie } });
+  const unconfirmed = await post("/calendar/even", { how: "spacing" });
+  t("Even out uploads: on the calendar, the preview lists the moves and changes nothing; without the box ticked, nothing happens", [
+    calendar.body.includes('href="/calendar/even"'), preview.statusCode, preview.body.includes("EV-1 · Even EV-1"), unconfirmed.status, JSON.stringify(await state()) === JSON.stringify(before),
+  ], [true, 200, true, 302, true]);
+  await post("/calendar/even", { how: "spacing", confirm: "1" });
+  const after = await state();
+  // Its frequency after yesterday's is inside the VO buffer, so the next goes 6 days out, the one after a frequency on.
+  const first = shiftDate(today, Math.max(every - 1, 6));
+  t("…applied: the next upload a frequency on from the last (never inside the VO buffer), the one after a frequency later, VOs six days before", [after.map((r) => r.air), after.map((r) => r.vo)], [
+    [first, shiftDate(first, every)], [shiftDate(first, -6), shiftDate(first, every - 6)],
+  ]);
+  const page = await app.inject({ method: "GET", url: "/calendar/even", headers: { cookie } });
+  t("…and Undo is offered", page.body.includes('action="/calendar/even/undo"'), true);
+  await post("/calendar/even/undo", {});
+  t("…Undo puts every upload and deadline back", JSON.stringify(await state()), JSON.stringify(before));
+}
+
 await app.close();
 await pool.end().catch(() => undefined);
 console.log(`\n${pass} passed, ${fail} failed\n`);

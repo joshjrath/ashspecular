@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-even-out-uploads",
+    title: "Even out uploads: the calendar on each channel's frequency",
+    changes: [
+      { text: "Calendar → Even out uploads…: every channel's upcoming uploads go its upload frequency apart, counted from its last upload (posted 11/2 on every 7 days, the next is 11/9). VO and script deadlines move with them.", href: "/calendar/even" },
+      { text: "It also staggers channels so no day piles up, shown week by week before you apply it; pick Fix the spacing only to skip that. Undo for a day after." },
+    ],
+  },
+  {
     id: "2026-11-03-compilation-channel-labels",
     title: "Channel names on a compilation are readable",
     changes: [

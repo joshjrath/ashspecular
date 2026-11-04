@@ -244,16 +244,19 @@ export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
  * in the database (not memory, like a drag's Undo) for a day, since a reset
  * is big enough that a restart shouldn't lose the way back.
  */
-export async function saveResetUndo(snaps: MoveSnapshot[], text: string): Promise<void> {
+/** Where a whole-calendar change keeps its Undo: Future reset, or Even out uploads. */
+export type CalendarUndo = "calendar_reset_undo" | "calendar_even_undo";
+
+export async function saveResetUndo(snaps: MoveSnapshot[], text: string, key: CalendarUndo = "calendar_reset_undo"): Promise<void> {
   const value = JSON.stringify({ at: new Date().toISOString(), text, snaps });
   await pool.query(
-    "INSERT INTO app_settings (key, value, secret, updated_at) VALUES ('calendar_reset_undo', $1, false, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()",
-    [value],
+    "INSERT INTO app_settings (key, value, secret, updated_at) VALUES ($2, $1, false, now()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = now()",
+    [value, key],
   );
 }
 
-export async function getResetUndo(): Promise<{ at: Date; text: string; snaps: MoveSnapshot[] } | null> {
-  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'calendar_reset_undo'");
+export async function getResetUndo(key: CalendarUndo = "calendar_reset_undo"): Promise<{ at: Date; text: string; snaps: MoveSnapshot[] } | null> {
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = $1", [key]);
   if (!rows[0]) return null;
   try {
     const v = JSON.parse(String(rows[0].value)) as { at: string; text: string; snaps: Array<Omit<MoveSnapshot, "voDue" | "deadline" | "scriptDue"> & { voDue: string | null; deadline: string | null; scriptDue: string | null }> };
@@ -265,20 +268,36 @@ export async function getResetUndo(): Promise<{ at: Date; text: string; snaps: M
   }
 }
 
-export async function clearResetUndo(): Promise<void> {
-  await pool.query("DELETE FROM app_settings WHERE key = 'calendar_reset_undo'");
+export async function clearResetUndo(key: CalendarUndo = "calendar_reset_undo"): Promise<void> {
+  await pool.query("DELETE FROM app_settings WHERE key = $1", [key]);
 }
 
-/** A channel's last posted video before a day: its latest past air date, or latest upload, whichever is later. */
-export async function lastPostedDay(channel: string, before: string): Promise<string | null> {
+/**
+ * A channel's last posted video as of a day: its latest air date before it
+ * (or on it, once that one's up), or its latest board upload up to it,
+ * whichever is later.
+ */
+export async function lastPostedDay(channel: string, asOf: string): Promise<string | null> {
   const { rows } = await pool.query<{ d: string | null }>(
     `SELECT to_char(GREATEST(
-       (SELECT max(air_date) FROM records WHERE channel = $1 AND batch_no IS NULL AND air_date < $2::date AND status <> 'removed'),
-       (SELECT max((published_at AT TIME ZONE '${ORG_TZ}')::date) FROM uploads WHERE channel = $1 AND board AND (published_at AT TIME ZONE '${ORG_TZ}')::date < $2::date)
+       (SELECT max(air_date) FROM records WHERE channel = $1 AND batch_no IS NULL AND status <> 'removed'
+           AND (air_date < $2::date OR (air_date = $2::date AND uploaded_at IS NOT NULL))),
+       (SELECT max((published_at AT TIME ZONE '${ORG_TZ}')::date) FROM uploads WHERE channel = $1 AND board AND (published_at AT TIME ZONE '${ORG_TZ}')::date <= $2::date)
      ), 'YYYY-MM-DD') AS d`,
-    [channel, before],
+    [channel, asOf],
   );
   return rows[0]?.d ?? null;
+}
+
+/** Upload days from a day on of every channel but these: still to go up, not paused, not daily batches. */
+export async function upcomingAirDays(from: string, except: string[]): Promise<string[]> {
+  const { rows } = await pool.query<{ d: string }>(
+    `SELECT to_char(air_date, 'YYYY-MM-DD') AS d FROM records
+      WHERE air_date >= $1::date AND batch_no IS NULL AND paused_at IS NULL AND uploaded_at IS NULL AND status IN ('open', 'done')
+        AND channel IS NOT NULL AND NOT (channel = ANY($2::text[]))`,
+    [from, except],
+  );
+  return rows.map((r) => r.d);
 }
 
 /** Daily batches per day over a range (they're counted on the calendar snapshot, not drawn one by one). */

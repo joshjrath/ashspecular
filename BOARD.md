@@ -337,6 +337,24 @@ plots the day the work is due.
     and every other upload that moves with its channel.
   - **Undo** puts every upload and VO day back as it was. It's offered on
     the Future reset page for a day afterwards.
+- **Even out uploads…** (beside Future reset) does the same for the posting
+  calendar. Each long-form channel with an upload frequency (Settings →
+  Channels, else its category's) gets its upcoming uploads exactly that far
+  apart, counted from its last upload that went up: posted Monday on every 7
+  days, its next is the following Monday, not Sunday.
+  - **Even out the days** (the default) also staggers channels so no day
+    piles up: a channel may start up to its frequency − 1 days later (6 at
+    most), once, and only where that clearly spreads the week out. After that
+    its gaps are its frequency again. **Fix the spacing only** moves nothing
+    later than its frequency needs.
+  - Nothing goes nearer than 6 days from today (the VO buffer) unless it
+    already was, and uploads already up, paused channels and videos, and daily
+    batches stay put. Other channels' uploads count towards each day's load.
+  - Each video's VO and script deadlines move with its upload.
+  - The preview shows uploads a day week by week (after, with before struck
+    through), where each channel's run now starts, and every move. Nothing
+    changes until you tick the box and press the button; **Undo** is offered
+    on the page for a day afterwards.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
 - **Complete / Incomplete** toggles sit beside the categories. Both are on

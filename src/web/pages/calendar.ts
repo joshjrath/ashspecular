@@ -507,7 +507,7 @@ export function renderCalendar(
   return layout(
     "Calendar",
     shell,
-    `${pageHeader("Calendar", `${snapButton(mode, `${ym}-01`, lastOfMonth(ym))}<a class="clear secondary" href="/calendar/reset" title="A last resort when work is far behind: spread the overdue VOs over the next days">Future reset…</a>`)}
+    `${pageHeader("Calendar", `${snapButton(mode, `${ym}-01`, lastOfMonth(ym))}<a class="clear secondary" href="/calendar/even" title="Line the upcoming uploads up with each channel's upload frequency, and even the days out">Even out uploads…</a><a class="clear secondary" href="/calendar/reset" title="A last resort when work is far behind: spread the overdue VOs over the next days">Future reset…</a>`)}
     <div class="calbar">
       <a class="nav" href="/calendar/${shiftMonth(ym, -1)}${q}" aria-label="Previous month">←</a>
       <span class="month">${esc(monthName(ym))}</span>
