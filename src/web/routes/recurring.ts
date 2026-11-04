@@ -5,6 +5,7 @@
 import { CHANNELS } from "../../catalog.js";
 import { MAX_AHEAD_DAYS, batchDays, batchStatus, openBatchesFor, openBatchesThrough, setBatchProgress, shortsDay, todayStatus, tomorrow } from "../../jobs/batches.js";
 import { bringAhead, clearBatches, closeBatchesOn, listBatchesOn } from "../../db/records.js";
+import { closeTasksAhead, openTasksAhead } from "../../db/tasks.js";
 import { refererPath, safeDate } from "../http.js";
 import { renderRecurring } from "../pages/recurring.js";
 import { shiftDate } from "../../parse/derive.js";
@@ -61,20 +62,33 @@ export function registerRecurring(app: FastifyInstance): void {
     const n = Math.min(Math.max(Number(body.days) || 0, 0), MAX_AHEAD_DAYS);
     let show = first;
     let opened: number[];
+    let days: string[];
+    const range = (from: string, to: string) => {
+      const out: string[] = [];
+      for (let d = from; d <= to && out.length < MAX_AHEAD_DAYS; d = shiftDate(d, 1)) out.push(d);
+      return out;
+    };
     if (day && day >= first) {
       opened = (await openBatchesFor(day)).ids;
+      days = [day];
       show = day;
     } else if (through && through >= first) {
       const last = through <= shiftDate(first, MAX_AHEAD_DAYS - 1) ? through : shiftDate(first, MAX_AHEAD_DAYS - 1);
       opened = (await openBatchesThrough(first, last)).ids;
+      days = range(first, last);
       show = first;
     } else if (n > 0) {
       opened = (await openBatchesThrough(first, shiftDate(first, n - 1))).ids;
+      days = range(first, shiftDate(first, n - 1));
     } else {
       opened = (await openBatchesFor(first)).ids;
+      days = [first];
     }
-    // Opened ahead to work on now: they join today's My Day as new batches.
-    await bringAhead(opened, workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day);
+    // Opened ahead to work on now: they join today's My Day as new batches, with the
+    // repeating tasks that fall on those days (each that day's occurrence, done today).
+    const myDay = workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day;
+    await bringAhead(opened, myDay);
+    await openTasksAhead(days.filter((d) => d > myDay), myDay).catch((err) => console.error("[recurring] couldn't open the repeating tasks ahead:", err));
     return reply.redirect(`/recurring?day=${show}`);
   });
 
@@ -84,7 +98,8 @@ export function registerRecurring(app: FastifyInstance): void {
     const myDay = workdayOf(new Date(), hasDatabase ? await getDayEnd() : null).day;
     if (day && day > myDay) {
       const r = await closeBatchesOn(day);
-      console.log(`[recurring] closed ${day}: ${r.closed} batch(es) gone, ${r.kept} started kept`);
+      const tasks = await closeTasksAhead(day);
+      console.log(`[recurring] closed ${day}: ${r.closed} batch(es) and ${tasks} task(s) gone, ${r.kept} started kept`);
     }
     return reply.redirect(`/recurring${day ? `?day=${day}` : ""}`);
   });

@@ -290,10 +290,15 @@ export function urgency(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): nu
 }
 
 /** Why a piece is where it is, in a few words. */
+/** The day a piece worked ahead is for: a batch's own day, or a repeating task's occurrence opened ahead. Null when it's not ahead. */
+export const aheadFor = (i: WorkItem): string | null =>
+  i.record?.batchNo && i.record.workDay ? i.airDate : i.task?.aheadFor ?? null;
+
 export function whyNow(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): string {
-  // A batch worked ahead of its own day: which day's it is.
-  if (i.record?.batchNo && i.record.workDay && i.airDate && i.airDate > today) {
-    return `ahead, for ${new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${i.airDate}T12:00:00Z`))} ${usDate(i.airDate).replace(/\/\d{4}$/, "")}`;
+  // A batch or repeating task worked ahead of its own day: which day's it is.
+  const ahead = aheadFor(i);
+  if (ahead && ahead > today) {
+    return `ahead, for ${new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${ahead}T12:00:00Z`))} ${usDate(ahead).replace(/\/\d{4}$/, "")}`;
   }
   if (i.due) {
     const h = (i.due.getTime() - now.getTime()) / 3_600_000;

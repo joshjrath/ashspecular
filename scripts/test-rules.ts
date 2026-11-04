@@ -82,7 +82,7 @@ import { planEvenDeadlines } from "../src/web/evendeadlines.js";
 import { layoutFor as snapLayout, snapshotSvg } from "../src/web/snapshot.js";
 import { withCodes } from "../src/web/gaps.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
-import { nextOccurrence } from "../src/tasks/repeat.js";
+import { fallsOn, nextOccurrence } from "../src/tasks/repeat.js";
 import { fmtMoney, isMonth, parseMoney, monthlyEquivalent, nextBill as finNextBill, monthEnd as finMonthEnd, monthsEnding as finMonthsEnding } from "../src/finance/money.js";
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
@@ -1777,6 +1777,10 @@ t("Repeating tasks and days off: a daily one skips the day off, a weekly one is 
   nextOccurrence("2026-11-03", "weekly", "2026-11-04", new Set(["2026-11-10"])),
   nextOccurrence("2026-11-03", "weekly", "2026-11-09", new Set(["2026-11-10", "2026-11-11"])),
 ], ["2026-11-11", "2026-11-09", "2026-11-12"]);
+t("Repeating tasks opened ahead: which days a repeat falls on", [
+  fallsOn("2026-11-04", "daily", "2026-11-07"), fallsOn("2026-11-03", "weekly", "2026-11-10"), fallsOn("2026-11-03", "weekly", "2026-11-09"),
+  fallsOn("2026-11-06", "weekdays", "2026-11-07"), fallsOn("2026-11-06", "weekdays", "2026-11-09"), fallsOn("2026-11-04", "daily", "2026-11-04"),
+], [true, true, false, false, true, false]);
 const aheadBatch = toItem({ ...mk({ id: 241, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-11-07", deadline: new Date("2026-11-07T23:00:00Z") }), workDay: "2026-11-04" })!;
 t("…a batch worked ahead is today's work in My Day, saying whose day it is", [aheadBatch.day, isRequired(aheadBatch, "2026-11-04"), whyNow(aheadBatch, new Date("2026-11-04T15:00:00Z"), "2026-11-04")], ["2026-11-04", true, "ahead, for Sat 11/7"]);
 const satBatch = toItem(mk({ id: 240, category: "bits", channel: "Specular Anime Bits", batchNo: 1, title: "Specular Anime Bits", airDate: "2026-09-28" }))!;

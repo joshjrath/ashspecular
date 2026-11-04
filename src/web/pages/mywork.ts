@@ -3,7 +3,7 @@
  * the VO Queue and recording mode, and Forgotten work.
  */
 import { CHANNELS } from "../../catalog.js";
-import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
+import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, aheadFor, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
 import { ORG_TZ, dateIn, instantIn, usDate } from "../../parse/derive.js";
 import { PAUSE_ICON, PLAY_ICON, SCRIPT_ICON, type Shell, channelColour, fmtMin, gapStrip, layout, pageHeader, row } from "../page.js";
 import { PRIORITY, TASK_CATEGORY } from "../../tasks/parse.js";
@@ -343,8 +343,8 @@ function doneRow(i: WorkItem): string {
     }</div></div>`;
 }
 
-/** The day a cleared piece was for: a batch its own day, anything else the day it was due. */
-const doneFor = (i: WorkItem): string | null => (isBatch(i.type) || i.type === "longform" ? i.airDate : i.due ? dateIn(ORG_TZ, i.due) : i.day);
+/** The day a cleared piece was for: a batch its own day, a task opened ahead the day it's for, anything else the day it was due. */
+const doneFor = (i: WorkItem): string | null => (isBatch(i.type) || i.type === "longform" ? i.airDate : aheadFor(i) ?? (i.due ? dateIn(ORG_TZ, i.due) : i.day));
 
 /**
  * Done today, sorted out: a section for each day the work was for — today's

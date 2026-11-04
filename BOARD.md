@@ -1917,9 +1917,13 @@ them, cleared ones included — the opener keys every batch by channel, date
 and index, so it can never double-open. Ticking a day ahead keeps you on it.
 Batches you open ahead join **today's My Day** as new batches (*ahead, for
 Sat 11/7*), each day its own group, so you can work them now; ones already
-open stay where they were. **Close this day** on a day ahead takes it back:
-its batches nobody has started (no upload ticked, no time tracked) go and
-leave My Day, any started stay on their own day, and the day opens by itself
+open stay where they were. **Repeating tasks** come too: each one that falls
+on a day you open (a daily task, a weekly one on its weekday) gets that day's
+occurrence now, due today at its usual time and marked *ahead, for* that day.
+Opening the day again doesn't make a second, and when the task's own repeat
+comes round to that day it skips it. **Close this day** on a day ahead takes it back:
+its batches nobody has started (no upload ticked, no time tracked) and its
+repeating tasks opened ahead and not done go, and leave My Day, any started stay on their own day, and the day opens by itself
 that morning as usual.
 
 Run it by hand any time:

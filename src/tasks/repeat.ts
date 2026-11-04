@@ -54,3 +54,10 @@ export function nextOccurrence(from: string, repeat: Repeat, today: string, days
   for (let guard = 0; daysOff.has(after) && guard < 400; guard++) after = shiftDate(after, 1);
   return after;
 }
+
+/** Whether a repeat counted from `from` falls on `day` (a day after it). */
+export function fallsOn(from: string, repeat: Repeat, day: string): boolean {
+  let d = from;
+  for (let guard = 0; d < day && guard < 800; guard++) d = step(d, repeat);
+  return d === day && day > from;
+}

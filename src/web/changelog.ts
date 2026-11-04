@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-tasks-ahead",
+    title: "Opening a day ahead brings its repeating tasks too",
+    changes: [
+      { text: "Recurring: opening an upcoming day also opens the repeating tasks that fall on it (daily ones, weekly ones on their day), due today in My Day and marked ahead, for that day. Their repeat skips the day when it comes round; closing the day takes them away.", href: "/recurring" },
+    ],
+  },
+  {
     id: "2026-11-04-done-today-sorted",
     title: "Done today, sorted by day and kind",
     changes: [

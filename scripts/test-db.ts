@@ -653,6 +653,27 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${ahead}T12:00:00Z`));
   t("Recurring: a day opened ahead joins today's My Day as new batches, saying whose day they are", [brought.n > 0, brought.today === brought.n, page.body.includes(`ahead, for ${label}`)], [true, true, true]);
 
+  // A repeating task that falls on a day opened ahead gets that day's occurrence now; its own repeat skips that day.
+  const { repeatTask } = await import("../src/db/tasks.js");
+  const tomorrowMine = shiftDate(myDay, 1), later = shiftDate(myDay, 2);
+  const daily = Number((await pool.query(
+    "INSERT INTO tasks (title, body, category, priority, due, repeat) VALUES ('Post the community tab', '', $1, 'normal', $2, 'daily') RETURNING id",
+    [category, instantIn(tomorrowMine, "10:00", ORG_TZ)],
+  )).rows[0].id);
+  await post("/recurring/ahead", { day: later });
+  const copy = (await pool.query(`SELECT id, to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD HH24:MI') AS due, repeat FROM tasks WHERE title = 'Post the community tab' AND ahead_for = $1::date`, [later])).rows;
+  await post("/recurring/ahead", { day: later });
+  const twice = (await pool.query(`SELECT count(*)::int AS n FROM tasks WHERE title = 'Post the community tab' AND ahead_for = $1::date`, [later])).rows[0].n;
+  const withTask = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  const nextId = await repeatTask(daily, myDay);
+  const next = (await pool.query(`SELECT to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD') AS d FROM tasks WHERE id = $1`, [nextId])).rows[0].d;
+  t("Recurring: a repeating task on a day opened ahead gets that day's occurrence today, once; its repeat then skips that day", [
+    copy.length, copy[0]?.due, copy[0]?.repeat ?? null, twice, withTask.body.includes("Post the community tab"), next,
+  ], [1, `${myDay} 10:00`, null, 1, true, shiftDate(later, 1)]);
+  await post("/recurring/close", { day: later });
+  t("…closing the day takes its task opened ahead away too", (await pool.query(`SELECT count(*)::int AS n FROM tasks WHERE ahead_for = $1::date AND status = 'open'`, [later])).rows[0].n, 0);
+  await pool.query("DELETE FROM tasks WHERE title = 'Post the community tab'");
+
   // Each group ungroups on its own; a day opened ahead can be closed again, and leaves My Day.
   const key = `bits-${ahead.replace(/-/g, "")}`;
   const split = await app.inject({ method: "POST", url: "/my-day/explode", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, payload: `group=${key}&on=1` });

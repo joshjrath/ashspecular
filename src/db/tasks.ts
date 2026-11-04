@@ -1,6 +1,6 @@
 import { pool } from "./pool.js";
 import type { Priority, TaskCategory } from "../tasks/parse.js";
-import { nextOccurrence, type Repeat } from "../tasks/repeat.js";
+import { fallsOn, nextOccurrence, type Repeat } from "../tasks/repeat.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
 
 export interface Task {
@@ -23,6 +23,8 @@ export interface Task {
   notes: string;
   /** How often it comes back; null for a one-off. */
   repeat: Repeat | null;
+  /** An occurrence opened ahead on Recurring: the day it's for (it's worked on its due day, today). */
+  aheadFor?: string | null;
 }
 
 function row(r: Record<string, unknown>): Task {
@@ -44,6 +46,7 @@ function row(r: Record<string, unknown>): Task {
     doneAt: (r.done_at as Date | null) ?? null,
     notes: (r.notes as string | null) ?? "",
     repeat: (r.repeat as Repeat | null) ?? null,
+    aheadFor: r.ahead_for ? (r.ahead_for as Date).toISOString().slice(0, 10) : null,
   };
 }
 
@@ -147,7 +150,13 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
     ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due)
     : DEADLINE_TIME;
   const { rows: off } = await pool.query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM days_off WHERE day > $1::date`, [today]);
-  const due = instantIn(nextOccurrence(from, t.repeat, today, new Set(off.map((r) => r.day))), time, ORG_TZ);
+  const offs = new Set(off.map((r) => r.day));
+  // An occurrence already opened ahead (done or not) isn't opened twice: on to the one after it.
+  let next = nextOccurrence(from, t.repeat, today, offs);
+  for (let guard = 0; guard < 60 && (await pool.query("SELECT 1 FROM tasks WHERE title = $1 AND ahead_for = $2::date", [t.title, next])).rowCount; guard++) {
+    next = nextOccurrence(next, t.repeat, next, offs);
+  }
+  const due = instantIn(next, time, ORG_TZ);
   const { rows: out } = await pool.query<{ id: string }>(
     `INSERT INTO tasks (title, body, category, priority, person, due, est_min, author, notes, repeat)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
@@ -156,6 +165,36 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
   // The finished one stays in Done, but only the new one repeats.
   await pool.query("UPDATE tasks SET repeat = NULL WHERE id = $1", [id]);
   return Number(out[0]!.id);
+}
+
+/**
+ * Days opened ahead on Recurring: each open repeating task that falls on one
+ * gets that day's occurrence now, due on `workOn` (today) at its usual time,
+ * marked as for that day. One already opened for it isn't made twice.
+ */
+export async function openTasksAhead(days: string[], workOn: string): Promise<number> {
+  const { rows } = await pool.query(`SELECT * FROM tasks WHERE status = 'open' AND repeat IS NOT NULL AND due IS NOT NULL AND ahead_for IS NULL`);
+  let made = 0;
+  for (const t of rows.map(row)) {
+    const from = dateIn(ORG_TZ, t.due!);
+    const time = new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due!);
+    for (const day of days.filter((d) => fallsOn(from, t.repeat!, d))) {
+      const { rowCount } = await pool.query(
+        `INSERT INTO tasks (title, body, category, priority, person, due, est_min, author, notes, ahead_for)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date
+          WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE title = $1 AND ahead_for = $10::date)`,
+        [t.title, t.body, t.category, t.priority, t.person, instantIn(workOn, time, ORG_TZ), t.estMin, t.author, t.notes, day],
+      );
+      made += rowCount ?? 0;
+    }
+  }
+  return made;
+}
+
+/** A day opened ahead, closed again: its tasks opened ahead and still open go. */
+export async function closeTasksAhead(day: string): Promise<number> {
+  const { rowCount } = await pool.query(`DELETE FROM tasks WHERE ahead_for = $1::date AND status = 'open'`, [day]);
+  return rowCount ?? 0;
 }
 
 /** Open tasks due on a day (ET), not snoozed past it: what a day off moves. */
