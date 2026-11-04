@@ -78,6 +78,7 @@ import { matchPosts, titleOverlap } from "../src/web/postcheck.js";
 import { taskItem, isRequired, repeatToday, shownTypes, spreadDayOff, logDays, logByDay, whyNow, workdayOf } from "../src/web/work.js";
 import { planReset } from "../src/web/reset.js";
 import { EVEN_WINDOW_DAYS, planEvenOut } from "../src/web/evenout.js";
+import { planEvenDeadlines } from "../src/web/evendeadlines.js";
 import { layoutFor as snapLayout, snapshotSvg } from "../src/web/snapshot.js";
 import { withCodes } from "../src/web/gaps.js";
 import { parseTask, properCase } from "../src/tasks/parse.js";
@@ -1816,6 +1817,31 @@ t("…My Day says which day it's still on, with End my day", [banner.includes("s
     planEvenOut({ today, floor, fixed: ["2026-11-09", "2026-11-09"], channels: [run("Specular Verse", "2026-11-02", ["2026-11-10"])] }).channels[0]!.first,
     planEvenOut({ today, floor, fixed: [], channels: [run("Specular Verse", "2026-11-02", ["2026-11-09"])] }).moves.length,
   ], ["2026-11-10", "2026-11-09", 0]);
+}
+
+// Even out deadlines: every VO six days before its upload, a few a day; a VO that can't make its upload moves the upload.
+{
+  const vo = (id: number, channel: string, air: string, voDay = shiftDate(air, -6)): import("../src/web/reset.js").ResetVo => ({ id, channel, title: `D${id}`, airDate: air, voDay });
+  const vid = (id: number, channel: string, air: string) => ({ id, channel, airDate: air, label: `D${id}` });
+  const base = { start: "2026-11-04", perDay: 5, daysOff: new Set<string>(), avgViews: new Map<string, number>(), late: [] as ReturnType<typeof vo>[] };
+  const lined = planEvenDeadlines({ ...base, upcoming: [vo(1, "Specular Verse", "2026-11-12"), vo(2, "Specular Force", "2026-11-13")], schedule: [vid(1, "Specular Verse", "2026-11-12"), vid(2, "Specular Force", "2026-11-13")] });
+  t("Even out deadlines: VOs already six days before their uploads stay", [lined.assign.size, lined.moves.length], [0, 0]);
+  const early = planEvenDeadlines({ ...base, upcoming: [vo(3, "Specular Verse", "2026-11-20", "2026-11-05")], schedule: [vid(3, "Specular Verse", "2026-11-20")] });
+  t("…one due far earlier than its upload needs moves to six days before it", [...early.assign.entries()], [[3, "2026-11-14"]]);
+  const six = ["Specular Verse", "Specular Force", "Specular Anime", "Specular FNAF", "Specular YOU", "Specular Studios"].map((ch, i) => vo(10 + i, ch, "2026-11-16"));
+  const crowd = planEvenDeadlines({ ...base, upcoming: six, schedule: six.map((v) => vid(v.id, v.channel, v.airDate!)) });
+  t("…six needed the same day with five a day: one is due a day earlier, no upload moves", [crowd.days.find((d) => d.day === "2026-11-10")!.after, crowd.days.find((d) => d.day === "2026-11-09")!.after, crowd.moves.length], [5, 1, 0]);
+  const off = planEvenDeadlines({ ...base, daysOff: new Set(["2026-11-10"]), upcoming: [vo(20, "Specular Verse", "2026-11-16")], schedule: [vid(20, "Specular Verse", "2026-11-16")] });
+  t("…a day off gets none: the VO goes the day before", [...off.assign.entries()], [[20, "2026-11-09"]]);
+  // Three late VOs, two a day from 11/4: the uploads 11/9 can take a VO five days before; the third can't, so its upload moves, and the channel's next with it.
+  const lateVos = [vo(30, "Specular Verse", "2026-11-09", "2026-11-01"), vo(31, "Specular Force", "2026-11-09", "2026-11-01"), vo(32, "Specular Anime", "2026-11-09", "2026-11-01")];
+  const behind = planEvenDeadlines({
+    ...base, perDay: 2, late: lateVos, upcoming: [vo(33, "Specular Anime", "2026-11-16")], avgViews: new Map([["Specular Verse", 3], ["Specular Force", 2], ["Specular Anime", 1]]),
+    schedule: [vid(30, "Specular Verse", "2026-11-09"), vid(31, "Specular Force", "2026-11-09"), vid(32, "Specular Anime", "2026-11-09"), vid(33, "Specular Anime", "2026-11-16")], every: new Map([["Specular Anime", 7]]),
+  });
+  t("…late VOs, biggest channels first: the one that can't be ready moves its upload six days after, the channel's next a week after that, its VO with it", [
+    behind.vos.filter((x) => x.id >= 30).sort((a, b) => a.id - b.id).map((x) => [x.id, x.to, x.newAir]), behind.moves.map((m) => [m.id, m.to]),
+  ], [[[30, "2026-11-04", "2026-11-09"], [31, "2026-11-04", "2026-11-09"], [32, "2026-11-05", "2026-11-11"], [33, "2026-11-12", "2026-11-18"]], [[32, "2026-11-11"], [33, "2026-11-18"]]]);
 }
 
 // Respacing to a new upload frequency: from the last upload on, never before the VO buffer, nothing uploaded moves.

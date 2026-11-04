@@ -53,6 +53,7 @@ src/
     snapshot.ts       Calendar → Snapshot: a range of the calendar as one self-contained SVG poster (PNG made in the browser)
     reset.ts          Future reset's plan: overdue VOs spread a few a day, uploads after them (routes/pages reset.ts)
     evenout.ts        Even out uploads' plan: each channel's uploads on its frequency, the days evened out (routes/pages evenout.ts)
+    evendeadlines.ts  Even out deadlines' plan: each VO six days before its upload, a few a day (routes/reset.ts, pages/evendeadlines.ts)
     work.ts           Ash's workload model (estimates, My Day, VO queue, forgotten work)
     finance/ bitsfeed/ competitors/   larger areas with their own routes.ts + pages.ts
     stories/          Story Lab's lore, dice, blueprints, idea scoring

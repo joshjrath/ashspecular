@@ -244,8 +244,8 @@ export async function restoreMoves(snaps: MoveSnapshot[]): Promise<void> {
  * in the database (not memory, like a drag's Undo) for a day, since a reset
  * is big enough that a restart shouldn't lose the way back.
  */
-/** Where a whole-calendar change keeps its Undo: Future reset, or Even out uploads. */
-export type CalendarUndo = "calendar_reset_undo" | "calendar_even_undo";
+/** Where a whole-calendar change keeps its Undo: Future reset, Even out uploads, Even out deadlines. */
+export type CalendarUndo = "calendar_reset_undo" | "calendar_even_undo" | "calendar_evendue_undo";
 
 export async function saveResetUndo(snaps: MoveSnapshot[], text: string, key: CalendarUndo = "calendar_reset_undo"): Promise<void> {
   const value = JSON.stringify({ at: new Date().toISOString(), text, snaps });

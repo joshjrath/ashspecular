@@ -4,7 +4,7 @@
  * button that does it (with Undo for a day after).
  */
 import { esc } from "../html.js";
-import { channelColour, layout, pageHeader, type Shell } from "../page.js";
+import { channelColour, dayLoads, layout, pageHeader, type Shell } from "../page.js";
 import { ORG_TZ, usDate } from "../../parse/derive.js";
 import { EVEN_BOUNDS, EVEN_WINDOW_DAYS, type EvenPlan } from "../evenout.js";
 
@@ -17,36 +17,19 @@ export interface EvenView {
   undone: boolean;
 }
 
-const weekday = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
 const short = (day: string) => {
   const name = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
   return `${name} ${usDate(day).replace(/\/\d{4}$/, "")}`;
 };
-const md = (day: string) => usDate(day).replace(/\/\d{4}$/, "");
 const when = (d: Date) => `${new Intl.DateTimeFormat("en-US", { timeZone: ORG_TZ, month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(d)} ET`;
 const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
-
-/** Uploads a day, a week a row (Sunday first): before → after. */
-function weeks(p: EvenPlan): string {
-  if (!p.days.length) return "";
-  const cells: string[] = Array.from({ length: weekday(p.days[0]!.day) }, () => `<div class="evday pad"></div>`);
-  for (const d of p.days) {
-    const cls = d.after > d.before ? " up" : d.after < d.before ? " down" : "";
-    cells.push(`<div class="evday${cls}" title="${esc(short(d.day))}: ${d.before} → ${d.after} upload${d.after === 1 ? "" : "s"}"><span>${esc(md(d.day))}</span><b>${d.after}</b>${d.after !== d.before ? `<s>${d.before}</s>` : ""}</div>`);
-  }
-  const most = (k: "before" | "after") => Math.max(...p.days.map((d) => d[k]));
-  return `<section class="panel"><h2>Uploads a day <span class="sub">— the big number is after, the struck one before · busiest day ${most("before")} → ${most("after")}</span></h2>
-    <div class="evweek evhead">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => `<div>${d}</div>`).join("")}</div>
-    <div class="evweek">${cells.join("")}</div>
-  </section>`;
-}
 
 export function renderEvenOut(shell: Shell, v: EvenView): string {
   const p = v.plan;
   const undoForm = (label: string) =>
     `<form method="post" action="/calendar/even/undo" class="rsinline"><button class="clear secondary" onclick="return confirm('Put every upload and its deadlines back as they were before evening out?')">${esc(label)}</button></form>`;
   const notes = [
-    v.done ? `<div class="rsnote ok"><p><b>Done.</b> ${esc(v.done)}</p>${undoForm("Undo")}<a class="clear secondary" href="/calendar?mode=posting">Open the calendar</a></div>` : "",
+    v.done ? `<div class="rsnote ok"><p><b>Done.</b> ${esc(v.done)}</p>${undoForm("Undo")}<a class="clear" href="/calendar/even-deadlines">Next: even out the deadlines</a><a class="clear secondary" href="/calendar?mode=posting">Open the calendar</a></div>` : "",
     v.undone ? `<div class="rsnote"><p>Undone: every upload and its deadlines are back as they were.</p></div>` : "",
     !v.done && v.undo ? `<div class="rsnote"><p>Last evened out ${esc(when(v.undo.at))}: ${esc(v.undo.text)}</p>${undoForm("Undo it")}</div>` : "",
   ].join("");
@@ -61,7 +44,7 @@ export function renderEvenOut(shell: Shell, v: EvenView): string {
 
   const header = pageHeader("Even out uploads", `<a class="clear secondary" href="/calendar?mode=posting">← Calendar</a>`);
   if (!p || !p.moves.length) {
-    return layout("Even out uploads", shell, `${header}${notes}${intro}${p ? weeks(p) : ""}
+    return layout("Even out uploads", shell, `${header}${notes}${intro}${p ? dayLoads(p.days, "Uploads a day", "upload") : ""}
       <section class="panel"><div class="empty">${p && p.channels.length ? "Every channel's uploads are already on their frequency, so there's nothing to move." : "No channel with an upload frequency has uploads coming up."}</div></section>`);
   }
 
@@ -84,5 +67,5 @@ export function renderEvenOut(shell: Shell, v: EvenView): string {
     <button class="clear">Even out the uploads</button>
   </form>`;
 
-  return layout("Even out uploads", shell, `${header}${notes}${intro}${weeks(p)}${channels}${moves}${apply}`);
+  return layout("Even out uploads", shell, `${header}${notes}${intro}${dayLoads(p.days, "Uploads a day", "upload")}${channels}${moves}${apply}`);
 }

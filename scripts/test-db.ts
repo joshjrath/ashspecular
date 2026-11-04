@@ -567,7 +567,7 @@ t("every page opens with a little of everything in it", await crawl(), []);
 // ── Even out uploads: each channel on its frequency from its last upload, with Undo ──
 {
   const { saveRecord, setUploaded } = await import("../src/db/records.js");
-  const { derive } = await import("../src/parse/derive.js");
+  const { derive, instantIn } = await import("../src/parse/derive.js");
   const { everyFor } = await import("../src/web/targets.js");
   const mk = async (code: string, air: string) => {
     const record = derive({
@@ -603,6 +603,20 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and Undo is offered", page.body.includes('action="/calendar/even/undo"'), true);
   await post("/calendar/even/undo", {});
   t("…Undo puts every upload and deadline back", JSON.stringify(await state()), JSON.stringify(before));
+
+  // Even out deadlines: a VO set due far earlier than its upload needs goes to six days before it.
+  await pool.query(`UPDATE records SET vo_due = $2, vo_source = 'stated' WHERE id = $1`, [ids[0], instantIn(shiftDate(today, 1), "18:00", ORG_TZ)]);
+  const dueBefore = await state();
+  const duePage = await app.inject({ method: "GET", url: "/calendar/even-deadlines?per=15", headers: { cookie } });
+  const dueUnconfirmed = await post("/calendar/even-deadlines", { per: "15" });
+  t("Even out deadlines: on the calendar and Future reset, the preview lists the VO and changes nothing; without the box ticked, nothing happens", [
+    calendar.body.includes('href="/calendar/even-deadlines"'), (await app.inject({ method: "GET", url: "/calendar/reset", headers: { cookie } })).body.includes('href="/calendar/even-deadlines"'),
+    duePage.statusCode, duePage.body.includes("Even EV-1"), dueUnconfirmed.status, JSON.stringify(await state()) === JSON.stringify(dueBefore),
+  ], [true, true, 200, true, 302, true]);
+  await post("/calendar/even-deadlines", { per: "15", confirm: "1" });
+  const dueAfter = await state();
+  t("…applied: the VO is due six days before its upload, the upload stays", [dueAfter[0]!.vo, dueAfter[0]!.air], [shiftDate(dueBefore[0]!.air, -6), dueBefore[0]!.air]);
+  t("…and Undo is offered, and puts it back", [(await app.inject({ method: "GET", url: "/calendar/even-deadlines", headers: { cookie } })).body.includes('action="/calendar/even-deadlines/undo"'), (await post("/calendar/even-deadlines/undo", {})).status, JSON.stringify(await state())], [true, 302, JSON.stringify(dueBefore)]);
 }
 
 await app.close();

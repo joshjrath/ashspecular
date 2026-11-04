@@ -56,6 +56,43 @@ export interface ResetPlan {
   channels: Array<{ channel: string; avgViews: number | null; late: number }>;
 }
 
+/** Each channel's VOs in upload order (then VO day). */
+export function channelQueues<T extends ResetVo>(vos: T[]): Map<string, T[]> {
+  const byAir = (a: T, b: T) => (a.airDate ?? "9").localeCompare(b.airDate ?? "9") || a.voDay.localeCompare(b.voDay) || a.id - b.id;
+  const byChannel = new Map<string, T[]>();
+  for (const v of vos) byChannel.set(v.channel, [...(byChannel.get(v.channel) ?? []), v]);
+  for (const list of byChannel.values()) list.sort(byAir);
+  return byChannel;
+}
+
+/** Channels by average long-form views, highest first (none yet: last). */
+export function channelsByViews(byChannel: Map<string, unknown>, avgViews: Map<string, number>): string[] {
+  const views = (ch: string) => avgViews.get(ch) ?? -1;
+  return [...byChannel.keys()].sort((a, b) => views(b) - views(a) || a.localeCompare(b));
+}
+
+/** Some of the VOs in rounds: every channel's first (biggest channel first), then each one's second, and on. */
+export function inRounds<T extends ResetVo>(list: T[], byChannel: Map<string, T[]>, channels: string[]): T[] {
+  const out: T[] = [];
+  for (let round = 0; out.length < list.length; round++) {
+    for (const ch of channels) {
+      const v = (byChannel.get(ch) ?? []).filter((x) => list.includes(x))[round];
+      if (v) out.push(v);
+    }
+  }
+  return out;
+}
+
+/** Where a reset's VOs start: today (the day My Day is on) or the day after. */
+export type StartFrom = "today" | "tomorrow";
+
+/** The first day for each choice. Past midnight with the day before not ended, "today" is the calendar day: the day before's deadlines have gone. */
+export function startDays(workday: { day: string; calendar: string; carried: boolean; ahead: boolean }): Record<StartFrom, string> {
+  const today = workday.carried ? workday.calendar : workday.day;
+  // If today's already ended, My Day is on tomorrow, and that's where "tomorrow" starts too.
+  return { today, tomorrow: workday.ahead ? workday.day : shiftDate(workday.day, 1) };
+}
+
 export function planReset(o: {
   /** The first day VOs may go to. */
   start: string;
@@ -72,24 +109,10 @@ export function planReset(o: {
 }): ResetPlan {
   const perDay = Math.max(RESET_BOUNDS.min, Math.min(RESET_BOUNDS.max, Math.round(o.perDay)));
   const lateIds = new Set(o.late.map((v) => v.id));
-  const byAir = (a: ResetVo, b: ResetVo) => (a.airDate ?? "9").localeCompare(b.airDate ?? "9") || a.voDay.localeCompare(b.voDay) || a.id - b.id;
-  const byChannel = new Map<string, ResetVo[]>();
-  for (const v of [...o.late, ...o.upcoming]) byChannel.set(v.channel, [...(byChannel.get(v.channel) ?? []), v]);
-  for (const list of byChannel.values()) list.sort(byAir);
-  const views = (ch: string) => o.avgViews.get(ch) ?? -1;
-  const channels = [...byChannel.keys()].sort((a, b) => views(b) - views(a) || a.localeCompare(b));
+  const byChannel = channelQueues([...o.late, ...o.upcoming]);
+  const channels = channelsByViews(byChannel, o.avgViews);
   // Late VOs first, then the ones not late yet; each in rounds: every channel's first, then each one's second.
-  const rounds = (list: ResetVo[]) => {
-    const out: ResetVo[] = [];
-    for (let round = 0; out.length < list.length; round++) {
-      for (const ch of channels) {
-        const v = byChannel.get(ch)!.filter((x) => list.includes(x))[round];
-        if (v) out.push(v);
-      }
-    }
-    return out;
-  };
-  const queue = [...rounds(o.late), ...rounds(o.upcoming)];
+  const queue = [...inRounds(o.late, byChannel, channels), ...inRounds(o.upcoming, byChannel, channels)];
 
   // Each channel's uploads as they stand: in order, none earlier than it was, none before
   // its VO's day + the buffer, and each at least the channel's frequency after the one

@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-even-out-deadlines",
+    title: "Even out deadlines: VOs lined up with their uploads",
+    changes: [
+      { text: "Calendar → Even out deadlines… (also on Future reset): every VO is due six days before its upload, no more than your VOs a day. A full day sends a VO to the nearest earlier day with room; a VO that can't be ready in time moves its upload (and the channel's later ones) instead.", href: "/calendar/even-deadlines" },
+      { text: "Do Even out uploads first and the deadlines follow the uploads; after evening out the uploads, the page links straight to it." },
+    ],
+  },
+  {
     id: "2026-11-04-even-out-exact",
     title: "Even out uploads keeps every channel exactly on its frequency",
     changes: [

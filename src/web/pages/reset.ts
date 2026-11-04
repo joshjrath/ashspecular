@@ -46,7 +46,7 @@ export function renderReset(shell: Shell, v: ResetView): string {
   </section>`;
 
   if (!p || !p.assign.size) {
-    return layout("Future reset", shell, `${pageHeader("Future reset", `<a class="clear secondary" href="/calendar">← Calendar</a>`)}${notes}${intro}
+    return layout("Future reset", shell, `${pageHeader("Future reset", `<a class="clear secondary" href="/calendar/even-deadlines">Even out deadlines</a><a class="clear secondary" href="/calendar">← Calendar</a>`)}${notes}${intro}
       <section class="panel"><div class="empty">No VOs are overdue, so there's nothing to reset.</div></section>`);
   }
 
@@ -85,6 +85,6 @@ export function renderReset(shell: Shell, v: ResetView): string {
   return layout(
     "Future reset",
     shell,
-    `${pageHeader("Future reset", `<a class="clear secondary" href="/calendar">← Calendar</a>`)}${notes}${intro}${order}${days}${rest}${apply}`,
+    `${pageHeader("Future reset", `<a class="clear secondary" href="/calendar/even-deadlines">Even out deadlines</a><a class="clear secondary" href="/calendar">← Calendar</a>`)}${notes}${intro}${order}${days}${rest}${apply}`,
   );
 }

@@ -355,6 +355,22 @@ plots the day the work is due.
     through), where each channel's run now starts, and every move. Nothing
     changes until you tick the box and press the button; **Undo** is offered
     on the page for a day afterwards.
+- **Even out deadlines…** (beside Even out uploads, and on Future reset) is
+  its partner for VOs: every pending VO is due 6 days before its upload, no
+  more than *VOs a day* (5 by default) and none on a day off. Best after
+  Even out uploads: line the uploads up, then the VOs follow them.
+  - A VO goes on the day its upload needs it by. If that day's full, it goes
+    to the nearest earlier day with room; if none, it can be due 5 days before
+    its upload; failing that it goes to the next day with room and **its upload
+    moves** to 6 days after it, with the channel's later uploads (their gaps
+    kept, closing in to the channel's frequency where they were wider).
+  - VOs already too late for their upload go first, on the soonest days, in
+    Future reset's order: late ones first, biggest channels first, in rounds.
+    A VO due far earlier than its upload needs moves later, to match it.
+  - *Start* is today or tomorrow, as in Future reset. The preview shows VOs a
+    day week by week (days off marked), every VO whose day changes and every
+    upload that moves. Nothing changes until you tick the box and press the
+    button; **Undo** is offered on the page for a day afterwards.
 - **Category toggles** above the grid hide or show a category. They double as
   the legend, and the calendar remembers how you left them.
 - **Complete / Incomplete** toggles sit beside the categories. Both are on

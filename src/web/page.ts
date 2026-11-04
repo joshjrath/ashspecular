@@ -255,6 +255,27 @@ export function timeAgo(at: Date): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/**
+ * How many things a day, before and after a change, a week a row (Sunday
+ * first): the big number after, the struck one before. Even out uploads and
+ * Even out deadlines show their plans with it.
+ */
+export function dayLoads(days: Array<{ day: string; before: number; after: number }>, heading: string, noun: string, off: Set<string> = new Set()): string {
+  if (!days.length) return "";
+  const md = (day: string) => usDate(day).replace(/\/\d{4}$/, "");
+  const cells: string[] = Array.from({ length: new Date(`${days[0]!.day}T12:00:00Z`).getUTCDay() }, () => `<div class="evday pad"></div>`);
+  for (const d of days) {
+    const cls = d.after > d.before ? " up" : d.after < d.before ? " down" : "";
+    const dayOff = off.has(d.day) ? `<em>off</em>` : "";
+    cells.push(`<div class="evday${cls}" title="${esc(md(d.day))}: ${d.before} → ${d.after} ${noun}${d.after === 1 ? "" : "s"}${dayOff ? " (day off)" : ""}"><span>${esc(md(d.day))}</span><b>${d.after}</b>${d.after !== d.before ? `<s>${d.before}</s>` : dayOff}</div>`);
+  }
+  const most = (k: "before" | "after") => Math.max(...days.map((d) => d[k]));
+  return `<section class="panel"><h2>${esc(heading)} <span class="sub">— the big number is after, the struck one before · busiest day ${most("before")} → ${most("after")}</span></h2>
+    <div class="evweek evhead">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => `<div>${d}</div>`).join("")}</div>
+    <div class="evweek">${cells.join("")}</div>
+  </section>`;
+}
+
 export function pageHeader(title: string, extra = ""): string {
   const now = new Date();
   const day = new Intl.DateTimeFormat("en-US", {

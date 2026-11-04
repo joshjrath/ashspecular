@@ -1120,7 +1120,7 @@ header.page .checknow button { white-space: nowrap; }
 .rsapply p { margin: 0 0 10px; color: var(--ink2); }
 .rsconfirm { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; color: var(--ink); }
 .rsgo { background: var(--late); color: #111; }
-/* Even out uploads: uploads a day, a week a row */
+/* Even out uploads and deadlines (dayLoads): how many a day, a week a row */
 .evweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .evhead { margin-bottom: 4px; }
 .evhead div { color: var(--ink3); font-size: 11px; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
@@ -1129,6 +1129,7 @@ header.page .checknow button { white-space: nowrap; }
 .evday span { color: var(--ink3); font-size: 11px; }
 .evday b { color: var(--ink); font-size: 17px; line-height: 1.1; }
 .evday s { color: var(--ink3); font-size: 11px; }
+.evday em { color: var(--ink3); font-size: 10.5px; font-style: normal; text-transform: uppercase; letter-spacing: .06em; }
 .evday.down { box-shadow: inset 0 0 0 1px var(--ok); }
 .evday.up { box-shadow: inset 0 0 0 1px var(--line); }
 @media (max-width: 640px) { .rsrow { flex-wrap: wrap; } .rsair { text-align: left; width: 100%; padding-left: 19px; } }
