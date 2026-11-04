@@ -1753,6 +1753,16 @@ t("My Day: switches (Task off), a batch on its own a row with its progress, and 
     at("Today&#39;s") > 0 && at("Today&#39;s") < at("Ahead · for") && at("Ahead · for") < at("Late · was due"), (page.match(/class="dgroup"/g) ?? []).length, page.includes("Stories VO"), page.includes("Bits batch"),
   ], [true, 4, true, true]);
 }
+{
+  // Getting ahead on VOs: one added to today counts today, says when it's due, and can go back; one not added offers +.
+  const due = shiftDate(wToday, 4);
+  const voRec = (id: number, workDay: string | null) => toItem({ ...mk({ id, category: "stories", channel: "Specular Verse", title: `Ahead VO ${id}`, airDate: shiftDate(due, 6), voDue: new Date(`${due}T22:00:00Z`) }), workDay })!;
+  const added = voRec(600, wToday), later = voRec(601, null);
+  const page = renderMyDay(shellFix, { now: wNow, today: wToday, required: [added], ahead: [later], done: [], loads, trackedToday: 0, running: null, focus: null, budget: null, asked: false, voLeft: { n: 0, minutes: 0 } });
+  t("My Day: a VO added ahead is today's work, marked whose day it is, with ↩; one in Do ahead has +, and the next few can be added at once", [
+    added.day, isRequired(added, wToday), whyNow(added, wNow, wToday).startsWith("ahead, for"), later.day, page.includes('name="off" value="1"'), page.includes('class="wbtn add"'), page.includes('action="/my-day/ahead-vos"'),
+  ], [wToday, true, true, due, true, true, true]);
+}
 // End my day: the day turns over when Ash says, not at midnight (noon the next day if she forgets).
 const ins = (iso: string) => new Date(iso);
 t("End my day: after midnight, the day before carries on until it's ended (or noon)", [

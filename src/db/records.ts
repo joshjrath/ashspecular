@@ -357,6 +357,15 @@ export async function setWorkDays(days: Map<number, string>): Promise<void> {
   for (const [id, day] of days) await pool.query(`UPDATE records SET work_day = $2::date WHERE id = $1 AND batch_no IS NOT NULL`, [id, day]);
 }
 
+/** A VO added to My Day ahead of its due day (worked on `day`), or taken back off it (null). Only open VOs. */
+export async function setVoWorkDay(id: number, day: string | null): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE records SET work_day = $2::date WHERE id = $1 AND batch_no IS NULL AND kind <> 'review' AND category IN ('stories', 'movies') AND status = 'open'`,
+    [id, day],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 /** A day off made a working day again: its batches are worked on their own day again. */
 export async function clearWorkDaysOn(day: string): Promise<void> {
   await pool.query(`UPDATE records SET work_day = NULL WHERE batch_no IS NOT NULL AND air_date = $1::date AND status = 'open'`, [day]);

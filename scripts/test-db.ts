@@ -674,6 +674,27 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…closing the day takes its task opened ahead away too", (await pool.query(`SELECT count(*)::int AS n FROM tasks WHERE ahead_for = $1::date AND status = 'open'`, [later])).rows[0].n, 0);
   await pool.query("DELETE FROM tasks WHERE title = 'Post the community tab'");
 
+  // Getting ahead on a VO: added to today's My Day, and back off it.
+  const { saveRecord: saveVo } = await import("../src/db/records.js");
+  const { derive: deriveVo } = await import("../src/parse/derive.js");
+  const voId = Number(await saveVo(deriveVo({
+    kind: "assignment", code: "AHEAD-1", title: "What If Thor Was In Bleach?", category: "stories", channel: "Specular Verse", tag: null, air_date: shiftDate(myDay, 12), stage: "script",
+    word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+  } as never, "", new Date()), { messageId: "ahead-vo-1", channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  const workDayOf = async () => (await pool.query(`SELECT to_char(work_day, 'YYYY-MM-DD') AS d FROM records WHERE id = $1`, [voId])).rows[0].d;
+  const beforeAdd = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  await post("/my-day/ahead", { id: String(voId), back: "/my-day" });
+  const addedDay = await workDayOf();
+  const addedPage = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  await post("/my-day/ahead", { id: String(voId), off: "1", back: "/my-day" });
+  const offDay = await workDayOf();
+  await post("/my-day/ahead-vos", { n: "1" });
+  const someAdded = (await pool.query(`SELECT count(*)::int AS n FROM records WHERE work_day = $1::date AND batch_no IS NULL AND category IN ('stories', 'movies')`, [myDay])).rows[0].n;
+  t("My Day: + adds a VO not due yet to today's list, ↩ takes it back off; Add the next 1 adds one", [
+    beforeAdd.body.includes('class="wbtn add"'), addedDay, addedPage.body.includes('name="off" value="1"'), offDay, someAdded,
+  ], [true, myDay, true, null, 1]);
+  await pool.query("UPDATE records SET work_day = NULL WHERE batch_no IS NULL");
+
   // Each group ungroups on its own; a day opened ahead can be closed again, and leaves My Day.
   const key = `bits-${ahead.replace(/-/g, "")}`;
   const split = await app.inject({ method: "POST", url: "/my-day/explode", headers: { cookie, "content-type": "application/x-www-form-urlencoded" }, payload: `group=${key}&on=1` });

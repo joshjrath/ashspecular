@@ -152,6 +152,8 @@ export function typeOf(r: StoredRecord): WorkType | null {
 
 const dueOf = (r: StoredRecord) => r.voDue ?? r.deadline ?? r.scriptDue;
 
+const minDay = (a: string, b: string | null | undefined) => (b && b < a ? b : a);
+
 export function toItem(r: StoredRecord, spent = 0): WorkItem | null {
   const type = typeOf(r);
   if (!type) return null;
@@ -165,8 +167,9 @@ export function toItem(r: StoredRecord, spent = 0): WorkItem | null {
     category: r.category,
     code: r.code,
     due,
-    // A batch worked ahead (a day off's, or one opened ahead on Recurring) counts on that day.
-    day: r.batchNo && r.workDay ? r.workDay : due ? dateIn(ORG_TZ, due) : r.airDate,
+    // A batch worked ahead (a day off's, or one opened ahead on Recurring) counts on that day;
+    // so does a VO added to My Day ahead of its due day.
+    day: r.batchNo && r.workDay ? r.workDay : due ? minDay(dateIn(ORG_TZ, due), r.workDay) : r.airDate,
     airDate: r.airDate,
     est: r.batchNo && r.channel ? channelEstimate(r.channel) : typeEstimate(type),
     spent,
@@ -290,9 +293,13 @@ export function urgency(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): nu
 }
 
 /** Why a piece is where it is, in a few words. */
-/** The day a piece worked ahead is for: a batch's own day, or a repeating task's occurrence opened ahead. Null when it's not ahead. */
-export const aheadFor = (i: WorkItem): string | null =>
-  i.record?.batchNo && i.record.workDay ? i.airDate : i.task?.aheadFor ?? null;
+/** The day a piece worked ahead is for: a batch's own day, a VO's due day, or a repeating task's occurrence opened ahead. Null when it's not ahead. */
+export const aheadFor = (i: WorkItem): string | null => {
+  if (i.record?.batchNo && i.record.workDay) return i.airDate;
+  // A VO added to My Day ahead: the day it's due.
+  if (i.record?.workDay && i.due) return dateIn(ORG_TZ, i.due) > i.record.workDay ? dateIn(ORG_TZ, i.due) : null;
+  return i.task?.aheadFor ?? null;
+};
 
 export function whyNow(i: WorkItem, now: Date, today = dateIn(ORG_TZ, now)): string {
   // A batch or repeating task worked ahead of its own day: which day's it is.

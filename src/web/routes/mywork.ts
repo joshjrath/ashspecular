@@ -4,7 +4,7 @@
  */
 import { LOG_RANGES, type LogRange, type LoggedEntry, MYDAY_GROUPS, dayLoads, doAhead, isRequired, isVo, logByDay, logDays, nextDays, projectBatches, remaining, repeatToday, shownTypes, typeOf, voQueue, whatNext, workdayOf } from "../work.js";
 import { ORG_TZ, dateIn, instantIn, shiftDate } from "../../parse/derive.js";
-import { type StoredRecord, getRecord, setStatus } from "../../db/records.js";
+import { type StoredRecord, getRecord, setStatus, setVoWorkDay } from "../../db/records.js";
 import { clearTime, forgetUntracked, getDayEnd, loggedBetween, minutesSince, runningTimer, setDayEnd, startTaskTimer, startTimer, stopTimer } from "../../db/timers.js";
 import { hasDatabase } from "../../config.js";
 import { formText, localPath } from "../http.js";
@@ -123,6 +123,28 @@ export function registerMyWork(app: FastifyInstance): void {
     if (ended) await setDayEnd(ended.prev ? { ...ended.prev, prev: null } : null);
     return reply.redirect("/my-day");
   });
+  // Getting ahead on VOs: one added to today's list (or taken back off it), or the next few from Do ahead.
+  app.post<{ Body: { id?: string; off?: string; back?: string } }>("/my-day/ahead", async (request, reply) => {
+    const id = Number(request.body?.id);
+    if (hasDatabase && Number.isSafeInteger(id) && id > 0) {
+      const day = workdayOf(new Date(), await getDayEnd()).day;
+      await setVoWorkDay(id, request.body?.off === "1" ? null : day);
+    }
+    return reply.redirect(localPath(request.body?.back, "/my-day"));
+  });
+  app.post<{ Body: { n?: string } }>("/my-day/ahead-vos", async (request, reply) => {
+    const n = [1, 3, 5].includes(Number(request.body?.n)) ? Number(request.body?.n) : 1;
+    if (hasDatabase) {
+      const now = new Date();
+      const w = workdayOf(now, await getDayEnd());
+      const work = await loadWork(now, { today: w.day, since: w.startedAt });
+      // The same order Do ahead shows them in: the soonest due first.
+      const next = doAhead(work.items.filter((i) => isVo(i.type)), now, n, w.day);
+      for (const i of next) await setVoWorkDay(i.id!, w.day);
+    }
+    return reply.redirect("/my-day");
+  });
+
   // One batch group (a kind and a day) ungrouped into rows, or grouped again.
   app.post<{ Body: { on?: string; group?: string } }>("/my-day/explode", async (request, reply) => {
     const group = formText(request.body?.group);

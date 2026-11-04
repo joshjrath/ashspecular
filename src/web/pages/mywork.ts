@@ -3,7 +3,7 @@
  * the VO Queue and recording mode, and Forgotten work.
  */
 import { CHANNELS } from "../../catalog.js";
-import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, aheadFor, batchType, channelEstimate, isBatch, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
+import { type DayEnd, type DayLoad, type FocusPick, type Workday, type Forgotten, LOG_RANGES, type LogRange, type LoggedDay, MYDAY_GROUPS, TYPE_BY_ID, VO_WPM, WORK_TYPES, type WorkItem, type WorkType, aheadFor, batchType, channelEstimate, isBatch, isRequired, isVo, itemKey, readMinutes, remaining, typeEstimate, whyNow } from "../work.js";
 import { ORG_TZ, dateIn, instantIn, usDate } from "../../parse/derive.js";
 import { PAUSE_ICON, PLAY_ICON, SCRIPT_ICON, type Shell, channelColour, fmtMin, gapStrip, layout, pageHeader, row } from "../page.js";
 import { PRIORITY, TASK_CATEGORY } from "../../tasks/parse.js";
@@ -87,6 +87,15 @@ function workRow(i: WorkItem, now: Date, running: string | null, back: string, e
             // A daily batch that isn't happening today can be taken off the day.
             i.record?.batchNo
               ? `<form method="post" action="/my-day/remove" onsubmit="return confirm('Remove this from the day? It goes to Removed, where you can put it back.')"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn x" title="Remove it from the day">×</button></form>`
+              : ""
+          }${
+            // A VO not due yet can be added to today's list to get ahead, and a VO added ahead taken back off it.
+            today && isVo(i.type) && i.record
+              ? aheadFor(i) && aheadFor(i)! > today
+                ? `<form method="post" action="/my-day/ahead"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="off" value="1"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn" title="Take it back off today's list (it's due ${esc(`${shortDay(aheadFor(i)!)} ${md(aheadFor(i)!)}`)})">↩</button></form>`
+                : !isRequired(i, today)
+                  ? `<form method="post" action="/my-day/ahead"><input type="hidden" name="id" value="${i.id}"><input type="hidden" name="back" value="${esc(back)}"><button class="wbtn add" title="Add it to today's list to get ahead">+</button></form>`
+                  : ""
               : ""
           }`
     }</div>
@@ -528,6 +537,7 @@ export function renderMyDay(shell: Shell, d: MyDayData): string {
   const ahead = `<section class="panel" id="ahead"><h2>Do ahead <span class="sub">— ${
     d.required.length ? "once today's is done" : "today's is done, so these are next"
   } · VOs first, since the editors can start once they're recorded</span></h2>
+    ${d.ahead.some((i) => isVo(i.type)) ? `<form method="post" action="/my-day/ahead-vos" class="mdahead"><span>Get ahead on VOs: add the next</span>${[1, 3, 5].map((n) => `<button class="mdpill" name="n" value="${n}">${n}</button>`).join("")}<span>to today · or <b>+</b> on any one</span></form>` : ""}
     ${d.ahead.length ? `<div class="wlist">${d.ahead.map((i) => workRow(i, d.now, running, back, "", d.today)).join("")}</div>` : `<div class="empty">Nothing ahead yet.</div>`}
   </section>`;
 

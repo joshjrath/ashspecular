@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-04-vos-ahead",
+    title: "Get ahead on VOs from My Day",
+    changes: [
+      { text: "Do ahead: + on a Stories or Movies VO adds it to today's list, marked ahead, for its due day; add the next 1, 3 or 5 at once. ↩ takes one back off. Its deadlines stay as they were.", href: "/my-day#ahead" },
+    ],
+  },
+  {
     id: "2026-11-04-tasks-ahead",
     title: "Opening a day ahead brings its repeating tasks too",
     changes: [

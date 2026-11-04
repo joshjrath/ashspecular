@@ -1159,6 +1159,10 @@ header.page .checknow button { white-space: nowrap; }
 .wgroup > summary .wt::after { content: " ▾"; color: var(--ink3); font-size: 12px; }
 .wgroup[open] > summary .wt::after { content: " ▴"; }
 .wgroup .wlist { margin: 6px 0 0 18px; }
+/* My Day: getting ahead on VOs from Do ahead */
+.mdahead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; color: var(--ink2); font-size: 13px; }
+.mdahead .mdpill { min-width: 34px; background: var(--sunk); border: 1px solid var(--line); color: var(--ink); }
+.wbtn.add { font-size: 17px; line-height: 1; }
 /* My Day: a batch group ungrouped into rows, under a line that groups it again */
 .wgrouphead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px 2px; border-left: 3px solid var(--wc); color: var(--ink3); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .wgrouphead form { margin: 0; }

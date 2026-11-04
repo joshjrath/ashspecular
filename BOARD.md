@@ -853,6 +853,10 @@ can be changed.)
 - **Do ahead:** work not due yet, best to do early first. VOs lead, since the
   editors can start once they're recorded; then revisions, Gaming, long-form
   and batches, soonest first within each.
+  - **Get ahead on VOs:** **+** on a Stories or Movies VO adds it to today's
+    list (*ahead, for Sat 11/7*); *add the next 1 / 3 / 5* adds the soonest
+    few at once. **↩** on one you added takes it back off. Its deadlines don't
+    change: it's just today's work now, and stays on the list until it's done.
 
 **Timers:** one runs at a time; starting another stops it. A green bar at the
 top of My Day and the VO Queue shows what's running, with a live clock,
