@@ -653,8 +653,29 @@ t("every page opens with a little of everything in it", await crawl(), []);
   const label = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${ahead}T12:00:00Z`));
   t("Recurring: a day opened ahead joins today's My Day as new batches, saying whose day they are", [brought.n > 0, brought.today === brought.n, page.body.includes(`ahead, for ${label}`)], [true, true, true]);
 
-  // A repeating task that falls on a day opened ahead gets that day's occurrence now; its own repeat skips that day.
   const { repeatTask } = await import("../src/db/tasks.js");
+  const repeatTaskOf = repeatTask;
+  // Today's daily task finished, so tomorrow's is open: opening tomorrow brings that one to today, and it repeats from tomorrow.
+  const head = Number((await pool.query(
+    "INSERT INTO tasks (title, body, category, priority, due, repeat) VALUES ('Check the analytics', '', $1, 'normal', $2, 'daily') RETURNING id",
+    [category, instantIn(shiftDate(myDay, 1), "09:30", ORG_TZ)],
+  )).rows[0].id);
+  await post("/recurring/ahead", { day: shiftDate(myDay, 1) });
+  const moved = (await pool.query(`SELECT to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD HH24:MI') AS due, to_char(ahead_for, 'YYYY-MM-DD') AS ahead, repeat FROM tasks WHERE id = $1`, [head])).rows[0];
+  const copies = (await pool.query(`SELECT count(*)::int AS n FROM tasks WHERE title = 'Check the analytics'`)).rows[0].n;
+  const shown = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  await post("/recurring/close", { day: shiftDate(myDay, 1) });
+  const putBack = (await pool.query(`SELECT to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD HH24:MI') AS due, ahead_for FROM tasks WHERE id = $1`, [head])).rows[0];
+  await post("/recurring/ahead", { day: shiftDate(myDay, 1) });
+  const nextHead = await repeatTaskOf(head, myDay);
+  const nextDue = (await pool.query(`SELECT to_char(due AT TIME ZONE '${ORG_TZ}', 'YYYY-MM-DD HH24:MI') AS d FROM tasks WHERE id = $1`, [nextHead])).rows[0].d;
+  t("Recurring: a repeating task finished today, then tomorrow opened: tomorrow's comes to today's My Day (no copy), closing puts it back, and it repeats from tomorrow", [
+    moved, copies, shown.body.includes("Check the analytics"), putBack, nextDue,
+  ], [{ due: `${myDay} 09:30`, ahead: shiftDate(myDay, 1), repeat: "daily" }, 1, true, { due: `${shiftDate(myDay, 1)} 09:30`, ahead_for: null }, `${shiftDate(myDay, 2)} 09:30`]);
+  await pool.query("DELETE FROM tasks WHERE title = 'Check the analytics'");
+
+  // A repeating task that falls on a day opened ahead gets that day's occurrence now; its own repeat skips that day.
+
   const tomorrowMine = shiftDate(myDay, 1), later = shiftDate(myDay, 2);
   const daily = Number((await pool.query(
     "INSERT INTO tasks (title, body, category, priority, due, repeat) VALUES ('Post the community tab', '', $1, 'normal', $2, 'daily') RETURNING id",

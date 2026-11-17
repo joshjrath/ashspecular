@@ -358,8 +358,7 @@ const doneFor = (i: WorkItem): string | null => (isBatch(i.type) || i.type === "
 /**
  * Done today, sorted out: a section for each day the work was for — today's
  * first, then what you got ahead on, then late work caught up — and in each,
- * a group per kind of work with its count and time. Big batch groups start
- * folded.
+ * a group per kind of work with its count and time, each open (tap to fold).
  */
 function doneToday(done: WorkItem[], today: string): string {
   const sum = (xs: WorkItem[]) => ({ est: xs.filter((i) => !i.untracked).reduce((n, i) => n + i.est, 0), spent: xs.reduce((n, i) => n + i.spent, 0) });
@@ -379,7 +378,7 @@ function doneToday(done: WorkItem[], today: string): string {
   const sections = days.map((day) => {
     const mine = done.filter((i) => doneFor(i) === day);
     const groups = WORK_TYPES.map((t) => ({ t, list: mine.filter((i) => i.type === t.id) })).filter((g) => g.list.length);
-    const body = groups.map(({ t, list }) => `<details class="dgroup" style="--wc:${t.colour}"${isBatch(t.id) && list.length >= 4 ? "" : " open"}>
+    const body = groups.map(({ t, list }) => `<details class="dgroup" style="--wc:${t.colour}" open>
         <summary><span class="dkind">${esc(t.label)}</span><span class="dcount">${list.length}</span><span class="dtime">${esc(times(list))}</span></summary>
         <div class="wlist done">${list.map(doneRow).join("")}</div>
       </details>`).join("");

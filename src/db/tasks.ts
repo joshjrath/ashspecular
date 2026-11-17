@@ -145,7 +145,8 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
   const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
   const t = rows[0] ? row(rows[0]) : null;
   if (!t?.repeat) return null;
-  const from = t.due ? dateIn(ORG_TZ, t.due) : today;
+  // Brought to today from a day opened ahead: it repeats from the day it was for.
+  const from = t.aheadFor ?? (t.due ? dateIn(ORG_TZ, t.due) : today);
   const time = t.due
     ? new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due)
     : DEADLINE_TIME;
@@ -170,20 +171,28 @@ export async function repeatTask(id: number, today = dateIn(ORG_TZ, new Date()))
 /**
  * Days opened ahead on Recurring: each open repeating task that falls on one
  * gets that day's occurrence now, due on `workOn` (today) at its usual time,
- * marked as for that day. One already opened for it isn't made twice.
+ * marked as for that day. The occurrence already open for that day (the one
+ * finishing today's opened) is the one that comes: it moves to today, and its
+ * repeat goes on from the day it's for. One already opened isn't made twice.
  */
 export async function openTasksAhead(days: string[], workOn: string): Promise<number> {
-  const { rows } = await pool.query(`SELECT * FROM tasks WHERE status = 'open' AND repeat IS NOT NULL AND due IS NOT NULL AND ahead_for IS NULL`);
+  const { rows } = await pool.query(`SELECT * FROM tasks WHERE status = 'open' AND repeat IS NOT NULL AND due IS NOT NULL`);
   let made = 0;
   for (const t of rows.map(row)) {
-    const from = dateIn(ORG_TZ, t.due!);
+    const from = t.aheadFor ?? dateIn(ORG_TZ, t.due!);
     const time = new Intl.DateTimeFormat("en-GB", { timeZone: ORG_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t.due!);
+    const due = instantIn(workOn, time, ORG_TZ);
+    // Its own occurrence is on an opened day: it's today's work now, for that day.
+    if (!t.aheadFor && from > workOn && days.includes(from)) {
+      await pool.query(`UPDATE tasks SET due = $2, ahead_for = $3::date, updated_at = now() WHERE id = $1`, [t.id, due, from]);
+      made += 1;
+    }
     for (const day of days.filter((d) => fallsOn(from, t.repeat!, d))) {
       const { rowCount } = await pool.query(
         `INSERT INTO tasks (title, body, category, priority, person, due, est_min, author, notes, ahead_for)
          SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date
           WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE title = $1 AND ahead_for = $10::date)`,
-        [t.title, t.body, t.category, t.priority, t.person, instantIn(workOn, time, ORG_TZ), t.estMin, t.author, t.notes, day],
+        [t.title, t.body, t.category, t.priority, t.person, due, t.estMin, t.author, t.notes, day],
       );
       made += rowCount ?? 0;
     }
@@ -191,10 +200,19 @@ export async function openTasksAhead(days: string[], workOn: string): Promise<nu
   return made;
 }
 
-/** A day opened ahead, closed again: its tasks opened ahead and still open go. */
+/**
+ * A day opened ahead, closed again: its copies opened ahead and still open
+ * go, and a repeating task's own occurrence brought to today goes back to
+ * its day, same time.
+ */
 export async function closeTasksAhead(day: string): Promise<number> {
-  const { rowCount } = await pool.query(`DELETE FROM tasks WHERE ahead_for = $1::date AND status = 'open'`, [day]);
-  return rowCount ?? 0;
+  const { rowCount } = await pool.query(`DELETE FROM tasks WHERE ahead_for = $1::date AND status = 'open' AND repeat IS NULL`, [day]);
+  const { rowCount: back } = await pool.query(
+    `UPDATE tasks SET due = (($1::date + ((due AT TIME ZONE '${ORG_TZ}')::time)) AT TIME ZONE '${ORG_TZ}'), ahead_for = NULL, updated_at = now()
+      WHERE ahead_for = $1::date AND status = 'open' AND repeat IS NOT NULL`,
+    [day],
+  );
+  return (rowCount ?? 0) + (back ?? 0);
 }
 
 /** Open tasks due on a day (ET), not snoozed past it: what a day off moves. */

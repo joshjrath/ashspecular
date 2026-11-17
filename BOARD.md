@@ -849,7 +849,7 @@ can be changed.)
   **Today's** first, then **Ahead · for Sat 11/7** (work you got ahead on, a
   batch by its own day), then **Late · was due Sun 11/1** (caught up). In each,
   a group per kind (Stories VO, Revision review, Bits batch…) with its count
-  and time; tap a group to fold it. Four or more batches start folded.
+  and time; every group starts open, and tapping one folds it.
 - **Do ahead:** work not due yet, best to do early first. VOs lead, since the
   editors can start once they're recorded; then revisions, Gaming, long-form
   and batches, soonest first within each.
@@ -1924,6 +1924,9 @@ Sat 11/7*), each day its own group, so you can work them now; ones already
 open stay where they were. **Repeating tasks** come too: each one that falls
 on a day you open (a daily task, a weekly one on its weekday) gets that day's
 occurrence now, due today at its usual time and marked *ahead, for* that day.
+That includes the one already waiting for that day (finish today's daily task
+and tomorrow's opens; open tomorrow and it joins today's list), which then
+repeats from the day it was for.
 Opening the day again doesn't make a second, and when the task's own repeat
 comes round to that day it skips it. **Close this day** on a day ahead takes it back:
 its batches nobody has started (no upload ticked, no time tracked) and its

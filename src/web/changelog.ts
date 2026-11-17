@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-17-tasks-tomorrow-and-done-open",
+    title: "Tomorrow's repeating tasks come with tomorrow's batches",
+    changes: [
+      { text: "Finish today's repeating task and open tomorrow on Recurring: tomorrow's occurrence now joins today's My Day, marked ahead, for tomorrow, and repeats from tomorrow. Closing the day puts it back.", href: "/recurring" },
+      { text: "Done today keeps every group open; tap one to fold it.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-11-04-vos-ahead",
     title: "Get ahead on VOs from My Day",
     changes: [
