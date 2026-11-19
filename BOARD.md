@@ -173,10 +173,11 @@ those off. Every choice is remembered in the browser.
 
 Recurring batches opened ahead for a later day stay on Recurring and the
 calendar; they join the dashboard, the lists and every count on the morning
-they're for. **A daily batch is never late.** Uploads are daily, so a day
-gone by can't be caught up on (tomorrow brings its own). A batch still open
-at 6 PM doesn't turn red, and when its day is over it leaves the open work,
-late, the chart and every count. The Recurring tab keeps that day's record.
+they're for. **An unfinished daily batch stays** until you clear it or take
+it off with × in My Day: once its time passes it's late, like any one-off,
+in My Day, the lists, late and every count, and the next day's batch joins
+it rather than replacing it. (Batches from before 11/18/2026 had already
+dropped off unfinished and stay gone.)
 
 **Tasks** are two tight lines each: the title, then its code, channel, air
 countdown and links, with one deadline pill on the right — "VO 9/24/2026 ·

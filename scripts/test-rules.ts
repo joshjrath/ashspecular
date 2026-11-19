@@ -1529,10 +1529,10 @@ const gapDash2 = renderDashboard({ ...gapShell2, active: "dashboard" }, { stats:
 t("each chip has × to clear its days", /action="\/gaps\/dismiss"[\s\S]*?name="days" value="2026-09-28,2026-10-02"/.test(gapDash2), true);
 t("…each calendar slot × clears its own day", [renderWeek(gapShell2, "2026-09-27", "posting", [{ date: "2026-09-28", list: [] }]).includes('name="days" value="2026-09-28"'), renderCalendar(gapShell2, "2026-10", "posting", [], [], []).includes('name="days" value="2026-10-02"')], [true, true]);
 
-section("Dashboard: Revisions as a column; daily batches are never late");
+section("Dashboard: Revisions as a column; an unfinished daily batch goes late like anything else");
 const lateBatch = { ...batchRec, id: 90, status: "open", deadline: new Date(Date.now() - 5 * 3_600_000), voDue: null, scriptDue: null } as typeof batchRec;
 const bList = renderList(shellFix, "Q", "", [lateBatch]);
-t("a daily batch past its time isn't late", [/class="due late"/.test(bList), bList.includes(" late</em>")], [false, false]);
+t("a daily batch past its time is late, like a one-off", [/class="due late"/.test(bList), bList.includes(" late</em>")], [true, true]);
 t("…nor red on the calendar", renderWeek(shellFix, "2026-09-27", "deadlines", [{ date: "2026-09-28", list: [lateBatch] }]).includes('class="at over"'), false);
 const oneOff = { ...plainRec, id: 91, deadline: new Date(Date.now() - 5 * 3_600_000), voDue: null, scriptDue: null } as typeof plainRec;
 t("…one-off work still is", /class="due late"/.test(renderList(shellFix, "Q", "", [oneOff])), true);

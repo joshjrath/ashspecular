@@ -370,7 +370,7 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("…and the day it moved on to has every daily batch, so My Day shows them", recurringChannels().every((c) => open.includes(c.name)) && page.body.includes(recurringChannels()[0]!.name), true);
   await post("/my-day/end/undo", {});
   t("…Undo puts it back", (await pool.query("SELECT count(*)::int AS n FROM app_settings WHERE key = 'myday_ended'")).rows[0].n, 0);
-  // Past midnight, the day before's unfinished batch stays in My Day until that day is ended.
+  // The day before's unfinished batch stays in My Day: it's cleared or taken off with ×, never dropped.
   const { openBatchesFor } = await import("../src/jobs/batches.js");
   const { loadWork } = await import("../src/web/shell.js");
   const yesterday = shiftDate(today, -1);
@@ -390,9 +390,10 @@ t("every page opens with a little of everything in it", await crawl(), []);
     rec.statusCode, rec.body.includes("You&#39;ve ended today in My Day") || rec.body.includes("You've ended today in My Day"), todaySection.includes(`value="${tomorrowDay}"`), todaySection.includes(`name="date" value="${today}"`),
   ], [200, true, true, false]);
   await setDayEnd(null);
-  t("My Day: the day before's unfinished batch stays while that day is still on, and drops off once it's ended", [
-    carried.items.some((i) => i.id === Number(late)), afterEnd.items.some((i) => i.id === Number(late)),
-  ], [true, false]);
+  const myDayPage = await app.inject({ method: "GET", url: "/my-day", headers: { cookie } });
+  t("My Day: the day before's unfinished batch stays, while that day is on and after it's ended, late like a one-off, until cleared", [
+    carried.items.some((i) => i.id === Number(late)), afterEnd.items.some((i) => i.id === Number(late)), myDayPage.body.includes(`name="id" value="${late}"`),
+  ], [true, true, true]);
 }
 
 // ── Future reset: late VOs spread out, uploads moved, and Undo ──────────────

@@ -777,8 +777,7 @@ function duePill(r: StoredRecord): string {
   if (!at) return `<span class="due none">no deadline</span>`;
   const label = r.kind === "review" ? "Review" : r.voDue ? "VO" : r.deadline ? "Due" : "Script";
   const ms = at.getTime() - Date.now();
-  // A daily batch is never late: its day is its day, and tomorrow brings its own.
-  const open = r.status === "open" && !(r.batchNo && ms < 0);
+  const open = r.status === "open";
   const state = !open ? "" : ms < 0 ? " late" : ms < 86_400_000 ? " soon" : "";
   const span = (n: number) => {
     const h = Math.round(Math.abs(n) / 3_600_000);

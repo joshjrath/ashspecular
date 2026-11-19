@@ -624,6 +624,9 @@ function hydrate(r: Row): StoredRecord {
 const standing = (col: string) => `CASE WHEN batch_no IS NULL THEN off_placed(id, ${col}) ELSE ${col} END`;
 
 /** The deadline as set: the voiceover time, then any other deadline, then the script's. */
+/** Unfinished daily batches stay from this day on; ones before it had already dropped off and stay gone. */
+export const BATCHES_KEPT_FROM = "2026-11-18";
+
 const SET_DUE = "COALESCE(vo_due, deadline, script_due)";
 
 /**
@@ -732,14 +735,13 @@ export async function channelCounts(): Promise<Record<string, number>> {
  * 3 AM for the Bits/Reading day, midnight for a long-form channel's (Specular).
  * Paused work is never live: it waits on the Paused page with no deadline.
  */
-// A daily batch is live on its own day only: a day ahead isn't due yet, and a
-// day gone by can't be caught up on (tomorrow brings its own), so it's never
-// overdue — it simply leaves the open work. The Recurring tab keeps its record.
-const LIVE = `paused_at IS NULL AND NOT (batch_no IS NOT NULL AND air_date <> (CASE WHEN category IN ('bits', 'reading')
+// A daily batch is live from its own day on: a day ahead isn't due yet, but one
+// left unfinished stays, late like any other work, until it's cleared or taken
+// off with ×. (Batches from before BATCHES_KEPT_FROM had already dropped off
+// unfinished, and stay that way.)
+const LIVE = `paused_at IS NULL AND NOT (batch_no IS NOT NULL AND (air_date < DATE '${BATCHES_KEPT_FROM}' OR air_date > (CASE WHEN category IN ('bits', 'reading')
   THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
-  ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END))`;
-/** Only one-off work can be late: a daily batch never is. */
-const CAN_BE_LATE = `batch_no IS NULL`;
+  ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END)))`;
 
 export interface Stats {
   late: number;
@@ -751,7 +753,7 @@ export interface Stats {
 export async function stats(zone: string): Promise<Stats> {
   const { rows } = await pool.query<Record<string, string>>(
     `SELECT
-       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND ${CAN_BE_LATE} AND ${DUE} < now()) AS late,
+       COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND ${DUE} < now()) AS late,
        COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE}
          AND (${DUE} AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date) AS due_today,
        COUNT(*) FILTER (WHERE status = 'open' AND ${LIVE} AND vo_due IS NOT NULL) AS vo,
@@ -782,7 +784,7 @@ export interface DayBucket {
 export async function dueByDay(zone: string, days = 14): Promise<DayBucket[]> {
   const { rows } = await pool.query<{ day: string | null; category: string; n: string }>(
     `SELECT
-       CASE WHEN ${DUE} < now() AND ${CAN_BE_LATE} THEN NULL
+       CASE WHEN ${DUE} < now() THEN NULL
             ELSE to_char(${DUE} AT TIME ZONE $1, 'YYYY-MM-DD') END AS day,
        -- Revisions are their own layer, not their channel's category.
        CASE WHEN kind = 'review' THEN 'revisions' ELSE category END AS category, COUNT(*) AS n
@@ -837,22 +839,15 @@ export async function openByCategory(): Promise<Map<string, StoredRecord[]>> {
 
 /**
  * Everything open that's Ash's to do, soonest first: Stories and Gaming
- * videos, revisions, and daily batches from today on (a day gone by is gone).
+ * videos, revisions, and daily batches, unfinished ones from past days too.
  * Paused work isn't work right now.
  */
-export async function openWork(batchesFrom?: string): Promise<StoredRecord[]> {
-  // An unfinished daily batch drops off once its day is over: at midnight (Bits and
-  // Reading at 3 AM), or — for My Day, which passes `batchesFrom` — once Ash ends that day.
-  const expired = batchesFrom
-    ? "air_date < $1::date"
-    : `air_date < (CASE WHEN category IN ('bits', 'reading')
-         THEN ((now() - interval '${SHORTS_DAY_STARTS_HOUR} hours') AT TIME ZONE '${ORG_TZ}')::date
-         ELSE (now() AT TIME ZONE '${ORG_TZ}')::date END)`;
+export async function openWork(): Promise<StoredRecord[]> {
+  // An unfinished daily batch stays until it's cleared or taken off with × (see LIVE).
   const { rows } = await pool.query<Row>(
     `${SELECT} WHERE status = 'open' AND paused_at IS NULL
-       AND NOT (batch_no IS NOT NULL AND ${expired})
+       AND NOT (batch_no IS NOT NULL AND air_date < DATE '${BATCHES_KEPT_FROM}')
      ORDER BY ${DUE} ASC NULLS LAST, created_at ASC LIMIT 800`,
-    batchesFrom ? [batchesFrom] : [],
   );
   return rows.map(hydrate);
 }
@@ -956,7 +951,7 @@ export async function feedRecords(from: string, to: string, batches: boolean): P
 /** Open work past its time, most overdue first — the chart's LATE column. */
 export async function listLate(limit = 300): Promise<StoredRecord[]> {
   const { rows } = await pool.query<Row>(
-    `${SELECT} WHERE status = 'open' AND ${LIVE} AND ${CAN_BE_LATE} AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
+    `${SELECT} WHERE status = 'open' AND ${LIVE} AND ${DUE} < now() ORDER BY ${DUE} ASC LIMIT $1`,
     [limit],
   );
   return rows.map(hydrate);

@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-19-batches-stay",
+    title: "Unfinished batches stay until you clear them",
+    changes: [
+      { text: "A daily batch you don't finish no longer drops off when its day is over: it stays in My Day, late like a one-off, until you clear it or take it off with ×.", href: "/my-day" },
+    ],
+  },
+  {
     id: "2026-11-17-tasks-tomorrow-and-done-open",
     title: "Tomorrow's repeating tasks come with tomorrow's batches",
     changes: [

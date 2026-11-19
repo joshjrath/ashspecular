@@ -82,8 +82,7 @@ async function refreshEstimates(): Promise<void> {
 export async function loadWork(now = new Date(), day?: { today: string; since: Date }) {
   await refreshEstimates().catch((err) => console.error("[estimates] couldn't read them:", err));
   const [open, done, running, revs, paused, tasks, tasksDone] = await Promise.all([
-    // My Day keeps its own day's batches until that day is ended, past midnight too.
-    openWork(day?.today),
+    openWork(),
     doneToday(day?.since),
     runningTimer(),
     revisionKeys(),
