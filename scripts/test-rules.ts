@@ -87,7 +87,7 @@ import { fmtMoney, isMonth, parseMoney, monthlyEquivalent, nextBill as finNextBi
 import { computePay, describePay, modelOn, parseTiers } from "../src/finance/pay.js";
 import { DEFAULT_THRESHOLDS, breakEven, derived, pnl as finPnl, project as finProject, reportingMonth, sustainability, type ExpenseFact, type Facts } from "../src/finance/metrics.js";
 import { parseMultipart } from "../src/web/finance/routes.js";
-import { moviePicks, sleepPicks, shapeOf, oneEach, nextMovieSlot, nextSleepSlot, maxOverlap, type Source as CompSource } from "../src/compilations/engine.js";
+import { moviePicks, sleepPicks, shapeOf, oneEach, nextMovieSlot, nextSleepSlot, maxOverlap, thumbPick, type Source as CompSource } from "../src/compilations/engine.js";
 import { tidyPackage } from "../src/compilations/package.js";
 import { clock, outputBlock, packageBlock, parseRuntime, renderCompilation, videoIdOf } from "../src/web/specular.js";
 import { readSplits, voiceBox, checkMark, channelChips } from "../src/web/finance/ui.js";
@@ -2155,9 +2155,12 @@ t("video ids from links", [videoIdOf("https://www.youtube.com/watch?v=dQw4w9WgXc
 const pkg = tidyPackage({ title_fits: true, title_note: "ok", better_title: "x", order: ["b", "zz", "a"], intro: " Hi. ", transitions: [{ into: "a", text: "Then A." }] }, ["a", "b", "c"]);
 t("the package keeps to its sources: every one once, a transition into each after the first", [pkg.order, pkg.transitions, pkg.intro, pkg.betterTitle], [["b", "a", "c"], ["Then A.", ""], "Hi.", null]);
 const comp = { id: 1, kind: "movie" as const, number: 7, title: "What If X? (Full Movie)", concept: "", slotDate: "2026-09-29", status: "planned" as const, recordId: null, uploadVideoId: null, inferred: false,
-  sources: [{ id: "a", title: "A", channel: "Specular Survives", runtime: 1200, runtimeFrom: "youtube", published: "2026-01-01" }, { id: "b", title: "B", channel: "Specular Survives", runtime: null, runtimeFrom: null, published: "2026-01-02" }],
-  playOrder: ["b", "a"], intro: "Intro.", transitions: ["Into A."], packageNote: null, packagedAt: null };
+  sources: [{ id: "a", title: "A", channel: "Specular Survives", runtime: 1200, runtimeFrom: "youtube", published: "2026-01-01", views: 50_000 }, { id: "b", title: "B", channel: "Specular Survives", runtime: null, runtimeFrom: null, published: "2026-01-02", views: 90_000 }],
+  thumb: null as string | null, playOrder: ["b", "a"], intro: "Intro.", transitions: ["Into A."], packageNote: null, packagedAt: null };
 t("the output block: DATE | MOVIE ### | TITLE, the list in play order, the total", outputBlock(comp, 600).split("\n"), ["9/29/2026 | MOVIE 007 | What If X? (Full Movie)", "", "1. B — ~10:00 (est.)", "2. A — 20:00", "", "Total Source Runtime: 30:00 (some estimated)"]);
+t("thumbnail to reuse: the most-viewed source's, skipping any used before; none when all have been", [
+  thumbPick(comp.sources, new Set())?.id, thumbPick(comp.sources, new Set(["b"]))?.id, thumbPick(comp.sources, new Set(["a", "b"])),
+], ["b", "a", null]);
 t("the editor package reads as a script", packageBlock(comp), "INTRO\nIntro.\n\n[ 1. B ]\n\nTRANSITION 1\nInto A.\n\n[ 2. A ]");
 t("a Sleep's package is the editor notes", packageBlock({ ...comp, kind: "sleep" }).startsWith("Editor Notes:\nKeep stories back to back"), true);
 {

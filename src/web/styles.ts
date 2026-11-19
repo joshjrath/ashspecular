@@ -1942,6 +1942,18 @@ h2 .spok, h2 .spwait { font-family: var(--ui); margin-left: 8px; vertical-align:
 .spform input[type=text], .spform textarea { flex: 1 1 200px; min-width: 0; background: var(--sunk); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 11px; font: 13.5px var(--ui); }
 .spedit { margin-top: 12px; } .spedit summary { cursor: pointer; font-size: 12.5px; color: var(--ink3); font-weight: 700; }
 .spmiss { margin: 6px 0; padding-left: 20px; font-size: 13px; color: var(--ink2); }
+/* Specular compilations: the thumbnail to reuse, each source's, and the used list */
+.spthumb { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin: 0 0 12px; }
+.spthumb img { width: 320px; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; display: block; background: var(--sunk); }
+.spthumb > div { flex: 1 1 220px; min-width: 0; }
+.spthumb p { margin: 0 0 6px; }
+.spthumbs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.spthumbs li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; min-width: 0; flex-wrap: wrap; }
+.spthumbs li img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: none; background: var(--sunk); }
+.spthumbs li.used img { opacity: .4; }
+.spthumbs .spt { flex: 1 1 160px; min-width: 0; }
+.spthumbs .spv { color: var(--ink3); font-size: 12px; }
+.spthumbs form { margin: 0; display: inline; }
 .spex { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .spex li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; } .spex li span { color: var(--ink3); font-size: 12px; }
 .spex form { margin-left: auto; }

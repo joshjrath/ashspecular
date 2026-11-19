@@ -19,6 +19,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-19-compilation-thumbs",
+    title: "Compilations recommend a thumbnail to reuse",
+    changes: [
+      { text: "Each Movie and Sleep recommends its most-viewed source's thumbnail, never one used before, and claims it when planned. Change it on the compilation's page.", href: "/story-lab/specular" },
+      { text: "Add thumbnails used before the board kept track under Thumbnails already used, so they're never recommended again.", href: "/story-lab/specular#thumbs" },
+    ],
+  },
+  {
     id: "2026-11-19-batches-stay",
     title: "Unfinished batches stay until you clear them",
     changes: [

@@ -450,6 +450,31 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("Specular's batch on a day with a planned Movie opens with the Movie's title; other days keep the channel's", [title, other ?? "Specular"], ["Every Spider-Man Theory, Explained", "Specular"]);
 }
 
+// ── A compilation's thumbnail: its most-viewed source's, each once, ever ──
+{
+  const { planCompilation, listCompilations } = await import("../src/db/compilations.js");
+  const vids = [["thumbAAAAA1", 900_000], ["thumbBBBBB2", 500_000], ["thumbCCCCC3", 100_000]] as const;
+  for (const [id, views] of vids) {
+    await pool.query(`INSERT INTO uploads (video_id, channel, title, published_at, url, views) VALUES ($1, 'Specular Verse', $2, now() - interval '30 days', $3, $4) ON CONFLICT DO NOTHING`, [id, `Thumb test ${id}`, `https://www.youtube.com/watch?v=${id}`, views]);
+  }
+  const pick = (n: number) => ({ kind: "movie", title: `Thumb Movie ${n}`, concept: `thumb:${n}`, sources: vids.map(([id, views]) => ({ id, title: `Thumb test ${id}`, views })) }) as never;
+  const one = await planCompilation(pick(1), shiftDate(today, 40));
+  const two = await planCompilation(pick(2), shiftDate(today, 41));
+  await post("/story-lab/specular/thumbs", { ids: "https://youtu.be/thumbCCCCC3", note: "Movie 001" });
+  const three = await planCompilation(pick(3), shiftDate(today, 42));
+  const steal = await post(`/story-lab/specular/${two}/thumb`, { video: "thumbAAAAA1" });
+  const thumbOf = async (id: number) => (await listCompilations({ id }))[0]!.thumb;
+  const page = await app.inject({ method: "GET", url: `/story-lab/specular/${three}`, headers: { cookie } });
+  const list = await app.inject({ method: "GET", url: "/story-lab/specular", headers: { cookie } });
+  t("Compilations: each reuses its most-viewed source's thumbnail not used before; one listed by hand counts; none is used twice", [
+    await thumbOf(one), await thumbOf(two), await thumbOf(three), steal.status, page.body.includes("Every source&#39;s thumbnail has been used") || page.body.includes("Every source's thumbnail has been used"),
+    list.body.includes("thumbCCCCC3/mqdefault.jpg"), list.body.includes("Movie 001"),
+  ], ["thumbAAAAA1", "thumbBBBBB2", null, 302, true, true, true]);
+  await post(`/story-lab/specular/${two}/thumb`, { video: "" });
+  await post(`/story-lab/specular/${three}/thumb`, { video: "thumbBBBBB2" });
+  t("…one set free can be used by another", [await thumbOf(two), await thumbOf(three)], [null, "thumbBBBBB2"]);
+}
+
 // ── Network Overview: readings in, figures out ──────────────────────────────
 {
   const { recordViewReadings, saveChannelDay, listNetChannels } = await import("../src/db/network.js");

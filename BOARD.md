@@ -1327,6 +1327,14 @@ three weeks.
 
 Use then opens the compilation's page, which has:
 
+- **The thumbnail to reuse:** its most-viewed source's whose thumbnail hasn't
+  been used before, claimed for it when it's planned so no other compilation
+  gets it. Its sources are listed most-viewed first; **Use** another (one used
+  on another compilation says which), or × to free it. *Open it full size* to
+  save it. Thumbnails used before the board kept track go in **Thumbnails
+  already used** on the compilations page (YouTube links or ids, a line each),
+  and are never recommended again.
+
 - **The output block**, ready to copy: `DATE | MOVIE ### | TITLE`, the
   numbered videos with runtimes, and the total source runtime. Below it, each
   source with its channel's name, in the channel's colour lightened so it

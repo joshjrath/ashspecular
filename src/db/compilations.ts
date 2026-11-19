@@ -7,7 +7,7 @@
 import { inTransaction, pool } from "./pool.js";
 import { CHANNELS, COMPILATION_CHANNEL_ID } from "../catalog.js";
 import { DEADLINE_TIME, ORG_TZ, dateIn, instantIn } from "../parse/derive.js";
-import { inferMovieConcept, inferMovieSources, inferSleepConcept, oneEach, type Kind, type PastCompilation, type Pick, type Source } from "../compilations/engine.js";
+import { inferMovieConcept, inferMovieSources, inferSleepConcept, oneEach, thumbPick, type Kind, type PastCompilation, type Pick, type Source } from "../compilations/engine.js";
 import { corpus } from "../web/stories/corpus.js";
 import { norm } from "../web/stories/lab.js";
 import { openBatchesFor } from "../jobs/batches.js";
@@ -97,7 +97,9 @@ export interface Compilation {
   recordId: number | null;
   uploadVideoId: string | null;
   inferred: boolean;
-  sources: Array<{ id: string; title: string; channel: string; runtime: number | null; runtimeFrom: string | null; published: string }>;
+  sources: Array<{ id: string; title: string; channel: string; runtime: number | null; runtimeFrom: string | null; published: string; views: number | null }>;
+  /** The source video whose thumbnail it reuses, once one's been chosen. */
+  thumb: string | null;
   playOrder: string[] | null;
   intro: string | null;
   transitions: string[] | null;
@@ -115,8 +117,9 @@ export async function listCompilations(opts: { kind?: Kind; statuses?: string[];
   const { rows } = await pool.query(
     `SELECT c.*, ${D("c.slot_date", "slot")},
        COALESCE((SELECT json_agg(json_build_object('id', u.video_id, 'title', u.title, 'channel', u.channel, 'runtime', u.duration_s,
-                  'runtimeFrom', u.duration_source, 'published', to_char(u.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY s.position)
-                 FROM compilation_sources s JOIN uploads u ON u.video_id = s.video_id WHERE s.compilation_id = c.id), '[]') AS sources
+                  'runtimeFrom', u.duration_source, 'published', to_char(u.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), 'views', u.views) ORDER BY s.position)
+                 FROM compilation_sources s JOIN uploads u ON u.video_id = s.video_id WHERE s.compilation_id = c.id), '[]') AS sources,
+       (SELECT t.video_id FROM compilation_thumbs t WHERE t.compilation_id = c.id) AS thumb
      FROM compilations c ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
      ORDER BY c.slot_date DESC NULLS LAST, c.id DESC LIMIT ${Math.max(1, Math.min(2000, opts.limit ?? 500))}`,
     args,
@@ -124,7 +127,7 @@ export async function listCompilations(opts: { kind?: Kind; statuses?: string[];
   return rows.map((r) => ({
     id: Number(r.id), kind: r.kind, number: r.number === null ? null : Number(r.number), title: r.title, concept: r.concept, slotDate: r.slot ?? null,
     status: r.status, recordId: r.record_id === null ? null : Number(r.record_id), uploadVideoId: r.upload_video_id, inferred: r.inferred,
-    sources: r.sources, playOrder: r.play_order, intro: r.intro, transitions: r.transitions, packageNote: r.package_note, packagedAt: r.packaged_at,
+    sources: r.sources.map((x: { views: unknown }) => ({ ...x, views: x.views === null ? null : Number(x.views) })), thumb: r.thumb ?? null, playOrder: r.play_order, intro: r.intro, transitions: r.transitions, packageNote: r.package_note, packagedAt: r.packaged_at,
   }));
 }
 
@@ -241,7 +244,55 @@ export async function planCompilation(pick: Pick, slot: string): Promise<number>
   }
   await pool.query("UPDATE compilations SET record_id = $2 WHERE id = $1", [id, recordId]);
   await syncNumbers();
+  // Its thumbnail: the most-viewed source's not used before, claimed now so no other compilation gets it.
+  const thumb = thumbPick(pick.sources, new Set((await listUsedThumbs()).map((t) => t.videoId)));
+  if (thumb) await setThumb(id, thumb.id).catch((err) => console.error("[specular] couldn't claim the thumbnail:", err));
   return id;
+}
+
+// ── reused thumbnails: each source's, once ever ──
+
+export interface UsedThumb { videoId: string; compilationId: number | null; label: string; note: string; title: string | null }
+
+/** Every thumbnail used: by which compilation ("Movie 012"), or listed by hand. */
+export async function listUsedThumbs(): Promise<UsedThumb[]> {
+  const { rows } = await pool.query(
+    `SELECT t.video_id, t.compilation_id, t.note, c.kind, c.number, u.title FROM compilation_thumbs t
+       LEFT JOIN compilations c ON c.id = t.compilation_id LEFT JOIN uploads u ON u.video_id = t.video_id
+      ORDER BY t.created_at DESC`,
+  );
+  return rows.map((r) => ({
+    videoId: r.video_id, compilationId: r.compilation_id === null ? null : Number(r.compilation_id), note: r.note, title: r.title ?? null,
+    label: r.compilation_id === null ? "listed by hand" : `${r.kind === "movie" ? "Movie" : "Sleep"} ${String(r.number ?? "").padStart(3, "0")}`,
+  }));
+}
+
+/**
+ * A compilation's thumbnail: one of its sources' not used by any other
+ * compilation or listed by hand (false if it is), or none (null).
+ */
+export async function setThumb(id: number, videoId: string | null): Promise<boolean> {
+  return inTransaction(async (db) => {
+    if (videoId) {
+      const { rows } = await db.query("SELECT compilation_id FROM compilation_thumbs WHERE video_id = $1", [videoId]);
+      if (rows[0] && Number(rows[0].compilation_id) !== id) return false;
+    }
+    await db.query("DELETE FROM compilation_thumbs WHERE compilation_id = $1", [id]);
+    if (videoId) await db.query("INSERT INTO compilation_thumbs (video_id, compilation_id) VALUES ($1, $2)", [videoId, id]);
+    return true;
+  });
+}
+
+/** Thumbnails used before the board kept track, listed by hand. Returns how many were new. */
+export async function addUsedThumbs(videoIds: string[], note: string): Promise<number> {
+  let n = 0;
+  for (const v of videoIds) n += (await pool.query("INSERT INTO compilation_thumbs (video_id, note) VALUES ($1, $2) ON CONFLICT DO NOTHING", [v, note])).rowCount ?? 0;
+  return n;
+}
+
+/** One listed by hand, taken off the list (a compilation's own is changed on its page). */
+export async function removeUsedThumb(videoId: string): Promise<void> {
+  await pool.query("DELETE FROM compilation_thumbs WHERE video_id = $1 AND compilation_id IS NULL", [videoId]);
 }
 
 async function syncNumbers(): Promise<void> {

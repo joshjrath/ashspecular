@@ -498,3 +498,12 @@ export function nextSleepSlot(today: string, lastSleep: string | null, taken: Se
   for (let i = 0; i < 200 && taken.has(d); i++) d = shiftDate(d, 4);
   return d;
 }
+
+/**
+ * The thumbnail to reuse for a compilation: its most-viewed source's, unless
+ * that thumbnail has been used before (by another compilation, or listed by
+ * hand), then the next most-viewed; null when every source's has been used.
+ */
+export function thumbPick<T extends { id: string; title: string; views: number | null }>(sources: T[], used: Set<string>): T | null {
+  return [...sources].filter((s) => !used.has(s.id)).sort((a, b) => (b.views ?? -1) - (a.views ?? -1) || a.title.localeCompare(b.title))[0] ?? null;
+}

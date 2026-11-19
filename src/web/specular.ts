@@ -7,9 +7,9 @@ import type { FastifyInstance } from "fastify";
 import {
   compilationChannel, addExclusion, addSkip, discardCompilation, listCompilations, listExclusions, loadCatalog, loadPast, planCompilation,
   listSkips, removeExclusion, renameCompilation, savePackage, setRuntime, setSources, sourceTexts, syncPosted, takenDays, todayOrg, voiceSamples,
-  type Compilation,
+  addUsedThumbs, listUsedThumbs, removeUsedThumb, setThumb, type Compilation, type UsedThumb,
 } from "../db/compilations.js";
-import { moviePicks, nextMovieSlot, nextSleepSlot, sleepPicks, typicalRuntime, type Kind, type Pick, type Source } from "../compilations/engine.js";
+import { moviePicks, nextMovieSlot, nextSleepSlot, sleepPicks, thumbPick, typicalRuntime, type Kind, type Pick, type Source } from "../compilations/engine.js";
 import { canWritePackages, writePackage } from "../compilations/package.js";
 import { usDate } from "../parse/derive.js";
 import { channelColour, layout, pageHeader, type Shell } from "./page.js";
@@ -220,7 +220,36 @@ export function packageBlock(c: Compilation): string {
 const copyBox = (id: string, text: string) =>
   `<div class="spcopy"><pre id="${id}">${esc(text)}</pre><button class="wnbtn" type="button" onclick="var t=document.getElementById('${id}').innerText;navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>{this.textContent='✓ Copied'})">Copy</button></div>`;
 
-export function renderCompilation(shell: Shell, c: Compilation, d: { typical: number; missing: Compilation["sources"]; writing: boolean; error: string | null; canWrite: boolean }): string {
+const thumbUrl = (id: string, size: "hqdefault" | "maxresdefault" | "mqdefault" = "hqdefault") => (/^[\w-]{11}$/.test(id) ? `https://i.ytimg.com/vi/${id}/${size}.jpg` : "");
+
+/**
+ * The thumbnail to reuse: its most-viewed source's not used before (each
+ * thumbnail once, ever), chosen when it was planned and changeable here.
+ */
+function thumbPanel(c: Compilation, used: UsedThumb[]): string {
+  if (!c.sources.length) return "";
+  const elsewhere = new Map(used.filter((t) => t.compilationId !== c.id).map((t) => [t.videoId, t.label]));
+  const rec = thumbPick(c.sources, new Set(elsewhere.keys()));
+  const shown = c.sources.find((s) => s.id === c.thumb) ?? null;
+  const big = shown ?? rec;
+  const head = big
+    ? `<div class="spthumb"><a href="${esc(thumbUrl(big.id, "maxresdefault"))}" target="_blank" rel="noopener"><img src="${esc(thumbUrl(big.id))}" alt="" loading="lazy" referrerpolicy="no-referrer"></a>
+        <div><p><b>${esc(big.title)}</b></p><p class="hint" style="padding:0">${big.views !== null ? `${esc(compactViews(big.views))} views · ` : ""}${shown ? "this compilation's thumbnail" : "recommended: its most-viewed source whose thumbnail hasn't been used"}</p>
+        ${shown ? "" : `<form method="post" action="/story-lab/specular/${c.id}/thumb"><input type="hidden" name="video" value="${esc(big.id)}"><button class="wnbtn go">Use this thumbnail</button></form>`}
+        <p class="hint" style="padding:0"><a href="${esc(thumbUrl(big.id, "maxresdefault"))}" target="_blank" rel="noopener">Open it full size</a> to save it.</p></div></div>`
+    : `<p class="hint" style="padding:0">Every source's thumbnail has been used on another compilation. Make a new one.</p>`;
+  const list = [...c.sources].sort((a, b) => (b.views ?? -1) - (a.views ?? -1)).map((s) => {
+    const by = elsewhere.get(s.id);
+    const act = s.id === c.thumb
+      ? `<span class="spok">in use here</span> <form method="post" action="/story-lab/specular/${c.id}/thumb"><input type="hidden" name="video" value=""><button class="wnx" title="Don't use it after all">×</button></form>`
+      : by ? `<span class="spwait">used on ${esc(by)}</span>`
+      : `<form method="post" action="/story-lab/specular/${c.id}/thumb"><input type="hidden" name="video" value="${esc(s.id)}"><button class="wnbtn">Use</button></form>`;
+    return `<li${by ? ' class="used"' : ""}><img src="${esc(thumbUrl(s.id, "mqdefault"))}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="spt">${esc(s.title)}</span><span class="spv">${s.views !== null ? esc(compactViews(s.views)) : "—"}</span>${act}</li>`;
+  }).join("");
+  return `<section class="panel"><h2>Thumbnail <span class="sub">— reuse a source's, most-viewed first; each thumbnail is used once, ever</span></h2>${head}<ul class="spthumbs">${list}</ul></section>`;
+}
+
+export function renderCompilation(shell: Shell, c: Compilation, d: { typical: number; missing: Compilation["sources"]; writing: boolean; error: string | null; canWrite: boolean; used?: UsedThumb[] }): string {
   const note = readNote(c.packageNote);
   const status = c.status === "posted" ? `<span class="spok">Posted${c.inferred ? " · read back from its title" : ""}</span>` : c.status === "planned" ? `<span class="spwait">Planned</span>` : `<span class="spwait">Discarded</span>`;
   let pkg = "";
@@ -281,6 +310,7 @@ export function renderCompilation(shell: Shell, c: Compilation, d: { typical: nu
         }
       </details>
     </section>
+    ${thumbPanel(c, d.used ?? [])}
     ${pkg}`,
   );
 }
@@ -289,7 +319,7 @@ export function renderCompilation(shell: Shell, c: Compilation, d: { typical: nu
 
 export function renderSpecularCatalog(
   shell: Shell,
-  d: { history: Compilation[]; exclusions: Awaited<ReturnType<typeof listExclusions>>; sources: Source[]; excluded: Array<Source & { reason: string }>; typical: number; msg: string },
+  d: { history: Compilation[]; exclusions: Awaited<ReturnType<typeof listExclusions>>; sources: Source[]; excluded: Array<Source & { reason: string }>; typical: number; msg: string; thumbs?: UsedThumb[] },
 ): string {
   const titles = [...d.sources, ...d.excluded].sort((a, b) => a.title.localeCompare(b.title));
   const hist = d.history
@@ -314,6 +344,14 @@ export function renderSpecularCatalog(
         .map((e) => `<li><b>${esc(e.title ?? e.videoId ?? "")}</b>${e.reason ? `<span>${esc(e.reason)}</span>` : ""}<form method="post" action="/story-lab/specular/exclude/${e.id}/remove"><button class="wnx" title="Take it off the list">×</button></form></li>`)
         .join("") || `<li class="hint">None.</li>`}</ul>
       <form method="post" action="/story-lab/specular/exclude" class="spform"><input type="text" name="title" list="sptitles" placeholder="Video title" required maxlength="300"><input type="text" name="reason" placeholder="Why — e.g. Demonetized" maxlength="200"><button class="wnbtn">Exclude</button></form>
+    </section>
+    <section class="panel" id="thumbs"><h2>Thumbnails already used <span class="sub">— never recommended again</span></h2>
+      <ul class="spthumbs">${(d.thumbs ?? [])
+        .map((t) => `<li><img src="${esc(thumbUrl(t.videoId, "mqdefault"))}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="spt">${esc(t.title ?? t.videoId)}</span><span class="spwait">${t.compilationId ? `<a href="/story-lab/specular/${t.compilationId}">${esc(t.label)}</a>` : esc(t.note || t.label)}</span>${
+          t.compilationId ? "" : `<form method="post" action="/story-lab/specular/thumbs/remove"><input type="hidden" name="video" value="${esc(t.videoId)}"><button class="wnx" title="Take it off the list">×</button></form>`
+        }</li>`)
+        .join("") || `<li class="hint">None yet.</li>`}</ul>
+      <form method="post" action="/story-lab/specular/thumbs" class="spform col"><label>Used before the board kept track — one YouTube link or video id a line</label><textarea name="ids" rows="3" placeholder="https://youtu.be/…"></textarea><input type="text" name="note" placeholder="Where — e.g. Movie 004" maxlength="120"><button class="wnbtn">Add to the list</button></form>
     </section>
     <section class="panel"><h2>Set a runtime <span class="sub">— wins over YouTube's and the script's estimate</span></h2>
       <form method="post" action="/story-lab/specular/runtime" class="spform"><input type="text" name="title" list="sptitles" placeholder="Video title" required maxlength="300"><input type="text" name="runtime" placeholder="24:10" inputmode="numeric" maxlength="9"><button class="wnbtn">Save</button></form>
@@ -374,10 +412,10 @@ export function registerSpecular(app: FastifyInstance, shell: (active: string) =
   });
 
   app.get("/story-lab/specular", async (request, reply) => {
-    const [s, history, exclusions, catalog] = await Promise.all([shell("storylab"), listCompilations({ limit: 400 }), listExclusions(), loadCatalog()]);
+    const [s, history, exclusions, catalog, thumbs] = await Promise.all([shell("storylab"), listCompilations({ limit: 400 }), listExclusions(), loadCatalog(), listUsedThumbs()]);
     const msg = str((request.query as Record<string, unknown>)?.msg).slice(0, 200);
     return reply.type("text/html").send(
-      renderSpecularCatalog(s, { history: history.filter((c) => c.status !== "discarded"), exclusions, sources: catalog.sources, excluded: catalog.excluded, typical: typicalRuntime(catalog.sources), msg }),
+      renderSpecularCatalog(s, { history: history.filter((c) => c.status !== "discarded"), exclusions, sources: catalog.sources, excluded: catalog.excluded, typical: typicalRuntime(catalog.sources), msg, thumbs }),
     );
   });
 
@@ -385,12 +423,12 @@ export function registerSpecular(app: FastifyInstance, shell: (active: string) =
     const id = Number(request.params.id);
     const [c] = Number.isInteger(id) && id > 0 ? await listCompilations({ id }) : [];
     if (!c) return reply.redirect("/story-lab/specular");
-    const [s, catalog, missing] = await Promise.all([shell("storylab"), loadCatalog(), c.kind === "movie" ? missingTexts(c) : Promise.resolve([])]);
+    const [s, catalog, missing, used] = await Promise.all([shell("storylab"), loadCatalog(), c.kind === "movie" ? missingTexts(c) : Promise.resolve([]), listUsedThumbs()]);
     // The catalog's runtime where YouTube's isn't known: the script's length, or one typed in.
     const known = new Map([...catalog.sources, ...catalog.excluded].map((x) => [x.id, x]));
     c.sources = c.sources.map((x) => (x.runtime === null && known.get(x.id)?.runtime ? { ...x, runtime: known.get(x.id)!.runtime, runtimeFrom: known.get(x.id)!.runtimeFrom } : x));
     return reply.type("text/html").send(
-      renderCompilation(s, c, { typical: typicalRuntime(catalog.sources), missing, writing: writing.has(id), error: failed.get(id) ?? null, canWrite: canWritePackages() }),
+      renderCompilation(s, c, { typical: typicalRuntime(catalog.sources), missing, writing: writing.has(id), error: failed.get(id) ?? null, canWrite: canWritePackages(), used }),
     );
   });
 
@@ -420,6 +458,26 @@ export function registerSpecular(app: FastifyInstance, shell: (active: string) =
     const ids = [...new Set(str(request.body?.ids).split(/[\s,]+/).map(videoIdOf).filter((v): v is string => Boolean(v && known.has(v))))];
     if (Number.isInteger(id) && id > 0) await setSources(id, ids.slice(0, 40));
     return reply.redirect(`/story-lab/specular/${id}`);
+  });
+
+  // A compilation's thumbnail: one of its own sources', not used by another (empty: none).
+  app.post<{ Params: { id: string }; Body: Record<string, string | undefined> }>("/story-lab/specular/:id/thumb", async (request, reply) => {
+    const id = Number(request.params.id);
+    const [c] = Number.isInteger(id) && id > 0 ? await listCompilations({ id }) : [];
+    if (!c) return reply.redirect("/story-lab/specular");
+    const video = str(request.body?.video);
+    if (!video || c.sources.some((s) => s.id === video)) await setThumb(id, video || null);
+    return reply.redirect(`/story-lab/specular/${id}`);
+  });
+  app.post<{ Body: Record<string, string | undefined> }>("/story-lab/specular/thumbs", async (request, reply) => {
+    const ids = [...new Set(str(request.body?.ids).split(/\s+/).map(videoIdOf).filter((v): v is string => Boolean(v)))].slice(0, 100);
+    const n = ids.length ? await addUsedThumbs(ids, str(request.body?.note).slice(0, 120)) : 0;
+    return reply.redirect(`${back(n ? `Added ${n} thumbnail${n === 1 ? "" : "s"} to the used list.` : "Nothing new to add — paste YouTube links or video ids.")}#thumbs`);
+  });
+  app.post<{ Body: Record<string, string | undefined> }>("/story-lab/specular/thumbs/remove", async (request, reply) => {
+    const video = videoIdOf(str(request.body?.video));
+    if (video) await removeUsedThumb(video);
+    return reply.redirect("/story-lab/specular#thumbs");
   });
 
   const findByTitle = async (title: string) => {
