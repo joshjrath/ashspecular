@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-20-gaps-follow-moves",
+    title: "Nothing-assigned slots follow a moved video straight away",
+    changes: [
+      { text: "Move a channel's last video on the calendar (or its air date on its page) and its Nothing assigned slots move with it right away, not a minute later.", href: "/calendar" },
+    ],
+  },
+  {
     id: "2026-11-19-compilation-thumbs",
     title: "Compilations recommend a thumbnail to reuse",
     changes: [

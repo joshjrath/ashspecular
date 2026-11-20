@@ -450,6 +450,26 @@ t("every page opens with a little of everything in it", await crawl(), []);
   t("Specular's batch on a day with a planned Movie opens with the Movie's title; other days keep the channel's", [title, other ?? "Specular"], ["Every Spider-Man Theory, Explained", "Specular"]);
 }
 
+// ── Moving a channel's last video moves its Nothing-assigned slots, straight away ──
+{
+  const { saveRecord } = await import("../src/db/records.js");
+  const { derive } = await import("../src/parse/derive.js");
+  const { shell } = await import("../src/web/shell.js");
+  const { everyFor } = await import("../src/web/targets.js");
+  const ch = "Specular Animation";
+  const id = Number(await saveRecord(derive({
+    kind: "assignment", code: "GAP-1", title: "Gap test", category: "stories", channel: ch, tag: null, air_date: shiftDate(today, 1), stage: "script",
+    word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+  } as never, "", new Date()), { messageId: "gap-move-1", channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  const every = everyFor(ch)!;
+  const slots = async () => ((await shell("calendar")).gaps ?? []).filter((g) => g.channel === ch).map((g) => g.date);
+  const before = await slots();
+  const moved = await app.inject({ method: "POST", url: `/r/${id}/move`, headers: { cookie, "content-type": "application/x-www-form-urlencoded", accept: "application/json" }, payload: `date=${shiftDate(today, 2)}&mode=posting` });
+  const after = await slots();
+  t("Moving a channel's last video a day later moves its Nothing-assigned slots a day too, straight away", [moved.statusCode, before[0], after[0]], [200, shiftDate(today, 1 + every), shiftDate(today, 2 + every)]);
+  await pool.query("UPDATE records SET status = 'removed' WHERE id = $1", [id]);
+}
+
 // ── A compilation's thumbnail: its most-viewed source's, each once, ever ──
 {
   const { planCompilation, listCompilations } = await import("../src/db/compilations.js");

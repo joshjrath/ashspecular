@@ -116,6 +116,8 @@ export function registerRecords(app: FastifyInstance): void {
       const mode = safeMode(request.body?.mode);
       const moved = await moveWithRest(record, date, mode, request.body?.only === "1");
       if (!moved.ok) return reply.code(400).send({ ok: false });
+      // Nothing-assigned slots count from a channel's last video: they move with it.
+      forgetGaps();
       // A deadline dropped on a day off lands on the working day before; say so.
       const off = mode === "deadlines" && (await listDaysOff()).includes(date)
         ? `${usDate(date)} is a day off, so it's due the working day before. `
@@ -132,6 +134,7 @@ export function registerRecords(app: FastifyInstance): void {
     const json = (request.headers.accept ?? "").includes("application/json");
     if (!kept) return json ? reply.code(410).send({ ok: false }) : reply.redirect(refererPath(request.headers.referer, "/calendar"));
     await restoreMoves(kept.snaps);
+    forgetGaps();
     if (json) return reply.send({ ok: true });
     // From a record's page: back to it, without the note that offered this.
     const back = refererPath(request.headers.referer, "/calendar");
@@ -150,9 +153,11 @@ export function registerRecords(app: FastifyInstance): void {
     if (!record) return reply.redirect(`/r/${id}`);
     if (!date || !record.airDate) {
       await moveAir(id, date, voFor(date));
+      forgetGaps();
       return reply.redirect(`/r/${id}`);
     }
     const moved = await moveWithRest(record, date, "posting", request.body?.rest !== "1");
+    forgetGaps();
     return reply.redirect(moved.undo ? `/r/${id}?moved=${moved.undo}` : `/r/${id}`);
   });
 
