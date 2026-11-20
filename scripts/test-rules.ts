@@ -7,7 +7,7 @@
  * Runs with no API key and no database, so it stays fast enough to run on
  * every change to derive.ts or the catalog.
  */
-import { CATEGORIES, CHANNELS, DARK_SURFACES, channelInk, matchChannel } from "../src/catalog.js";
+import { CATEGORIES, CHANNELS, DARK_SURFACES, categoryChoices, channelInk, matchChannel } from "../src/catalog.js";
 import {
   ORG_TZ,
   dateIn,
@@ -491,6 +491,9 @@ const ratio = (a: string, b: string) => {
   return (hi! + 0.05) / (lo! + 0.05);
 };
 
+t("a channel moves between the long-form categories, or between Bits and Reading; Specular's daily batch stays put", [
+  categoryChoices({ category: "gaming" }), categoryChoices({ category: "bits", recurring: { perDay: 1, opensAt: "06:00", dueAt: "18:00" } } as never), categoryChoices({ category: "movies", recurring: { perDay: 1, opensAt: "00:05", dueAt: "23:59" } } as never),
+], [["stories", "gaming", "movies"], ["bits", "reading"], []]);
 t("every channel has a colour", CHANNELS.every((c) => /^#[0-9A-F]{6}$/i.test(c.color)), true);
 t("every channel colour is different", new Set(CHANNELS.map((c) => c.color.toUpperCase())).size, CHANNELS.length);
 t("none reuses a category colour", CHANNELS.some((c) => CATEGORIES.some((k) => k.color.toUpperCase() === c.color.toUpperCase())), false);

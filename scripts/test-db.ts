@@ -317,6 +317,29 @@ t("every page opens with a little of everything in it", await crawl(), []);
   await post("/settings/colours", { [`e_${force.id}`]: "" });
 }
 
+// ── Moving a channel to another category in Settings ──
+{
+  const { CHANNELS } = await import("../src/catalog.js");
+  const { saveRecord } = await import("../src/db/records.js");
+  const { derive } = await import("../src/parse/derive.js");
+  const game = CHANNELS.find((c) => c.category === "gaming" && !c.recurring)!;
+  const bits = CHANNELS.find((c) => c.category === "bits" && c.recurring)!;
+  const rec = Number(await saveRecord(derive({
+    kind: "assignment", code: "CAT-1", title: "Every GTA 6 Leak, Explained", category: "gaming", channel: game.name, tag: null, air_date: shiftDate(today, 5), stage: "script",
+    word_count: 3000, assignee: null, script_due: null, vo_due: null, deadline: null, version: null, links: [], brief: null, note: null, confidence: 0.9,
+  } as never, "", new Date()), { messageId: "cat-move-1", channelId: "c", guildId: null, author: "ash", url: "", raw: "", parsedBy: "pattern" }));
+  const page = await app.inject({ method: "GET", url: "/settings", headers: { cookie } });
+  const saved = await post("/settings/colours", { [`k_${game.id}`]: "stories", [`k_${bits.id}`]: "stories" });
+  const after = { channel: CHANNELS.find((c) => c.id === game.id)!.category, record: (await pool.query("SELECT category FROM records WHERE id = $1", [rec])).rows[0].category, bits: CHANNELS.find((c) => c.id === bits.id)!.category };
+  const said = decodeURIComponent((saved.location ?? "").replace(/\+/g, " "));
+  t("Settings: a channel moves to another category, its videos with it; a daily-batch channel can't become long-form", [
+    page.body.includes(`name="k_${game.id}"`), after.channel, after.record, after.bits, said.includes(`${game.name} is now in Stories`), said.includes("can't move to that category"),
+  ], [true, "stories", "stories", "bits", true, true]);
+  await post("/settings/colours", { [`k_${game.id}`]: "gaming" });
+  t("…and back", [CHANNELS.find((c) => c.id === game.id)!.category, (await pool.query("SELECT category FROM records WHERE id = $1", [rec])).rows[0].category], ["gaming", "gaming"]);
+  await pool.query("UPDATE records SET status = 'removed' WHERE id = $1", [rec]);
+}
+
 // ── A Shorts channel's uploads a day, and × on a daily batch in My Day ──────
 {
   const { CHANNELS } = await import("../src/catalog.js");

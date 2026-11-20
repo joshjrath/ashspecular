@@ -19,6 +19,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: "2026-11-20-channel-category",
+    title: "Move a channel to another category",
+    changes: [
+      { text: "Settings → Channels: each channel has a Category choice. Move a long-form channel between Stories, Gaming and Movies (or a daily-batch one between Bits and Reading), and its videos already on the board move with it.", href: "/settings#colours" },
+    ],
+  },
+  {
     id: "2026-11-20-gaps-follow-moves",
     title: "Nothing-assigned slots follow a moved video straight away",
     changes: [

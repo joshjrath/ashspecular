@@ -167,7 +167,17 @@ export const CHANNELS: Channel[] = [
 ];
 
 /** Each catalog channel as written above, before any rename, addition or colour set on the board. */
-const ORIGINAL = new Map(CHANNELS.map((c) => [c.id, { name: c.name, aliases: c.aliases ? [...c.aliases] : undefined, color: c.color, units: c.recurring?.units }]));
+const ORIGINAL = new Map(CHANNELS.map((c) => [c.id, { name: c.name, aliases: c.aliases ? [...c.aliases] : undefined, color: c.color, units: c.recurring?.units, category: c.category }]));
+
+/**
+ * The categories a channel can be moved to in Settings: a long-form channel
+ * between Stories, Gaming and Movies; a daily-batch one between Bits and
+ * Reading. Specular's own daily long-form batch stays where it is.
+ */
+export function categoryChoices(channel: Pick<Channel, "category" | "recurring">): CategoryId[] {
+  if (channel.recurring) return channel.category === "bits" || channel.category === "reading" ? ["bits", "reading"] : [];
+  return ["stories", "gaming", "movies"];
+}
 
 /** An added channel's own colour, picked when it was added. */
 const addedColours = new Map<string, string>();
@@ -217,6 +227,7 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
     c.aliases = o.aliases ? [...o.aliases] : undefined;
     c.formerly = undefined;
     c.every = undefined;
+    c.category = o.category;
     if (c.recurring && o.units !== undefined) c.recurring.units = o.units;
   }
   addedColours.clear();
@@ -228,6 +239,8 @@ export function applyChannelSettings(settings: ChannelSetting[]): void {
       if (s.added) continue;
       known.name = name;
       if (s.every != null && s.every >= 0) known.every = s.every;
+      // Moved to another category in Settings.
+      if (s.category && categoryChoices(known).includes(s.category)) known.category = s.category;
       // A daily batch's uploads, changed in Settings.
       if (known.recurring && s.units != null && s.units > 0) known.recurring.units = Math.min(50, Math.round(s.units));
       continue;

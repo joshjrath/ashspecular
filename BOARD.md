@@ -508,6 +508,13 @@ apart.
   name doesn't have to match the YouTube channel's own name.
 - **Recolour one** with its picker. A hand-set colour always wins; *Reset*
   goes back. *Read the avatars again* re-samples them now.
+- **Move it to another category:** each channel's row has a **Category**
+  choice. A long-form channel moves between Stories, Gaming and Movies; a
+  daily-batch channel between Bits and Reading (Specular's own daily batch
+  stays put). Saved with *Save channels*, its videos already on the board
+  move with it, so they count as that kind of work (a Gaming video moved to
+  Stories is a VO), and its upload frequency follows the new category's
+  unless you've set one.
 - **Change how often it posts:** each long-form channel (Stories, Gaming,
   and Movies except Specular's daily batch) has an **Uploads** choice:
   *Default* (Stories every 4 days, Gaming its usual pace), every 1 to 30

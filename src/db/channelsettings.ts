@@ -13,7 +13,7 @@
  */
 import { inTransaction, pool } from "./pool.js";
 import {
-  CATEGORIES, CATEGORY_IDS, CHANNELS, applyChannelSettings, checkChannelName, isCatalogChannel, newChannelId, type CategoryId, type ChannelSetting,
+  CATEGORIES, CATEGORY_IDS, CHANNELS, applyChannelSettings, categoryChoices, checkChannelName, isCatalogChannel, newChannelId, type CategoryId, type ChannelSetting,
 } from "../catalog.js";
 
 /**
@@ -168,6 +168,29 @@ export async function renameChannel(id: string, raw: string): Promise<{ ok: true
   }
   await loadChannelSettings();
   return { ok: true, name: to, from };
+}
+
+/**
+ * Move a channel to another category (within categoryChoices): kept on its
+ * settings row, and its videos already filed (not its daily batches) move
+ * with it, so they count as that kind of work everywhere.
+ */
+export async function setChannelCategory(id: string, category: string): Promise<{ ok: true; changed: boolean } | { error: string }> {
+  const channel = CHANNELS.find((c) => c.id === id);
+  if (!channel) return { error: "That channel isn't on the board." };
+  const to = categoryChoices(channel).find((c) => c === category);
+  if (!to) return { error: `${channel.name} can't move to that category.` };
+  if (to === channel.category) return { ok: true, changed: false };
+  await inTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO channel_settings (id, name, added, category) VALUES ($1, $2, false, $3)
+       ON CONFLICT (id) DO UPDATE SET category = $3, updated_at = now()`,
+      [id, channel.name, to],
+    );
+    await client.query("UPDATE records SET category = $2, updated_at = now() WHERE channel = $1 AND batch_no IS NULL", [channel.name, to]);
+  });
+  await loadChannelSettings();
+  return { ok: true, changed: true };
 }
 
 /** Add a channel to a category. Bits and Reading channels open a daily batch of `units` uploads. */

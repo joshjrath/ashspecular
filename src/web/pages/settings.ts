@@ -35,12 +35,22 @@ export interface ColourRow {
   daily?: number | null;
   /** A long-form channel's upload frequency: what's set (days, 0 for none, null for its category's), and what that default is. */
   every?: { value: number | null; fallback: string } | null;
+  /** The categories it can be moved to (its own included); none when it can't move. */
+  categories?: string[];
   /** A Shorts channel's uploads a day (its daily batch), when it can be set here. */
   units?: number | null;
 }
 
 /** The frequencies offered, in days; one set by hand that isn't among them is offered too. */
 const EVERY_CHOICES = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 28, 30];
+
+/** Which category a channel is in, to move it to another (Stories, Gaming or Movies; Bits or Reading). */
+function categorySelect(r: ColourRow): string {
+  if (!r.categories || r.categories.length < 2) return "";
+  return `<label class="every">Category <select name="k_${esc(r.id)}" aria-label="${esc(r.name)}'s category">${r.categories
+    .map((id) => `<option value="${esc(id)}"${id === r.category ? " selected" : ""}>${esc(CATEGORIES.find((c) => c.id === id)?.label ?? id)}</option>`)
+    .join("")}</select></label>`;
+}
 
 /** A long-form channel's upload frequency, as a select: its category's, every N days, or no target. */
 function everySelect(r: ColourRow): string {
@@ -340,7 +350,7 @@ function colourSettings(rows: ColourRow[], saved: string, error: string, newColo
           <span class="src">${why(r)}${r.added ? ` · added here${r.daily && !r.units ? ` · ${r.daily} a day` : ""}` : ""}${
             r.previous?.length ? ` · <span title="A Discord message that uses an earlier name still finds it">was ${esc(r.previous.join(", "))}</span>` : ""
           }${r.removable ? ` <button class="linkbtn" formaction="/settings/channels/remove" name="remove" value="${esc(r.id)}" formnovalidate onclick="return confirm('Take ${esc(r.name).replace(/'/g, "")} off the board?')">Take off</button>` : ""}</span>
-          ${everySelect(r)}
+          ${categorySelect(r)}${everySelect(r)}
         </div>`,
       )
       .join("")}</fieldset>`;

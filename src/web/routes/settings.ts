@@ -3,7 +3,7 @@
  * estimates, API keys, limits, the login password, channel names and
  * colours, adding and removing channels.
  */
-import { CATEGORIES, CHANNELS } from "../../catalog.js";
+import { CATEGORIES, CHANNELS, categoryChoices } from "../../catalog.js";
 import { COMP_BOUNDS, compSetting, usageToday as compUsageToday, getCompSettings, saveCompSettings } from "../../db/competitors.js";
 import { COOKIE_NAME, checkPassword, cookieOptions, issueToken, passwordChangedAt } from "../auth.js";
 import { IDEA_BOUNDS, getSettings as getIdeaSettings, ideaSetting, usageOn as ideaUsageOn, saveSettings as saveIdeaSettings } from "../../db/ideas.js";
@@ -11,7 +11,7 @@ import { KEY_DEFS, LIMIT_DEFS, keyStates, keysInEffect, mask, setKey, setLimit, 
 import { RAIL_ITEMS } from "../page.js";
 import { TASK_CATEGORY } from "../../tasks/parse.js";
 import { WORK_TYPES } from "../work.js";
-import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelEvery, setChannelUnits } from "../../db/channelsettings.js";
+import { addChannel, channelUse, listChannelSettings, loadChannelSettings, removeChannel, renameChannel, setChannelCategory, setChannelEvery, setChannelUnits } from "../../db/channelsettings.js";
 import { EVERY_BOUNDS, UNITS_BOUNDS, canSetEvery, canSetUnits, defaultEvery, everyFor } from "../targets.js";
 import { shortsDay } from "../../parse/derive.js";
 import { aiRunSummary } from "../../db/storylab.js";
@@ -188,6 +188,7 @@ export function registerSettings(app: FastifyInstance): void {
             sampled: sampled.has(c.name), linked: src?.linked ?? false, error: src?.error ?? null,
             previous: set?.previous ?? [], added: Boolean(set?.added), removable: unused.has(c.id), daily: c.recurring?.units ?? null,
             every: canSetEvery(c) ? { value: c.every ?? null, fallback: defaultEvery(c.category) } : null,
+            categories: categoryChoices(c),
             units: canSetUnits(c) ? c.recurring?.units ?? 1 : null,
           };
         }),
@@ -231,6 +232,16 @@ export function registerSettings(app: FastifyInstance): void {
       const v = body[`c_${c.id}`];
       if (v && /^#[0-9a-f]{6}$/i.test(v) && v.toUpperCase() !== c.color.toUpperCase()) await setChannelColour(c.name, v);
     }
+    // Categories: a channel moved to another, its videos with it.
+    const moved: string[] = [];
+    for (const c of [...CHANNELS]) {
+      const k = body[`k_${c.id}`];
+      if (typeof k !== "string" || k === c.category) continue;
+      const r = await setChannelCategory(c.id, k);
+      if ("error" in r) failed.push(r.error);
+      else if (r.changed) moved.push(`${c.name} is now in ${CATEGORIES.find((x) => x.id === k)?.label ?? k}`);
+    }
+    if (moved.length) { forgetGaps(); forgetPaces(); }
     // Upload frequencies: "" its category's, "0" no target, else every N days within EVERY_BOUNDS.
     let paced = 0;
     const repaced: string[] = [];
@@ -280,6 +291,7 @@ export function registerSettings(app: FastifyInstance): void {
     const q = new URLSearchParams({ colours: "saved" });
     const said = [
       renamed.length ? `${renamed.join("; ")} — everywhere on the board.` : "",
+      moved.length ? `${moved.join("; ")}, its videos with it.` : "",
       respaced.length ? `Respaced ${respaced.join("; ")}; their VO and script deadlines moved with them.` : "",
     ].filter(Boolean);
     if (said.length) q.set("chmsg", said.join(" "));
